@@ -1,0 +1,6 @@
+@FutureKawaSiegeBackend_HostAddress = http://localhost:5044
+
+GET {{FutureKawaSiegeBackend_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

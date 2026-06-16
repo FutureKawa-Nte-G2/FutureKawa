@@ -174,4 +174,4 @@ A User Story is considered **Done** when:
 ## Project Management
 
 Tasks and User Stories are tracked on our
-[GitHub Projects board](TODO_INSERT_LINK).
+[GitHub Projects board]([Project-Kanban](https://github.com/orgs/FutureKawa-Nte-G2/projects/2)).

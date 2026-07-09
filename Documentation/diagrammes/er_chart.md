@@ -99,6 +99,7 @@ erDiagram
         int sensor_id FK "nullable"
         alert_type type "ENUM, NOT NULL"
         alert_state state "ENUM, NOT NULL, default active"
+        numeric value "valeur relevée"
         timestamptz created_at "NOT NULL, default now()"
         timestamptz resolved_at "nullable"
     }

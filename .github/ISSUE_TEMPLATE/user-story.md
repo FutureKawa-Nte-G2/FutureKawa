@@ -17,6 +17,18 @@ As a **[type of user]**,
 I want to **[action]**,
 So that **[benefit]**.
 
+
+## Affected Personas
+- [ ] CEO / Executive Management (Head Office)
+- [ ] Operations & Supply Chain (Head Office)
+- [ ] Quality Manager (Head Office)
+- [ ] Sales Management (Head Office)
+- [ ] IT Department (Head Office)
+- [ ] Farm Manager (Local)
+- [ ] Warehouse Manager (Local)
+- [ ] Quality Agent (Local)
+- [ ] Worker (Local)
+
 ---
 
 ## Acceptance Criteria
@@ -30,6 +42,11 @@ So that **[benefit]**.
 | Method | Route |
 |--------|-------|
 | `GET/POST` | `/route` |
+
+### Notes complémentaires
+- 
+- 
+- 
 
 ---
 

@@ -3,7 +3,7 @@
 Ce schéma retire tout ce qui n'est pas explicitement demandé en section III (Besoins
 exprimés) et IV (Livrables) du sujet :
 
-- **Supprimé** : `ORDERS`, `BATCH_ORDER`, `DELIVERY`, `CLIENT` — gestion de commandes non
+- **Supprimé** : `ORDERS`, `BATCH_DELIVERY`, `DELIVERY`, `CLIENT` — gestion de commandes non
   demandée (mentionnée une seule fois, en section I, comme description du business
   model de l'entreprise, pas comme exigence fonctionnelle du projet).
 - **Supprimé** : `is_compliant` (flag d'audit), `SENSOR_ASSIGNMENT` (capteur par lot,
@@ -34,12 +34,14 @@ erDiagram
         serial id PK
         int country_id FK "NOT NULL"
         varchar name "NOT NULL"
+        varchar external_ref "NOT NULL, UNIQUE, reference exploitation cote ERP"
     }
 
     WAREHOUSE {
         serial id PK
         int country_id FK "NOT NULL"
         varchar name "NOT NULL"
+        varchar external_ref "NOT NULL, UNIQUE, reference entrepot cote ERP"
     }
 
     USER {
@@ -102,7 +104,7 @@ erDiagram
 ## Notes de lecture
 
 - **`batch_status`** : ENUM `compliant` / `alert` / `expired`. Champ purement
-  déclaratif, orthogonal à la présence en stock — aucune contrainte structurelle ne
+  déclaratif, lié à la présence en stock — aucune contrainte structurelle ne
   retire un lot du FIFO sur la base du statut qualité ; c'est `shipped_at` qui gère la
   sortie du FIFO (cf. ci-dessous), indépendamment du fait que le lot ait été `alert` ou
   `expired` à un moment de son historique.
@@ -114,37 +116,39 @@ erDiagram
   sein de la base pays (chaque pays a sa propre base, pas de risque de collision
   inter-pays). L'`id` interne reste la PK et la clé utilisée par le frontend siège ;
   `batch_ref` ne sert qu'à l'ingestion fichier.
+- **`FARM.external_ref` / `WAREHOUSE.external_ref` — même logique de rapprochement** :
+  un pays a plusieurs exploitations et plusieurs entrepôts ; l'ERP ne connaît ni l'un ni
+  l'autre par leur `id` interne. Le fichier de réception doit donc fournir `farm_ref` et
+  `warehouse_ref`, résolus par simple `WHERE external_ref = ...`. Pas besoin d'un
+  équivalent sur `COUNTRY` : chaque backend pays est une base séparée, le pays est déjà
+  déterminé par le fait que le fichier atterrit sur ce backend-là.
 - **`stored_at` / `shipped_at`, symétrie d'intégration ERP** : les deux champs sont
   renseignés par le même mécanisme d'ingestion fichier, dans deux dossiers distincts
-  surveillés par le backend pays — `incoming/reception/` (crée un `BATCH`, renseigne
-  `batch_ref` et `stored_at`) et `incoming/delivery/` (résout le `BATCH` existant via
-  `batch_ref`, renseigne `shipped_at`). Aucune entité "commande" n'est créée : le
-  fichier delivery ne porte que `batch_ref` et la date de sortie, pas de client ni de
-  quantité — ce qui éviterait de recréer le bloc `ORDERS` qu'on a retiré. La requête
-  FIFO devient `WHERE shipped_at IS NULL ORDER BY stored_at ASC`.
+  surveillés par le backend pays — `incoming/reception/` (crée un `BATCH`, résout
+  `farm_ref`/`warehouse_ref`, renseigne `batch_ref` et `stored_at`) et
+  `incoming/delivery/` (résout le `BATCH` existant via `batch_ref`, renseigne
+  `shipped_at`). Aucune entité "commande" n'est créée : le fichier delivery ne porte que
+  `batch_ref` et la date de sortie. La requête FIFO devient
+  `WHERE shipped_at IS NULL ORDER BY stored_at ASC`.
 - **`ALERT.warehouse_id` vs `ALERT.batch_id`** : une alerte `condition` est déclenchée
   par l'entrepôt (capteur ambiant, cf. état des lieux précédent), une alerte
   `expiration` est propre à un lot. Un seul des deux FK est rempli selon `type`.
-- **Sortie FIFO : aucun contrôle applicatif** : le fichier `delivery`
+- **Sortie FIFO : aucun contrôle applicatif précisé dans le sujet** : le fichier `delivery`
   peut désigner n'importe quel lot non expédié de l'entrepôt, l'application ne vérifie
   pas qu'il s'agit bien du plus ancien. Le choix du lot relève de l'ERP, pas de la
   solution ; le sujet ne demande qu'une consultation triée par date, pas une contrainte
-  bloquante à l'écriture.  Si on a le temps, on pourra créer une alerte
-  "le lot expédié n'était pas celui prévu dans le FIFO"
-- **Passage `alert` → `compliant`** : à trancher — soit une alerte `condition`
-  `resolved` fait automatiquement repasser tous les lots concernés à `compliant`, soit
-  ça reste un statut informatif que quelqu'un remet à jour manuellement. Le sujet ne
-  tranche pas, donc c'est à vous de fixer la règle.
+  bloquante à l'écriture. On pourra ajouter une alerte si on a le temps.
+- **Passage `alert` → `compliant`** :  ça reste un statut informatif que quelqu'un remet à jour manuellement. Le sujet ne
+  tranche pas, donc c'est à nous de fixer la règle.
 - **`quality_grade`** : couvre "des caractéristiques de qualité" mentionné dans le
   sujet sans préciser le format — laissé en `varchar` faute de plus de détail dans le
   cahier des charges ; à typer plus finement si vous avez une nomenclature (calibre,
-  grade SCA, etc.). Enum géré dans l'ERP, pas danns l'application FIFO
+  grade SCA, etc.).
 - **`recorded_by` retiré** : il référençait un `USER` humain qui enregistrait le lot
   depuis un formulaire. Puisqu'il n'y a plus de saisie humaine (l'enregistrement vient du
   fichier ERP), ce champ n'a plus de porteur légitime. `USER` reste utile pour
   l'authentification sur le frontend siège (lecture seule), mais n'est plus lié à
   `BATCH`.
-
 
 ## Nouvelles US à écrire
 

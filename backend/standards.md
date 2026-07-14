@@ -6,25 +6,25 @@
 
 ## 1. Stack imposée
 
-| Sujet                | Imposé                                                                                                                                                                                                                                                                                                          | Notes                                                          |
-| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| Langage              | C# / .NET 10                                                                                                                                                                                                                                                                                                    | `nullable enabled` partout                                     |
-| Architecture         | Clean Architecture (couches ci-dessous)                                                                                                                                                                                                                                                                         | Pas de logique métier hors `Business`                          |
-| API                  | Controllers ASP.NET héritant de `GateController<T>`. Toute réponse HTTP doit passer **exclusivement** par ses méthodes : `MakeResponse`, `MakeResponseAsync`, `MakeEmptyResponse`, `MakeEmptyResponseAsync`, `MakePaginatedResponse`. Aucun `return Ok()`, `return BadRequest()`, `return StatusCode()` direct. | Cf. `FutureKawaSiege.API/Controllers/_GateController.cs`       |
-| Validation           | **FluentValidation**                                                                                                                                                                                                                                                                                            | Un validator par DTO d'entrée                                  |
-| Mapping DTO ↔ Entity | **Mapster**                                                                                                                                                                                                                                                                                                     | Pas de mapping manuel inutile                                  |
-| Logging              | **Serilog** côté hôte, **`ILogger<T>`** dans le code applicatif                                                                                                                                                                                                                                                 | Jamais `Console.WriteLine`, jamais Serilog en direct           |
-| ORM                  | **EF Core**                                                                                                                                                                                                                                                                                                     | Migrations versionnées                                         |
-| Persistance          | **Repository custom**                                                                                                                                                                                                                                                                                           | `DbContext` jamais exposé à `Business`                         |
-| Auth par défaut      | **JWT Bearer**                                                                                                                                                                                                                                                                                                  | 99% des endpoints                                              |
-| Tests                | **xUnit v3 + Moq**                                                                                                                                                                                                                                                                                              | FluentAssertions si déjà présent dans le projet de tests cible |
-| Coverage min         | **80%**                                                                                                                                                                                                                                                                                                         | Non régressif vs `develop`                                     |
-| Style                | EditorConfig + analyzers .NET                                                                                                                                                                                                                                                                                   | `EnforceCodeStyleInBuild=true`, `AnalysisLevel=latest`         |
+| Sujet                | Imposé                                                                            | Notes                                                          |
+| -------------------- | --------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| Langage              | C# / .NET 10                                                                      | `nullable enabled` partout                                     |
+| Architecture         | Clean Architecture (couches ci-dessous)                                           | Pas de logique métier hors `Business`                          |
+| API                  | Controllers ASP.NET héritant de `ControllerBase`. Réponses via `ActionResult<T>`. |                                                                |
+| Validation           | **FluentValidation**                                                              | Un validator par DTO d'entrée                                  |
+| Mapping DTO ↔ Entity | **Mapster**                                                                       | Pas de mapping manuel inutile                                  |
+| Logging              | **Serilog** côté hôte, **`ILogger<T>`** dans le code applicatif                   | Jamais `Console.WriteLine`, jamais Serilog en direct           |
+| ORM                  | **EF Core**                                                                       | Migrations versionnées                                         |
+| Persistance          | **Repository custom**                                                             | `DbContext` jamais exposé à `Business`                         |
+| Auth par défaut      | **JWT Bearer**                                                                    | 99% des endpoints                                              |
+| Tests                | **xUnit v3 + Moq**                                                                | FluentAssertions si déjà présent dans le projet de tests cible |
+| Coverage min         | **80%**                                                                           | Non régressif vs `develop`                                     |
+| Style                | EditorConfig + analyzers .NET                                                     | `EnforceCodeStyleInBuild=true`, `AnalysisLevel=latest`         |
 
 ## 2. Architecture en couches (stricte)
 
 ```
-FutureKawaSiege.API            — HTTP binding, auth, validation, mapping. AUCUNE logique métier. Toute réponse HTTP via méthodes `GateController<T>` exclusivement.
+FutureKawaSiege.API            — HTTP binding, auth, validation, mapping. AUCUNE logique métier.
 FutureKawaSiege.Business       — Services métier, règles, orchestration des repositories.
 FutureKawaSiege.Data           — Entités EF Core, configurations, DbContext, migrations.
 FutureKawaSiege.Commons        — DTOs, modèles d'API, helpers partagés.
@@ -42,7 +42,8 @@ Toute logique placée dans la mauvaise couche est un **défaut bloquant**.
 - **Catch** : jamais silencieux. Toujours log ou rethrow.
 - **DI** : injection par constructeur classique côté .NET.
 - **Pas de secret en dur** : `appsettings.*.json` propres, secrets via configuration externe.
-- **Réponses API** : `return` dans un controller = toujours via `MakeResponse*` / `MakeEmptyResponse*` / `MakePaginatedResponse`. Tout `return Ok(...)`, `return BadRequest(...)` ou `return StatusCode(...)` direct est un **défaut bloquant**.
+- **Réponses API** : utiliser les méthodes standard de `ControllerBase` (`Ok()`, `NotFound()`, `BadRequest()`, `Unauthorized()`, etc.).
+- **Documentation des interfaces** : chaque méthode d'interface (dans les dossiers `Abstraction/` et `Repositories/`) doit avoir un `<summary>` XML documentant son rôle, ses paramètres et sa valeur de retour. Chaque implémentation de ces méthodes doit porter un `/// <inheritdoc/>` pour hériter du résumé.
 
 ## 4. Tests
 
@@ -62,12 +63,11 @@ Toute logique placée dans la mauvaise couche est un **défaut bloquant**.
 
 ## 6. Sécurité (OWASP)
 
-- Auth conforme : JWT Keycloak par défaut, IP+ApiKey pour endpoints admin.
 - Validation FluentValidation **avant** tout traitement.
 - Pas de SQL brut non paramétré.
 - Pas de secret/token en dur.
 - Logs ne fuitent ni mots de passe, ni tokens, ni PII.
-- Exceptions non gérées ne fuitent pas de stack traces côté client (gestion via `GateController`/`ResponsesFormatter`).
+- Exceptions non gérées ne fuitent pas de stack traces côté client (gestion via middleware d'exception).
 
 ## 7. Build & vérification locale
 

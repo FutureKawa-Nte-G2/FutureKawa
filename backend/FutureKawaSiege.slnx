@@ -1,7 +1,6 @@
 <Solution>
   <Folder Name="/Tests/">
     <Project Path="FutureKawaSiege.Business.Tests/FutureKawaSiege.Business.Tests.csproj" Id="503670d1-678f-4101-893a-309ffcb5ec09" />
-    <Project Path="FutureKawaSiege.Data.Tests/FutureKawaSiege.Data.Tests.csproj" Id="0b6f9c27-4b6f-4bb2-b4c5-3ee25ff142b1" />
     <Project Path="Tests/FutureKawaSiege.API.Tests/FutureKawaSiege.API.Tests.csproj" />
   </Folder>
   <Project Path="FutureKawaSiege.API/FutureKawaSiege.API.csproj" />

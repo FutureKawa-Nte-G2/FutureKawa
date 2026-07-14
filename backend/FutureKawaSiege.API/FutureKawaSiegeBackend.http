@@ -1,6 +1,17 @@
-@FutureKawaSiegeBackend_HostAddress = http://localhost:5044
+@HostAddress = http://localhost:55649
 
-GET {{FutureKawaSiegeBackend_HostAddress}}/weatherforecast/
-Accept: application/json
+# @name login
+POST {{HostAddress}}/api/auth/login
+Content-Type: application/json
 
-###
+{
+  "email": "test@futurekawa.com",
+  "password": "TestPass123"
+}
+
+GET {{HostAddress}}/api/auth/me
+
+GET {{HostAddress}}/api/auth/me
+Authorization: Bearer {{login.response.body.$.data.accessToken}}
+
+POST {{HostAddress}}/api/auth/logout

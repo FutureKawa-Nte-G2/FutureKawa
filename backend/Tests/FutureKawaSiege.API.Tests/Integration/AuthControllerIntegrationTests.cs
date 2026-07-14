@@ -97,6 +97,85 @@ public class AuthControllerIntegrationTests : IClassFixture<CustomWebApplication
     }
 
     [Fact]
+    public async Task PostRefresh_Should_Return200_WithNewTokens_When_ValidCookie()
+    {
+        // Arrange
+        await SeedUserAsync();
+
+        var loginResponse = await _client.PostAsJsonAsync("/api/auth/login",
+            new LoginRequest("test@futurekawa.com", "TestPass123"));
+        loginResponse.EnsureSuccessStatusCode();
+
+        var loginBody = await loginResponse.Content.ReadFromJsonAsync<ApiResponse<LoginResponse>>();
+        var oldAccessToken = loginBody!.Data!.AccessToken;
+
+        // Extract the refresh token cookie (Secure=true not sent over test HTTP, so pass manually)
+        var cookieValue = ExtractCookieValue(loginResponse, "refresh_token");
+
+        // Act — call refresh with the cookie
+        using var refreshRequest = new HttpRequestMessage(HttpMethod.Post, "/api/auth/refresh");
+        refreshRequest.Headers.TryAddWithoutValidation("Cookie", $"refresh_token={cookieValue}");
+        var refreshResponse = await _client.SendAsync(refreshRequest);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, refreshResponse.StatusCode);
+
+        var refreshBody = await refreshResponse.Content.ReadFromJsonAsync<ApiResponse<LoginResponse>>();
+        Assert.NotNull(refreshBody);
+        Assert.True(refreshBody.Success);
+        Assert.NotNull(refreshBody.Data!.AccessToken);
+        Assert.NotEqual(oldAccessToken, refreshBody.Data.AccessToken);
+        Assert.Equal("test@futurekawa.com", refreshBody.Data.User.Email);
+
+        // Verify a new refresh token cookie is set (rotation)
+        var setCookieHeaders = refreshResponse.Headers.GetValues("Set-Cookie").ToList();
+        Assert.Contains(setCookieHeaders, c => c.Contains("refresh_token"));
+    }
+
+    [Fact]
+    public async Task PostRefresh_Should_Return401_When_RevokedToken()
+    {
+        // Arrange — seed, login, capture cookie, then logout to revoke it
+        await SeedUserAsync();
+
+        var loginResponse = await _client.PostAsJsonAsync("/api/auth/login",
+            new LoginRequest("test@futurekawa.com", "TestPass123"));
+        loginResponse.EnsureSuccessStatusCode();
+
+        var cookieValue = ExtractCookieValue(loginResponse, "refresh_token");
+
+        // Logout revokes the refresh token server-side
+        using var logoutRequest = new HttpRequestMessage(HttpMethod.Post, "/api/auth/logout");
+        logoutRequest.Headers.TryAddWithoutValidation("Cookie", $"refresh_token={cookieValue}");
+        await _client.SendAsync(logoutRequest);
+
+        // Act — try to refresh with the now-revoked cookie
+        using var refreshRequest = new HttpRequestMessage(HttpMethod.Post, "/api/auth/refresh");
+        refreshRequest.Headers.TryAddWithoutValidation("Cookie", $"refresh_token={cookieValue}");
+        var refreshResponse = await _client.SendAsync(refreshRequest);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.Unauthorized, refreshResponse.StatusCode);
+
+        var refreshBody = await refreshResponse.Content.ReadFromJsonAsync<ApiResponse<LoginResponse>>();
+        Assert.NotNull(refreshBody);
+        Assert.False(refreshBody.Success);
+    }
+
+    /// <summary>
+    /// Extracts a cookie value from a Set-Cookie response header.
+    /// Needed because test server uses HTTP and cookies with Secure=true are not sent automatically.
+    /// </summary>
+    private static string ExtractCookieValue(HttpResponseMessage response, string cookieName)
+    {
+        var header = response.Headers.GetValues("Set-Cookie")
+            .First(c => c.StartsWith($"{cookieName}="));
+        // Format: "name=value; path=...; secure; ..."
+        var nameAndValue = header.Split(';')[0];  // "name=value"
+        return nameAndValue[(cookieName.Length + 1)..]; // value
+    }
+
+    [Fact]
     public async Task GetMe_Should_Return401_When_NoJwt()
     {
         var response = await _client.GetAsync("/api/auth/me");

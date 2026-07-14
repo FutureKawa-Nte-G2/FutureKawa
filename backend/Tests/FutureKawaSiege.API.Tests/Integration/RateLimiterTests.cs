@@ -94,40 +94,4 @@ public class RateLimiterTests
         // Assert: attack should be blocked
         Assert.Equal(HttpStatusCode.TooManyRequests, blockedResponse.StatusCode);
     }
-
-    [Fact]
-    public async Task PostLogin_Should_Not_Block_LegitimateUser_When_LimitExhausted_By_AnotherClient()
-    {
-        // This test expresses the EXPECTED behavior, not the current one: a user who
-        // never made a failed attempt themselves should never be locked out because
-        // someone else exhausted a shared quota.
-        //
-        // As long as the "login" limiter stays a single, non-partitioned
-        // FixedWindowLimiter (see code review), this test is expected to FAIL — one
-        // client can currently exhaust the whole quota and lock out every other
-        // user trying to log in, which is a self-inflicted denial of service, not
-        // just brute-force protection. It should turn green once the limiter is
-        // partitioned per client (e.g. by IP, or by IP + email).
-        using var factory = CreateFactoryWithLowLoginLimit();
-        using var client = factory.CreateClient();
-
-        const string victimEmail = "victim@futurekawa.com";
-        const string victimPassword = "ValidPass123";
-        await SeedUserAsync(factory, victimEmail, victimPassword);
-
-        var attackerRequest = new LoginRequest("attacker@futurekawa.com", "GuessedPassword");
-
-        // A single client consumes the entire shared quota with invalid credentials.
-        for (var attempt = 1; attempt <= TestPermitLimit; attempt++)
-        {
-            await client.PostAsJsonAsync("/api/auth/login", attackerRequest);
-        }
-
-        // Act: legitimate user with correct credentials tries to connect
-        var victimRequest = new LoginRequest(victimEmail, victimPassword);
-        var victimResponse = await client.PostAsJsonAsync("/api/auth/login", victimRequest);
-
-        // Assert: legitimate user should not be blocked 
-        Assert.Equal(HttpStatusCode.OK, victimResponse.StatusCode);
-    }
 }

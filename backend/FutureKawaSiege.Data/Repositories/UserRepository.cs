@@ -21,9 +21,9 @@ public class UserRepository : IUserRepository
     }
 
     /// <inheritdoc/>
-    public Task UpdateAsync(User user, CancellationToken cancellationToken = default)
+    public async Task UpdateAsync(User user, CancellationToken cancellationToken = default)
     {
         _context.Users.Update(user);
-        return Task.CompletedTask;
+        await _context.SaveChangesAsync(cancellationToken);
     }
 }

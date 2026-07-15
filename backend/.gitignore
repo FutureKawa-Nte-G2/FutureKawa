@@ -6,6 +6,9 @@
 # dotenv files
 .env
 
+# Project plans
+plans/
+
 # User-specific files
 *.rsuser
 *.suo

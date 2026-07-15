@@ -1,6 +1,6 @@
 # Standards techniques — FutureKawaSiege (Back .NET 10)
 
-> **Stack cible** — Certains packages listés ci-dessous ne sont pas encore installés (FluentValidation, Mapster, Serilog, EF Core, Moq). Ce document décrit la stack **visée** ; les packages seront ajoutés au fil de l'implémentation.
+> **Stack cible** — Certains packages listés ci-dessous ne sont pas encore installés (FluentValidation, Mapster, Serilog, EF Core, NSubstitute). Ce document décrit la stack **visée** ; les packages seront ajoutés au fil de l'implémentation.
 >
 > Source de vérité unique pour les agents et tout contributeur humain. **À lire en premier** par tout agent avant d'agir.
 
@@ -17,7 +17,7 @@
 | ORM                  | **EF Core**                                                                       | Migrations versionnées                                         |
 | Persistance          | **Repository custom**                                                             | `DbContext` jamais exposé à `Business`                         |
 | Auth par défaut      | **JWT Bearer**                                                                    | 99% des endpoints                                              |
-| Tests                | **xUnit v3 + Moq**                                                                | FluentAssertions si déjà présent dans le projet de tests cible |
+| Tests                | **xUnit v3 + NSubstitute**                                                        | FluentAssertions si déjà présent dans le projet de tests cible |
 | Coverage min         | **80%**                                                                           | Non régressif vs `develop`                                     |
 | Style                | EditorConfig + analyzers .NET                                                     | `EnforceCodeStyleInBuild=true`, `AnalysisLevel=latest`         |
 
@@ -28,7 +28,7 @@ FutureKawaSiege.API            — HTTP binding, auth, validation, mapping. AUCU
 FutureKawaSiege.Business       — Services métier, règles, orchestration des repositories.
 FutureKawaSiege.Data           — Entités EF Core, configurations, DbContext, migrations.
 FutureKawaSiege.Commons        — DTOs, modèles d'API, helpers partagés.
-*.Tests                        — xUnit + Moq, un projet de tests par couche.
+*.Tests                        — xUnit + NSubstitute, un projet de tests par couche.
 ```
 
 Toute logique placée dans la mauvaise couche est un **défaut bloquant**.
@@ -47,7 +47,7 @@ Toute logique placée dans la mauvaise couche est un **défaut bloquant**.
 
 ## 4. Tests
 
-- Framework : **xUnit v3**. Mocking : **Moq**. Pas d'autre framework introduit.
+- Framework : **xUnit v3**. Mocking : **NSubstitute**. Pas d'autre framework introduit.
 - Nommage strict : `MethodName_Should_Behavior_When_Condition`.
 - Un test = une assertion logique (plusieurs `Assert` OK si même comportement).
 - Pas de dépendance horloge/réseau/FS sans mock.

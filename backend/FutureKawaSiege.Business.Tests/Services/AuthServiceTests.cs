@@ -4,25 +4,25 @@ using FutureKawaSiege.Commons.Exceptions.Services;
 using FutureKawaSiege.Commons.Models.API.Requests;
 using FutureKawaSiege.Data.Entities;
 using FutureKawaSiege.Data.Repositories;
-using Moq;
+using NSubstitute;
 
 namespace FutureKawaSiege.Business.Tests.Services;
 
 public class AuthServiceTests
 {
-    private readonly Mock<IUserRepository> _userRepoMock = new();
-    private readonly Mock<IPasswordHasher> _passwordHasherMock = new();
-    private readonly Mock<IJwtService> _jwtServiceMock = new();
-    private readonly Mock<IRefreshTokenService> _refreshTokenServiceMock = new();
+    private readonly IUserRepository _userRepo = Substitute.For<IUserRepository>();
+    private readonly IPasswordHasher _passwordHasher = Substitute.For<IPasswordHasher>();
+    private readonly IJwtService _jwtService = Substitute.For<IJwtService>();
+    private readonly IRefreshTokenService _refreshTokenService = Substitute.For<IRefreshTokenService>();
     private readonly AuthService _authService;
 
     public AuthServiceTests()
     {
         _authService = new AuthService(
-            _userRepoMock.Object,
-            _passwordHasherMock.Object,
-            _jwtServiceMock.Object,
-            _refreshTokenServiceMock.Object);
+            _userRepo,
+            _passwordHasher,
+            _jwtService,
+            _refreshTokenService);
     }
 
     private static User CreateTestUser() => new()
@@ -39,12 +39,12 @@ public class AuthServiceTests
     public async Task LoginAsync_Should_ReturnLoginResponse_When_CredentialsAreValid()
     {
         var user = CreateTestUser();
-        _userRepoMock.Setup(r => r.GetByEmailAsync(user.Email, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(user);
-        _passwordHasherMock.Setup(h => h.Verify("password", user.PasswordHash)).Returns(true);
-        _jwtServiceMock.Setup(j => j.GenerateAccessToken(user)).Returns("access_token");
-        _refreshTokenServiceMock.Setup(r => r.CreateAndStoreAsync(user.Id, It.IsAny<CancellationToken>()))
-            .ReturnsAsync("refresh_token");
+        _userRepo.GetByEmailAsync(user.Email, Arg.Any<CancellationToken>())
+            .Returns(user);
+        _passwordHasher.Verify("password", user.PasswordHash).Returns(true);
+        _jwtService.GenerateAccessToken(user).Returns("access_token");
+        _refreshTokenService.CreateAndStoreAsync(user.Id, Arg.Any<CancellationToken>())
+            .Returns("refresh_token");
 
         var result = await _authService.LoginAsync(new LoginRequest(user.Email, "password"));
 
@@ -57,8 +57,8 @@ public class AuthServiceTests
     [Fact]
     public async Task LoginAsync_Should_ThrowAuthenticationException_When_UserNotFound()
     {
-        _userRepoMock.Setup(r => r.GetByEmailAsync("unknown@test.com", It.IsAny<CancellationToken>()))
-            .ReturnsAsync((User?)null);
+        _userRepo.GetByEmailAsync("unknown@test.com", Arg.Any<CancellationToken>())
+            .Returns((User?)null);
 
         await Assert.ThrowsAsync<AuthenticationException>(
             () => _authService.LoginAsync(new LoginRequest("unknown@test.com", "password")));
@@ -68,9 +68,9 @@ public class AuthServiceTests
     public async Task LoginAsync_Should_ThrowAuthenticationException_When_PasswordIsWrong()
     {
         var user = CreateTestUser();
-        _userRepoMock.Setup(r => r.GetByEmailAsync(user.Email, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(user);
-        _passwordHasherMock.Setup(h => h.Verify("wrong", user.PasswordHash)).Returns(false);
+        _userRepo.GetByEmailAsync(user.Email, Arg.Any<CancellationToken>())
+            .Returns(user);
+        _passwordHasher.Verify("wrong", user.PasswordHash).Returns(false);
 
         await Assert.ThrowsAsync<AuthenticationException>(
             () => _authService.LoginAsync(new LoginRequest(user.Email, "wrong")));
@@ -86,10 +86,10 @@ public class AuthServiceTests
             CreatedAt = DateTime.UtcNow, ExpiresAt = DateTime.UtcNow.AddDays(7),
         };
 
-        _refreshTokenServiceMock
-            .Setup(r => r.ValidateAndRotateAsync("valid_refresh", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(("new_raw_refresh", newRefreshToken, user));
-        _jwtServiceMock.Setup(j => j.GenerateAccessToken(user)).Returns("new_access_token");
+        _refreshTokenService
+            .ValidateAndRotateAsync("valid_refresh", Arg.Any<CancellationToken>())
+            .Returns(("new_raw_refresh", newRefreshToken, user));
+        _jwtService.GenerateAccessToken(user).Returns("new_access_token");
 
         var result = await _authService.RefreshAsync("valid_refresh");
 
@@ -100,9 +100,10 @@ public class AuthServiceTests
     [Fact]
     public async Task RefreshAsync_Should_ThrowAuthenticationException_When_RefreshTokenIsRevoked()
     {
-        _refreshTokenServiceMock
-            .Setup(r => r.ValidateAndRotateAsync("revoked", It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new AuthenticationException("Invalid or expired refresh token."));
+        _refreshTokenService
+            .ValidateAndRotateAsync("revoked", Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<(string, RefreshToken, User)>(
+                new AuthenticationException("Invalid or expired refresh token.")));
 
         await Assert.ThrowsAsync<AuthenticationException>(
             () => _authService.RefreshAsync("revoked"));
@@ -113,7 +114,7 @@ public class AuthServiceTests
     {
         await _authService.LogoutAsync("some_token");
 
-        _refreshTokenServiceMock.Verify(
-            r => r.RevokeAsync("some_token", It.IsAny<CancellationToken>()), Times.Once);
+        await _refreshTokenService.Received(1)
+            .RevokeAsync("some_token", Arg.Any<CancellationToken>());
     }
 }

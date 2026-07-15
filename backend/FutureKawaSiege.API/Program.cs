@@ -77,6 +77,9 @@ var app = builder.Build();
 
 if (args.Contains("--seed"))
 {
+    if (!app.Environment.IsDevelopment() && !app.Environment.IsEnvironment("Testing"))
+        throw new InvalidOperationException("--seed is only allowed in Development or Testing.");
+
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     var hasher = scope.ServiceProvider.GetRequiredService<FutureKawaSiege.Business.Services.Abstraction.IPasswordHasher>();

@@ -61,7 +61,7 @@ public class JwtServiceTests
         var token1 = _jwtService.GenerateRefreshToken();
         var token2 = _jwtService.GenerateRefreshToken();
         Assert.NotEqual(token1, token2);
-        Assert.NotEqual(Convert.FromBase64String(token1).Length, 0);
+        Assert.NotEmpty(Convert.FromBase64String(token1));
     }
 
     [Fact]

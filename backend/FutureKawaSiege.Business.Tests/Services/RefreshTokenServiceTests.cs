@@ -4,14 +4,14 @@ using FutureKawaSiege.Commons.Exceptions.Services;
 using FutureKawaSiege.Data.Entities;
 using FutureKawaSiege.Data.Repositories;
 using Microsoft.Extensions.Configuration;
-using Moq;
+using NSubstitute;
 
 namespace FutureKawaSiege.Business.Tests.Services;
 
 public class RefreshTokenServiceTests
 {
-    private readonly Mock<IRefreshTokenRepository> _refreshTokenRepoMock = new();
-    private readonly Mock<IJwtService> _jwtServiceMock = new();
+    private readonly IRefreshTokenRepository _refreshTokenRepoMock = Substitute.For<IRefreshTokenRepository>();
+    private readonly IJwtService _jwtServiceMock = Substitute.For<IJwtService>();
     private readonly RefreshTokenService _refreshTokenService;
 
     public RefreshTokenServiceTests()
@@ -24,15 +24,15 @@ public class RefreshTokenServiceTests
             .Build();
 
         _refreshTokenService = new RefreshTokenService(
-            _refreshTokenRepoMock.Object,
-            _jwtServiceMock.Object,
+            _refreshTokenRepoMock,
+            _jwtServiceMock,
             config);
     }
 
     [Fact]
     public async Task ValidateAndRotateAsync_Should_ThrowAuthenticationException_When_TokenIsExpired_But_NotRevoked()
     {
-        // Assert : create expired token
+        // Arrange : create expired token
         var expiredToken = new RefreshToken
         {
             Id = Guid.NewGuid(),
@@ -43,12 +43,11 @@ public class RefreshTokenServiceTests
             CreatedAt = DateTime.UtcNow.AddDays(-8),
         };
 
-        // Act
         _refreshTokenRepoMock
-            .Setup(r => r.GetByTokenHashAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(expiredToken);
+            .GetByTokenHashAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(expiredToken);
 
-        // Assert
+        // Act & Assert
         await Assert.ThrowsAsync<AuthenticationException>(
             () => _refreshTokenService.ValidateAndRotateAsync("raw_refresh_token"));
     }

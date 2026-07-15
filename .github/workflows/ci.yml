@@ -5,7 +5,6 @@ on:
     branches:
       - main
       - develop
-      - features/7_auth-and-jwt-token
   pull_request:
     branches:
       - main

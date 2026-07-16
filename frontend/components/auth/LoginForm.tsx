@@ -1,13 +1,12 @@
 "use client";
 
 import { useState, type SubmitEvent } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "../../context/AuthContext";
 import { ApiError } from "../../lib/api/client";
-import { useRouter } from "next/navigation";
+import { Button } from "../ui/Button";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-// Generic error message: never expose whether the email or the password was wrong.
 const GENERIC_ERROR = "Email ou mot de passe incorrect.";
 
 interface FieldErrors {
@@ -17,6 +16,7 @@ interface FieldErrors {
 
 export function LoginForm() {
   const { loginUser } = useAuth();
+  const router = useRouter();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -24,7 +24,6 @@ export function LoginForm() {
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const router = useRouter();
 
   function validate(): FieldErrors {
     const errors: FieldErrors = {};
@@ -50,14 +49,12 @@ export function LoginForm() {
     setIsSubmitting(true);
     try {
       await loginUser({ email, password });
-        router.push("/dashboard");    // Choice of design: route to dashboard page post-login
+      router.push("/dashboard");
     } catch (err) {
-      // Always show a generic message, regardless of what the backend says,
-      // so we never confirm/deny whether the email exists.
       if (err instanceof ApiError) {
         setFormError(GENERIC_ERROR);
       } else {
-        setFormError("Something went wrong. Please try again.");
+        setFormError("Une erreur est survenue. Veuillez réessayer.");
       }
     } finally {
       setIsSubmitting(false);
@@ -66,11 +63,11 @@ export function LoginForm() {
 
   return (
     <form onSubmit={handleSubmit} noValidate className="w-full max-w-sm space-y-5">
-      <div>
-        <h1 className="text-2xl font-semibold text-gray-900">
+      <div className="text-center">
+        <h1 className="text-2xl font-bold text-gray-900">
           Bienvenue sur FutureKawaHUB
         </h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <p className="mt-1 text-base font-normal text-gray-500">
           Suivi des stocks et des conditions de conservation
         </p>
       </div>
@@ -93,7 +90,7 @@ export function LoginForm() {
           onChange={(e) => setEmail(e.target.value)}
           aria-invalid={Boolean(fieldErrors.email)}
           aria-describedby={fieldErrors.email ? "email-error" : undefined}
-          className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-green-600 focus:outline-none focus:ring-1 focus:ring-green-600"
+          className="mt-1 w-full rounded-2xl border border-gray-300 px-3 py-2 font-input font-medium text-base/5 text-input-text focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
         />
         {fieldErrors.email && (
           <p id="email-error" className="mt-1 text-xs text-red-600">
@@ -115,7 +112,7 @@ export function LoginForm() {
             onChange={(e) => setPassword(e.target.value)}
             aria-invalid={Boolean(fieldErrors.password)}
             aria-describedby={fieldErrors.password ? "password-error" : undefined}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 pr-10 text-sm focus:border-green-600 focus:outline-none focus:ring-1 focus:ring-green-600"
+            className="w-full rounded-2xl border border-gray-300 px-3 py-2 pr-10 font-input font-medium text-base/5 text-input-text focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
           />
           <button
             type="button"
@@ -133,13 +130,9 @@ export function LoginForm() {
         )}
       </div>
 
-      <button
-        type="submit"
-        disabled={isSubmitting}
-        className="w-full rounded-lg bg-green-600 py-2.5 text-sm font-medium text-white transition hover:bg-green-700 disabled:opacity-50"
-      >
+      <Button type="submit" disabled={isSubmitting} className="w-full">
         {isSubmitting ? "Connexion..." : "Se connecter"}
-      </button>
+      </Button>
 
       <p className="text-center text-xs text-gray-400">
         En vous connectant, vous acceptez les Conditions d&apos;utilisation et la
@@ -149,7 +142,6 @@ export function LoginForm() {
   );
 }
 
-// Small inline icons to avoid adding a new dependency (no icon library confirmed yet)
 function EyeIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

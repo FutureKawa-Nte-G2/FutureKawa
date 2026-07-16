@@ -1,11 +1,20 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist_Mono, Poppins, REM } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "../context/AuthContext";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+// Body copy: titles, subtitles, labels, buttons
+const poppins = Poppins({
+  variable: "--font-poppins",
   subsets: ["latin"],
+  weight: ["400", "500", "700"],
+});
+
+// User-typed input text only (email/password fields)
+const rem = REM({
+  variable: "--font-rem",
+  subsets: ["latin"],
+  weight: ["500"],
 });
 
 const geistMono = Geist_Mono({
@@ -26,7 +35,7 @@ export default function RootLayout({
   return (
     <html
       lang="fr"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${poppins.variable} ${rem.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
         <AuthProvider>{children}</AuthProvider>

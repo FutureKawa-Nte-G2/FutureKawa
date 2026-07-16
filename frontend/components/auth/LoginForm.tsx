@@ -68,7 +68,7 @@ export function LoginForm() {
           Bienvenue sur FutureKawaHUB
         </h1>
         <p className="mt-1 text-base font-normal text-gray-500">
-          Suivi des stocks et des conditions de conservation
+          Suivi la qualité et les stocks de cafés verts
         </p>
       </div>
 

@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "../../context/AuthContext";
 import { LoginForm } from "./LoginForm";
+import Image from "next/image";
 
 // Renders the login form, or redirects to /dashboard if a silent
 // reconnection (via the refresh cookie) already succeeded on mount.
@@ -32,8 +33,15 @@ export function LoginGate() {
       <div className="flex w-full flex-col justify-center px-8 md:w-1/2 md:px-16">
         <LoginForm />
       </div>
-      {/* TODO: replace with the real Figma export, e.g. public/images/login-hero.jpg */}
-      <div className="hidden md:block md:w-1/2 bg-gray-200" />
+      <div className="relative hidden md:block md:w-1/2">
+        <Image
+          src="/images/login-hero.jpg"
+          alt="Un champs de café survolé par un drône"
+          fill
+          priority
+          className="object-cover"
+        />
+      </div>
     </div>
   );
 }

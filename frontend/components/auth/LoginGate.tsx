@@ -38,6 +38,7 @@ export function LoginGate() {
           src="/images/login-hero.jpg"
           alt="Un champs de café survolé par un drône"
           fill
+          sizes="50vw"
           priority
           className="object-cover"
         />

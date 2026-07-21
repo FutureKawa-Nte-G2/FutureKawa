@@ -5,7 +5,19 @@
   --foreground: #0a0a0a;
   --brand: #59c144;
   --brand-hover: #4ca425; /* ~15% darker */
-    --input-text: #636060;
+  --input-text: #636060;
+
+  /* Tokens/Border */
+  --border-primary: #e4e4e4;
+  --border-secondary: #f9f9f9;
+
+  /* Tokens/Status */
+  --status-compliant-text: #259800;
+  --status-compliant-bg: #f0feed;
+  --status-alert-text: #dc2626;
+  --status-alert-bg: #feeded;
+  --status-expired-text: #c2410c;
+  --status-expired-bg: #fff1e8;
 }
 
 @theme inline {
@@ -14,6 +26,17 @@
   --color-brand: var(--brand);
   --color-brand-hover: var(--brand-hover);
   --color-input-text: var(--input-text);
+
+  --color-border-primary: var(--border-primary);
+  --color-border-secondary: var(--border-secondary);
+
+  --color-status-compliant-text: var(--status-compliant-text);
+  --color-status-compliant-bg: var(--status-compliant-bg);
+  --color-status-alert-text: var(--status-alert-text);
+  --color-status-alert-bg: var(--status-alert-bg);
+  --color-status-expired-text: var(--status-expired-text);
+  --color-status-expired-bg: var(--status-expired-bg);
+
   --font-sans: var(--font-poppins);
   --font-mono: var(--font-geist-mono);
   --font-input: var(--font-rem);

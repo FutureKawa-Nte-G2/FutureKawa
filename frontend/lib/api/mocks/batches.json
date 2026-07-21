@@ -1,0 +1,70 @@
+{
+  "batches": [
+    {
+      "id": "1",
+      "countryCode": "BR",
+      "warehouseId": "BR-W1",
+      "batchRef": "ERP-BR-2025-0091",
+      "farm": "Fazenda Boa Vista",
+      "warehouse": "Santos Warehouse",
+      "enteredAt": "2025-04-10T08:00:00Z",
+      "status": "expired",
+      "shippedAt": null
+    },
+    {
+      "id": "2",
+      "countryCode": "BR",
+      "warehouseId": "BR-W2",
+      "batchRef": "ERP-BR-2026-0014",
+      "farm": "Fazenda Serra Alta",
+      "warehouse": "Cerrado Warehouse",
+      "enteredAt": "2026-05-15T09:30:00Z",
+      "status": "compliant",
+      "shippedAt": null
+    },
+    {
+      "id": "3",
+      "countryCode": "BR",
+      "warehouseId": "BR-W1",
+      "batchRef": "ERP-BR-2026-0022",
+      "farm": "Fazenda Boa Vista",
+      "warehouse": "Santos Warehouse",
+      "enteredAt": "2026-06-01T14:15:00Z",
+      "status": "alert",
+      "shippedAt": null
+    },
+    {
+      "id": "4",
+      "countryCode": "BR",
+      "warehouseId": "BR-W2",
+      "batchRef": "ERP-BR-2026-0035",
+      "farm": "Fazenda Rio Verde",
+      "warehouse": "Cerrado Warehouse",
+      "enteredAt": "2026-06-20T10:00:00Z",
+      "status": "compliant",
+      "shippedAt": null
+    },
+    {
+      "id": "5",
+      "countryCode": "BR",
+      "warehouseId": "BR-W1",
+      "batchRef": "ERP-BR-2026-0041",
+      "farm": "Fazenda Serra Alta",
+      "warehouse": "Santos Warehouse",
+      "enteredAt": "2026-07-01T07:45:00Z",
+      "status": "compliant",
+      "shippedAt": null
+    },
+    {
+      "id": "6",
+      "countryCode": "BR",
+      "warehouseId": "BR-W2",
+      "batchRef": "ERP-BR-2026-0048",
+      "farm": "Fazenda Rio Verde",
+      "warehouse": "Cerrado Warehouse",
+      "enteredAt": "2026-07-10T11:20:00Z",
+      "status": "compliant",
+      "shippedAt": null
+    }
+  ]
+}

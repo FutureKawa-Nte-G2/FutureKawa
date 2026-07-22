@@ -6,7 +6,7 @@ import { BatchTable } from "@/components/batches/BatchTable";
 import { getBatches } from "@/lib/api/batches";
 import type { Batch } from "@/lib/api/types";
 
-export default function DashboardPage() {
+export default function FiFoPage() {
   const [selection, setSelection] = useState<LocationSelection>({
     country: null,
     warehouse: null,

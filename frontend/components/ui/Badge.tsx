@@ -4,18 +4,20 @@ interface BadgeProps {
   status: BatchStatus;
 }
 
+// Displayed labels are in French; BatchStatus values themselves stay as the English API contract
 const STATUS_STYLES: Record<BatchStatus, { label: string; className: string }> = {
-  compliant: { label: "compliant", className: "text-status-compliant-text bg-status-compliant-bg" },
-  alert: { label: "alert", className: "text-status-alert-text bg-status-alert-bg" },
-  expired: { label: "expired", className: "text-status-expired-text bg-status-expired-bg" },
+  compliant: { label: "conforme", className: "text-status-compliant-text bg-status-compliant-bg" },
+  alert: { label: "alerte", className: "text-status-alert-text bg-status-alert-bg" },
+  expired: { label: "périmé", className: "text-status-expired-text bg-status-expired-bg" },
 };
 
 export function Badge({ status }: BadgeProps) {
   const { label, className } = STATUS_STYLES[status];
 
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${className}`}>
-      <span className="h-1.5 w-1.5 rounded-full bg-current" />
+    <span
+      className={`inline-flex h-8 w-24 shrink-0 items-center justify-center rounded-full text-center text-xs font-medium ${className}`}
+    >
       {label}
     </span>
   );

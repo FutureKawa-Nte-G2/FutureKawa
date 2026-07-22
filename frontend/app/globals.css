@@ -9,7 +9,9 @@
 
   /* Tokens/Border */
   --border-primary: #e4e4e4;
-  --border-secondary: #f9f9f9;
+
+  /* Tokens/Background */
+  --background-secondary: #f9f9f9;
 
   /* Tokens/Status */
   --status-compliant-text: #259800;
@@ -18,6 +20,12 @@
   --status-alert-bg: #feeded;
   --status-expired-text: #c2410c;
   --status-expired-bg: #fff1e8;
+
+  /* Tokens/Action (status-driven buttons) */
+  --action-alert-bg: #dc2626;      /* = status-alert-text, reused as a solid button background */
+  --action-alert-bg-hover: #b91c1c;
+  --action-expired-bg: #c2410c;    /* = status-expired-text, reused as a solid button background */
+  --action-expired-bg-hover: #9a3412;
 }
 
 @theme inline {
@@ -28,7 +36,7 @@
   --color-input-text: var(--input-text);
 
   --color-border-primary: var(--border-primary);
-  --color-border-secondary: var(--border-secondary);
+  --color-background-secondary: var(--background-secondary);
 
   --color-status-compliant-text: var(--status-compliant-text);
   --color-status-compliant-bg: var(--status-compliant-bg);
@@ -37,17 +45,15 @@
   --color-status-expired-text: var(--status-expired-text);
   --color-status-expired-bg: var(--status-expired-bg);
 
+  --color-action-alert-bg: var(--action-alert-bg);
+  --color-action-alert-bg-hover: var(--action-alert-bg-hover);
+  --color-action-expired-bg: var(--action-expired-bg);
+  --color-action-expired-bg-hover: var(--action-expired-bg-hover);
+
   --font-sans: var(--font-poppins);
   --font-mono: var(--font-geist-mono);
   --font-input: var(--font-rem);
 }
-
-/* @media (prefers-color-scheme: dark) {
-  :root {
-    --background: #ededed;
-    --foreground: #0a0a0a;
-  }
-} */
 
 body {
   background: var(--background);

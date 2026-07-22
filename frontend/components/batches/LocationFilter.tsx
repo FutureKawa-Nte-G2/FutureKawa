@@ -61,30 +61,30 @@ export function LocationFilter({ onSelectionChange }: LocationFilterProps) {
   }
 
   const countryOptions = [
-    { value: ALL_COUNTRIES, label: "All countries" },
+    { value: ALL_COUNTRIES, label: "Tous les pays" },
     ...countries.map((country) => ({ value: country.code, label: country.name })),
   ];
 
   const warehouseOptions = countryCode
     ? [
-        { value: ALL_WAREHOUSES, label: "All warehouses" },
+        { value: ALL_WAREHOUSES, label: "Tous les entrepôts" },
         ...warehouses.map((warehouse) => ({ value: warehouse.id, label: warehouse.name })),
       ]
     : [];
 
   return (
-    <aside className="flex w-[224px] flex-col gap-4 bg-border-secondary p-4">
+    <aside className="flex w-[224px] flex-col gap-4 bg-background-secondary p-4">
       <Select
-        label="Country"
+        label="Pays"
         value={countryCode ?? ALL_COUNTRIES}
         options={countryOptions}
         onChange={handleCountryChange}
       />
       <Select
-        label="Warehouse"
+        label="Entrepôt"
         value={warehouseId ?? ALL_WAREHOUSES}
         options={warehouseOptions}
-        placeholder="Select a country first"
+        placeholder="Sélectionnez d'abord un pays"
         disabled={!countryCode}
         onChange={handleWarehouseChange}
       />

@@ -1,7 +1,7 @@
 {
   "countries": [
-    { "code": "BR", "name": "Brazil" },
-    { "code": "EC", "name": "Ecuador" },
-    { "code": "CO", "name": "Colombia" }
+    { "code": "BR", "name": "Brésil" },
+    { "code": "EC", "name": "Equateur" },
+    { "code": "CO", "name": "Colombie" }
   ]
 }

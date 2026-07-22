@@ -1,13 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { LocationFilter, type LocationSelection } from "@/components/batches/LocationFilter";
+import { BatchTable } from "@/components/batches/BatchTable";
+import { getBatches } from "@/lib/api/batches";
+import type { Batch } from "@/lib/api/types";
 
 export default function DashboardPage() {
   const [selection, setSelection] = useState<LocationSelection>({
     country: null,
     warehouse: null,
   });
+  const [batches, setBatches] = useState<Batch[]>([]);
+
+  useEffect(() => {
+    getBatches({
+      countryCode: selection.country?.code,
+      warehouseId: selection.warehouse?.id,
+    }).then(setBatches);
+  }, [selection]);
 
   const title = selection.warehouse
     ? `${selection.country?.name} — ${selection.warehouse.name}`
@@ -21,8 +32,8 @@ export default function DashboardPage() {
         <p className="mt-1 text-sm text-input-text">
           Suivi des stocks et accès aux courbes de mesures qualité.
         </p>
-        <div className="mt-8 text-sm text-input-text">
-          Tableau des lots en stock.
+        <div className="mt-8">
+          <BatchTable batches={batches} />
         </div>
       </main>
     </div>

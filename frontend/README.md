@@ -19,7 +19,9 @@ writes to country data directly, only via the head-office backend API.
 - Node.js 24 or later (`node -v` to check)
 - npm (bundled with Node)
 - The [FutureKawaSiege backend](../backend) running locally for any authenticated flow
-  (login, dashboard data) — see that repository's own README for setup
+  (login, fifo data) — see that repository's own README for setup.
+  **Not required for local frontend development**: see "Developing without a backend"
+  below.
 
 > **Windows note:** if you switch between WSL and native Windows for this project, do not
 > share a single `node_modules` folder between the two — reinstall (`npm install`) after
@@ -52,11 +54,44 @@ writes to country data directly, only via the head-office backend API.
 ```
    Open [http://localhost:3000](http://localhost:3000).
 
+## Developing without a backend
+
+Several head-office API endpoints (batches, countries, warehouses) are not implemented
+yet. Set `NEXT_PUBLIC_USE_MOCKS=true` in `.env.local` to run the app entirely against
+local mock data (`lib/api/mocks/`) — no backend, database, or network access required:
+
+```bash
+NEXT_PUBLIC_API_BASE_URL=http://localhost:55648
+NEXT_PUBLIC_USE_MOCKS=true
+```
+
+In this mode, login is also bypassed: the app loads as an already-authenticated head-office
+user (see `context/AuthContext.tsx`).
+
+**Never enable this flag in a production build.** `NEXT_PUBLIC_*` variables are baked
+into the client bundle at build time, so a mock-enabled production build would ship
+fake data and a bypassed login screen to real users.
+
 ## Environment variables
 
 | Variable | Description | Required |
 |---|---|---|
 | `NEXT_PUBLIC_API_BASE_URL` | Base URL of the head-office backend API | Yes |
+| `NEXT_PUBLIC_USE_MOCKS` | When `true`, bypasses the backend and login entirely, using local mock data instead. See "Developing without a backend". | No (default: `false`) |
+
+## API endpoints consumed
+
+The frontend currently calls the following head-office backend routes. Request/response
+shapes are defined in `lib/api/types.ts`, which is the single source of truth for these
+contracts — refer to that file (or share it directly with backend developers) rather than
+a copy of the shapes here.
+
+| Endpoint | Used by |
+|---|---|
+| `POST /api/auth/login`, `/refresh`, `/logout`, `/me` | `lib/api/auth.ts` |
+| `GET /api/batches` | `lib/api/batches.ts` — sorted oldest-first, filterable by country/warehouse, excludes shipped batches |
+| `GET /api/countries` | `lib/api/batches.ts` |
+| `GET /api/warehouses` | `lib/api/batches.ts` — filterable by country |
 
 ## Available scripts
 
@@ -106,8 +141,10 @@ Always re-run the test suite and manually verify the app after any dependency bu
 
 ## Project structure
 frontend/
-├── app/                      # Next.js App Router: routes and root layout
-│   ├── layout.tsx            # Root layout, font loading, AuthProvider
+├── app/                       # Next.js App Router: routes and root layout
+│   ├── fifo              
+│   │   └── page.tsx           # Batches FIFO listing screen
+│   ├── layout.tsx             # Root layout, font loading, AuthProvider
 │   ├── page.tsx               # "/" — login page (also the sole public entry point)
 │   └── globals.css            # Tailwind import, design tokens (colors, fonts)
 ├── components/
@@ -116,15 +153,24 @@ frontend/
 │   │   ├── LoginForm.test.tsx
 │   │   └── LoginGate.tsx      # Silent-reconnect gate shown at "/"
 │   └── ui/
-│       └── Button.tsx         # Shared button component (variants)
+│       ├── Button.tsx # Shared button component (variants: primary/alert/expired)
+│       ├── Badge.tsx # Status badge (compliant/alert/expired)
+│       ├── Badge.test.tsx
+│       └── Select.tsx # Generic labeled select
 ├── context/
 │   ├── AuthContext.tsx        # In-memory auth state, silent refresh on mount
 │   └── AuthContext.test.tsx
 ├── lib/
 │   └── api/
+│       ├── mocks/             # Local fixture data used when NEXT_PUBLIC_USE_MOCKS=true
+│       │   ├── batches.json
+│       │   ├── countries.json
+│       │   ├── user.json
+│       │   └── warehouses.json
+│       ├── auth.ts            # login / refresh / logout / me functions
+│       ├── batches.ts         # getBatches / getCountries / getWarehouses,
 │       ├── client.ts          # Low-level fetch wrapper (ApiResponse unwrapping)
 │       ├── constants.ts       # API base URL
-│       ├── auth.ts            # login / refresh / logout / me functions
 │       └── types.ts           # Shared API request/response types
 ├── public/
 │   ├── images/                # Photos and illustrations (e.g. login hero image)

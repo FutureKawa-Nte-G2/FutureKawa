@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getUnreadAlerts, markAlertAsRead } from "@/lib/api/alerts";
-import type { AlertItem } from "@/lib/api/types";
+import { getUnreadAlerts, resolveAlert } from "@/lib/api/alerts";
+import type { AlertItem, AlertType } from "@/lib/api/types";
 
-const KIND_STYLES: Record<AlertItem["kind"], string> = {
+const TYPE_STYLES: Record<AlertType, string> = {
   alert: "text-status-alert-text bg-status-alert-bg",
   expired: "text-status-expired-text bg-status-expired-bg",
 };
@@ -17,9 +17,9 @@ export function AlertButton() {
     getUnreadAlerts().then(setAlerts);
   }, []);
 
-  async function handleAlertClick(id: string) {
+  async function handleResolve(id: string) {
     setAlerts((prev) => prev.filter((a) => a.id !== id));
-    await markAlertAsRead(id);
+    await resolveAlert(id);
   }
 
   return (
@@ -55,11 +55,11 @@ export function AlertButton() {
                 key={alert.id}
                 type="button"
                 role="menuitem"
-                onClick={() => handleAlertClick(alert.id)}
+                onClick={() => handleResolve(alert.id)}
                 className="flex w-full items-start gap-2 px-3 py-2 text-left text-sm hover:bg-background-secondary"
               >
-                <span className={`mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${KIND_STYLES[alert.kind]}`}>
-                  {alert.kind === "expired" ? "périmé" : "alerte"}
+                <span className={`mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${TYPE_STYLES[alert.alertType]}`}>
+                  {alert.alertType === "expired" ? "périmé" : "alerte"}
                 </span>
                 <span className="text-foreground">{alert.message}</span>
               </button>

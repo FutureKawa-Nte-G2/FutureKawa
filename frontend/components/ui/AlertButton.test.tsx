@@ -4,22 +4,40 @@ import userEvent from "@testing-library/user-event";
 import { AlertButton } from "./AlertButton";
 
 const mockGetUnreadAlerts = vi.fn();
-const mockMarkAlertAsRead = vi.fn();
+const mockResolveAlert = vi.fn();
 
 vi.mock("@/lib/api/alerts", () => ({
   getUnreadAlerts: () => mockGetUnreadAlerts(),
-  markAlertAsRead: (id: string) => mockMarkAlertAsRead(id),
+  resolveAlert: (id: string) => mockResolveAlert(id),
 }));
 
 const alerts = [
-  { id: "alert-1", kind: "expired" as const, message: "Lot BR-2026-0341 périmé.", createdAt: "2026-07-27T08:15:00Z" },
-  { id: "alert-2", kind: "alert" as const, message: "Conditions hors plage à Cuenca-2.", createdAt: "2026-07-26T14:32:00Z" },
+  {
+    id: "1",
+    alertType: "expired" as const,
+    alertStatus: "open" as const,
+    batchRef: "BR-2026-0341",
+    warehouse: "Cerrado",
+    message: "Le lot BR-2026-0341 a dépassé 365 jours de stockage dans l'entrepôt Cerrado (Brésil).",
+    createdAt: "2026-07-27T08:15:00Z",
+    resolvedAt: null,
+  },
+  {
+    id: "2",
+    alertType: "alert" as const,
+    alertStatus: "open" as const,
+    batchRef: null,
+    warehouse: "Santos",
+    message: "Conditions hors plage détectée dans l'entrepôt de Santos (Brésil).",
+    createdAt: "2026-06-01T14:15:00Z",
+    resolvedAt: null,
+  },
 ];
 
 describe("AlertButton", () => {
   beforeEach(() => {
     mockGetUnreadAlerts.mockReset().mockResolvedValue(alerts);
-    mockMarkAlertAsRead.mockReset().mockResolvedValue(undefined);
+    mockResolveAlert.mockReset().mockResolvedValue(undefined);
   });
 
   it("displays the unread count from the API", async () => {
@@ -32,9 +50,9 @@ describe("AlertButton", () => {
     render(<AlertButton />);
 
     await user.click(await screen.findByRole("button", { name: /Alertes non lues \(2\)/ }));
-    await user.click(await screen.findByRole("menuitem", { name: /Lot BR-2026-0341 périmé/ }));
+    await user.click(await screen.findByRole("menuitem", { name: /BR-2026-0341/ }));
 
-    expect(mockMarkAlertAsRead).toHaveBeenCalledWith("alert-1");
+    expect(mockResolveAlert).toHaveBeenCalledWith("1");
     expect(screen.queryByText(/Lot BR-2026-0341/)).not.toBeInTheDocument();
     expect(screen.getByText("1")).toBeInTheDocument();
   });

@@ -1,0 +1,44 @@
+import { describe, it, expect, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { Navbar } from "./Navbar";
+
+const mockUseAuth = vi.fn();
+
+vi.mock("@/context/AuthContext", () => ({
+  useAuth: () => mockUseAuth(),
+}));
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
+}));
+
+vi.mock("@/lib/api/alerts", () => ({
+  getUnreadAlerts: () => Promise.resolve([]),
+  markAlertAsRead: () => Promise.resolve(undefined),
+}));
+
+describe("Navbar", () => {
+  it("renders nothing when no user is authenticated", () => {
+    mockUseAuth.mockReturnValue({ user: null, logoutUser: vi.fn() });
+    const { container } = render(<Navbar />);
+
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("renders the navbar, including the user avatar, once authenticated", async () => {
+    mockUseAuth.mockReturnValue({
+      user: {
+        id: "mock-user-1",
+        email: "demo.hq@futurekawa.com",
+        role: "OperationsSupplyChain",
+        country: "HQ",
+        warehouseId: null,
+      },
+      logoutUser: vi.fn(),
+    });
+    render(<Navbar />);
+
+    expect(await screen.findByText("Opérations & Supply Chain")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Rafraîchir les données" })).toBeInTheDocument();
+  });
+});

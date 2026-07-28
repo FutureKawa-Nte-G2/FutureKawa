@@ -1,0 +1,16 @@
+{
+  "alerts": [
+    {
+      "id": "alert-1",
+      "kind": "expired",
+      "message": "Le lot BR-2026-0341 a dépassé 365 jours de stockage.",
+      "createdAt": "2026-07-27T08:15:00Z"
+    },
+    {
+      "id": "alert-2",
+      "kind": "alert",
+      "message": "Conditions hors plage détectée dans l'entrepôt Cuenca-2 (Équateur).",
+      "createdAt": "2026-07-26T14:32:00Z"
+    }
+  ]
+}

@@ -84,3 +84,18 @@ export interface BatchListResponse {
   totalCount: number;
   totalPages: number;
 }
+
+// Alert info returned by GET /api/alerts (unread only)
+// kind mirrors the two trigger conditions from the spec: out-of-range
+// measurement ("alert") or batch past its 365-day expiry ("expired")
+export interface AlertItem {
+  id: string;
+  kind: Extract<BatchStatus, "alert" | "expired">;
+  message: string;
+  createdAt: string;
+}
+
+// Alert list response, same wrapper shape as BatchListResponse/CountryListResponse
+export interface AlertListResponse {
+  alerts: AlertItem[];
+}

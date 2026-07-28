@@ -5,6 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 import { UserMenu } from "@/components/layout/UserMenu";
 import { RefreshButton } from "../ui/RefreshButton";
 import { AlertButton } from "../ui/AlertButton";
+import { SearchInput } from "../ui/SearchInput";
 
 export function Navbar() {
   const { user } = useAuth();
@@ -25,7 +26,7 @@ export function Navbar() {
       {/* Main navbar content: search (left) + actions (right) */}
       <div className="flex flex-1 items-center justify-between gap-4 px-6">
         <div className="max-w-md flex-1">
-          {/* SearchInput — placeholder only, wired in a following increment */}
+          <SearchInput />
         </div>
 
         <div className="flex items-center gap-3">

@@ -55,6 +55,7 @@ export function UserMenu() {
         onClick={() => setIsOpen((v) => !v)}
         aria-haspopup="menu"
         aria-expanded={isOpen}
+        title="Menu utilisateur"
         className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-background-secondary"
       >
         <Avatar />

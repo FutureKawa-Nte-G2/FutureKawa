@@ -30,6 +30,7 @@ export function AlertButton() {
         aria-haspopup="menu"
         aria-expanded={isOpen}
         aria-label={`Alertes non lues (${alerts.length})`}
+        title={`Alertes non lues (${alerts.length})`}
         className="relative flex h-(--nav-icon-size) w-(--nav-icon-size) items-center justify-center rounded-full bg-background-secondary text-input-text hover:bg-brand-hover/10"
       >
         <BellIcon />

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { UserMenu } from "@/components/layout/UserMenu";
+import { RefreshButton } from "../ui/RefreshButton";
 
 export function Navbar() {
   const { user } = useAuth();
@@ -27,6 +28,7 @@ export function Navbar() {
         </div>
 
         <div className="flex items-center gap-3">
+          <RefreshButton />
           {/* RefreshButton, NotificationButton — wired in following increments */}
           <UserMenu />
         </div>

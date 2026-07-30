@@ -58,15 +58,20 @@ export interface WarehouseListResponse {
 export type BatchStatus = "compliant" | "alert" | "expired";
 
 // A stored batch of green coffee, as consolidated and exposed by the HQ backend
+// A stored batch of green coffee, as consolidated and exposed by the HQ backend.
+// Display fields (countryName, warehouseName, farmName) are provided as-is by the
+// backend — the frontend never derives or reformats them from the id/code fields.
 export interface Batch {
   id: string; // batch_id_pays — unique within its country only, always paired with countryCode
-  countryCode: string; // FK to Country.code
+  countryCode: string; // FK to Country.code, used in the /batches/[country]/[id] route
+  countryName: string; // display name
   warehouseId: string; // FK to Warehouse.id, used to filter the list by warehouse
+  warehouseName: string; // display name
+  farmName: string; // farm/exploitation display name
   batchRef: string; // ERP reference (BATCH.batch_ref), used for reconciliation/traceability
-  farm: string; // farm/exploitation name
-  warehouse: string; // warehouse display name, kept alongside warehouseId to avoid a lookup for table rendering
-  enteredAt: string; // ISO 8601 date-time — date the batch entered storage, used for FIFO sort
+  qualityGrade: string; // quality characteristic set at batch creation (e.g. "Premium", "Robusta")
   status: BatchStatus;
+  enteredAt: string; // ISO 8601 date-time — date the batch entered storage, used for FIFO sort
   shippedAt: string | null; // ISO 8601 date-time; null while in stock.
   // Note: the backend already filters out shipped batches from GET /api/batches by default,
   // this field is kept for completeness/potential future audit views.

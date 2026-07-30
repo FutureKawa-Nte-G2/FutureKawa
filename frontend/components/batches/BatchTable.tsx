@@ -6,7 +6,7 @@ interface BatchTableProps {
   batches: Batch[];
 }
 
-const COLUMN_LABELS = ["Id lot", "Exploitation", "Entrepôt", "Date de stockage", "Statut", "Actions"];
+const COLUMN_LABELS = ["Id lot", "Exploitation", "Entrepôt", "Qualité", "Date de stockage", "Statut", "Actions"];
 
 export function BatchTable({ batches }: BatchTableProps) {
   if (batches.length === 0) {
@@ -17,7 +17,9 @@ export function BatchTable({ batches }: BatchTableProps) {
     <div className="flex w-full max-w-[990px] flex-col gap-3">
       <div className={`${HEADER_ROW_CLASSES} ${GRID_TEMPLATE} text-xs font-medium text-input-text`}>
         {COLUMN_LABELS.map((label) => (
-          <span key={label}>{label}</span>
+           <span key={label} className="min-w-0 text-center">
+            {label}
+            </span>
         ))}
       </div>
       {batches.map((batch) => (

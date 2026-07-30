@@ -13,12 +13,14 @@ function makeBatch(overrides: Partial<Batch>): Batch {
   return {
     id: "42",
     countryCode: "BR",
+    countryName: "Brésil",
     warehouseId: "BR-W1",
+    warehouseName: "Test Warehouse",
+    farmName: "Fazenda Test",
     batchRef: "ERP-BR-2026-0042",
-    farm: "Fazenda Test",
-    warehouse: "Test Warehouse",
-    enteredAt: "2026-01-01T00:00:00Z",
+    qualityGrade: "Premium",
     status: "compliant",
+    enteredAt: "2026-01-01T00:00:00Z",
     shippedAt: null,
     ...overrides,
   };
@@ -39,8 +41,8 @@ describe("BatchRow", () => {
 
   it("displays farm, warehouse and a formatted entry date", () => {
     const batch = makeBatch({
-      farm: "Fazenda Boa Vista",
-      warehouse: "Santos Warehouse",
+      farmName: "Fazenda Boa Vista",
+      warehouseName: "Santos Warehouse",
       enteredAt: "2026-07-01T07:45:00Z",
     });
     render(<BatchRow batch={batch} />);

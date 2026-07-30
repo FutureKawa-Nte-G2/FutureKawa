@@ -15,10 +15,11 @@ export function BatchRow({ batch }: BatchRowProps) {
 
   return (
     <div className={`${ROW_CLASSES} ${GRID_TEMPLATE}`}>
-      <span className="text-center text-sm text-foreground">{batch.batchRef}</span>
-      <span className="text-center text-sm text-foreground">{batch.farm}</span>
-      <span className="text-center text-sm text-foreground">{batch.warehouse}</span>
-      <span className="text-center text-sm text-foreground">{formatEnteredAt(batch.enteredAt)}</span>
+      <span className="min-w-0 text-center text-sm text-foreground">{batch.batchRef}</span>
+      <span className="min-w-0 text-center text-sm text-foreground">{batch.farmName}</span>
+      <span className="min-w-0 text-center text-sm text-foreground">{batch.warehouseName}</span>
+      <span className="min-w-0 text-center text-sm text-foreground">{batch.qualityGrade}</span>
+      <span className="min-w-0 text-center text-sm text-foreground">{formatEnteredAt(batch.enteredAt)}</span>
       <Badge status={batch.status} />
       <QualityTrackingButton
         status={batch.status}

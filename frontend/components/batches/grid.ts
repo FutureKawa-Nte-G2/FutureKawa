@@ -6,7 +6,7 @@
 // based on that grid's own content, so they don't stay aligned across grids
 // even with an identical template string. Fixed widths guarantee identical
 // columns everywhere. 96px matches the Badge's fixed width (w-24).
-export const GRID_TEMPLATE = "grid-cols-[2fr_2fr_2fr_1.5fr_96px_160px]";
+export const GRID_TEMPLATE = "grid-cols-[2fr_2fr_2fr_1fr_1.5fr_96px_160px]";
 
 // Shared row shell (dimensions, border, radius, spacing), background excluded
 // since the header and data rows use different Tokens/Background values.

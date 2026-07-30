@@ -12,12 +12,14 @@ function makeBatch(overrides: Partial<Batch>): Batch {
   return {
     id: "1",
     countryCode: "BR",
+    countryName: "Brésil",
     warehouseId: "BR-W1",
+    warehouseName: "Test Warehouse",
+    farmName: "Fazenda Test",
     batchRef: "ERP-BR-2026-0001",
-    farm: "Fazenda Test",
-    warehouse: "Test Warehouse",
-    enteredAt: "2026-01-01T00:00:00Z",
+    qualityGrade: "Premium",
     status: "compliant",
+    enteredAt: "2026-01-01T00:00:00Z",
     shippedAt: null,
     ...overrides,
   };

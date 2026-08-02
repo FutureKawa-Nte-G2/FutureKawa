@@ -79,4 +79,8 @@ export interface Batch {
 
 export interface BatchListResponse {
   batches: Batch[];
+  page: number;
+  pageSize: number;
+  totalCount: number;
+  totalPages: number;
 }

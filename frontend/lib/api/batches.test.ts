@@ -1,7 +1,12 @@
 import { describe, it, expect, beforeAll } from "vitest";
-import type { Batch, Country, Warehouse } from "./types";
+import type { Batch, BatchListResponse, Country, Warehouse } from "./types";
 
-let getBatches: (params?: { countryCode?: string; warehouseId?: string }) => Promise<Batch[]>;
+let getBatches: (params?: {
+  countryCode?: string;
+  warehouseId?: string;
+  page?: number;
+  pageSize?: number;
+}) => Promise<BatchListResponse>;
 let getCountries: () => Promise<Country[]>;
 let getWarehouses: (countryCode?: string) => Promise<Warehouse[]>;
 
@@ -10,36 +15,69 @@ beforeAll(async () => {
   ({ getBatches, getCountries, getWarehouses } = await import("./batches"));
 });
 
+const ALL_IDS = Array.from({ length: 20 }, (_, i) => String(i + 1));
+const BR_W1_IDS = ALL_IDS.filter((id) => Number(id) % 2 === 1); // odd ids
+const BR_W2_IDS = ALL_IDS.filter((id) => Number(id) % 2 === 0); // even ids
+
 describe("getBatches", () => {
   it("returns batches sorted oldest-first", async () => {
-    const batches = await getBatches();
-    expect(batches.map((b) => b.id)).toEqual(["1", "2", "3", "4", "5", "6"]);
+    // pageSize covers all 20 mock batches so the full sorted set is visible in one page
+    const response = await getBatches({ pageSize: 20 });
+    expect(response.batches.map((b) => b.id)).toEqual(ALL_IDS);
   });
 
   it("filters by countryCode", async () => {
     const brazil = await getBatches({ countryCode: "BR" });
     const ecuador = await getBatches({ countryCode: "EC" });
 
-    expect(brazil).toHaveLength(6);
-    expect(ecuador).toHaveLength(0);
+    expect(brazil.totalCount).toBe(20);
+    expect(ecuador.totalCount).toBe(0);
   });
 
   it("filters by warehouseId", async () => {
-    const santos = await getBatches({ warehouseId: "BR-W1" });
-    const cerrado = await getBatches({ warehouseId: "BR-W2" });
+    const santos = await getBatches({ warehouseId: "BR-W1", pageSize: 20 });
+    const cerrado = await getBatches({ warehouseId: "BR-W2", pageSize: 20 });
 
-    expect(santos.map((b) => b.id)).toEqual(["1", "3", "5"]);
-    expect(cerrado.map((b) => b.id)).toEqual(["2", "4", "6"]);
+    expect(santos.batches.map((b) => b.id)).toEqual(BR_W1_IDS);
+    expect(cerrado.batches.map((b) => b.id)).toEqual(BR_W2_IDS);
   });
 
   it("combines countryCode and warehouseId filters", async () => {
-    const batches = await getBatches({ countryCode: "BR", warehouseId: "BR-W1" });
-    expect(batches.map((b) => b.id)).toEqual(["1", "3", "5"]);
+    const response = await getBatches({ countryCode: "BR", warehouseId: "BR-W1", pageSize: 20 });
+    expect(response.batches.map((b) => b.id)).toEqual(BR_W1_IDS);
   });
 
-  it("returns every batch when no filter is given", async () => {
-    const batches = await getBatches({});
-    expect(batches).toHaveLength(6);
+  it("defaults to page 1 and pageSize 10 when omitted", async () => {
+    const response = await getBatches();
+    expect(response.page).toBe(1);
+    expect(response.pageSize).toBe(10);
+    expect(response.batches).toHaveLength(10);
+    expect(response.batches.map((b) => b.id)).toEqual(ALL_IDS.slice(0, 10));
+  });
+
+  it("returns only pageSize items and reports correct pagination metadata", async () => {
+    const response = await getBatches({ pageSize: 8 });
+
+    expect(response.batches).toHaveLength(8);
+    expect(response.batches.map((b) => b.id)).toEqual(ALL_IDS.slice(0, 8));
+    expect(response.totalCount).toBe(20);
+    expect(response.totalPages).toBe(3);
+  });
+
+  it("returns the remaining partial page on the last page", async () => {
+    const response = await getBatches({ pageSize: 8, page: 3 });
+
+    expect(response.batches.map((b) => b.id)).toEqual(ALL_IDS.slice(16, 20));
+    expect(response.page).toBe(3);
+    expect(response.totalPages).toBe(3);
+  });
+
+  it("returns an empty batches array with totalPages 1 when the filtered set is empty", async () => {
+    const response = await getBatches({ countryCode: "EC" });
+
+    expect(response.batches).toEqual([]);
+    expect(response.totalCount).toBe(0);
+    expect(response.totalPages).toBe(1);
   });
 });
 

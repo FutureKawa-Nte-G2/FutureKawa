@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { LocationFilter, type LocationSelection } from "@/components/batches/LocationFilter";
 import { BatchTable } from "@/components/batches/BatchTable";
 import { PageSizeSelector } from "@/components/ui/PageSizeSelector";
 import { Pagination } from "@/components/ui/Pagination";
 import { getBatches } from "@/lib/api/batches";
+import { useRefresh } from "@/context/RefreshContext";
 import type { Batch } from "@/lib/api/types";
 
 export default function FifoPage() {
@@ -17,18 +18,29 @@ export default function FifoPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [totalPages, setTotalPages] = useState(1);
+  const { registerRefreshHandler } = useRefresh();
 
-  useEffect(() => {
-    getBatches({
+  const fetchBatches = useCallback(async () => {
+    const response = await getBatches({
       countryCode: selection.country?.code,
       warehouseId: selection.warehouse?.id,
       page,
       pageSize,
-    }).then((response) => {
-      setBatches(response.batches);
-      setTotalPages(response.totalPages);
     });
+    setBatches(response.batches);
+    setTotalPages(response.totalPages);
   }, [selection, page, pageSize]);
+
+  useEffect(() => {
+    fetchBatches();
+  }, [fetchBatches]);
+
+  // Declare this page as the current handler for the navbar's refresh button.
+  // Cleared on unmount so a stale page doesn't respond after navigating away.
+  useEffect(() => {
+    registerRefreshHandler(fetchBatches);
+    return () => registerRefreshHandler(null);
+  }, [registerRefreshHandler, fetchBatches]);
 
   function handleSelectionChange(next: LocationSelection) {
     setSelection(next);

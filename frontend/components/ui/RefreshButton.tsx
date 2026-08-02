@@ -1,16 +1,19 @@
 "use client";
 
-import { useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { useRefresh } from "@/context/RefreshContext";
 
 export function RefreshButton() {
-  const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+  const { triggerRefresh } = useRefresh();
+  const [isPending, setIsPending] = useState(false);
 
-  function handleRefresh() {
-    startTransition(() => {
-      router.refresh();
-    });
+  async function handleRefresh() {
+    setIsPending(true);
+    try {
+      await triggerRefresh();
+    } finally {
+      setIsPending(false);
+    }
   }
 
   return (

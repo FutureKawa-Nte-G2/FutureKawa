@@ -18,7 +18,7 @@ export function Navbar() {
     <header className="sticky top-0 z-40 flex h-(--navbar-height) w-full border-b border-border-primary bg-background">
       {/* Logo band — same width AND background as the sidebar, so both stay visually continuous */}
       <div className="flex w-(--sidebar-width) shrink-0 items-center justify-center bg-background-secondary px-6">
-        <Link href="/dashboard" className="text-logo font-bold text-brand">
+        <Link href="/fifo" className="text-logo font-bold text-brand">
           Futurekawa
         </Link>
       </div>

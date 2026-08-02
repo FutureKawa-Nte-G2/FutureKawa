@@ -3,6 +3,7 @@ import { Geist_Mono, Poppins, REM } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "../context/AuthContext";
 import { Navbar } from "@/components/layout/Navbar";
+import { RefreshProvider } from "@/context/RefreshContext";
 
 // Body copy: titles, subtitles, labels, buttons
 const poppins = Poppins({
@@ -40,8 +41,10 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <AuthProvider>
-          <Navbar />
-          {children}
+          <RefreshProvider>
+            <Navbar />
+              {children}
+           </RefreshProvider>
           </AuthProvider>
       </body>
     </html>

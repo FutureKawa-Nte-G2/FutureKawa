@@ -215,6 +215,13 @@ frontend/
 │   ├── images/                        # Photos and illustrations (e.g. login hero image)
 │   └── icons/                         # Reusable SVG icons
 │
+├── .env.local                         # Local environment variables (gitignored, not committed)
+├── .gitignore                         # List of files not committed
+├── package-lock.json                  # Records the exact fully-resolved dependency tree installed
+├── package.json                       # Project metadata and dependencies and version range
+├── README.md                          # You are here
+├── vitest.config.ts                   # Test config files
+└── vitest.setup.ts
 
 ## Security notes
 

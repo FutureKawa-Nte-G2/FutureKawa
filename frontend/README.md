@@ -120,14 +120,19 @@ npm run test
 | File | Covers |
 |---|---|
 | `context/AuthContext.test.tsx` | Access token kept in memory only (never persisted) |
+| `context/RefreshContext.test.tsx` | Handler registration, triggering, and unregistration on unmount (backs the navbar refresh button) |
 | `components/auth/LoginForm.test.tsx` | Field validation, generic error messages on failure, password visibility toggle |
+| `components/layout/Navbar.test.tsx` | TODO — describe what this file covers |
 | `lib/api/batches.test.ts` | Sorting, country/warehouse filtering, server-side pagination (page/pageSize defaults, partial last page, empty result set) |
+| `lib/api/alerts.test.ts` | TODO — describe what this file covers |
 | `components/batches/LocationFilter.test.tsx` | Country → warehouse cascading selection, reset behavior, "all countries/warehouses" options |
 | `components/batches/BatchTable.test.tsx` | Empty state, row rendering, column headers |
 | `components/batches/BatchRow.test.tsx` | Displayed fields (ERP reference, not internal id), status badge, navigation to batch detail |
 | `components/ui/Badge.test.tsx` | French status labels, per-status color classes |
 | `components/ui/PageSizeSelector.test.tsx` | Available page size options, numeric (not string) value on change |
 | `components/ui/Pagination.test.tsx` | Ellipsis logic at start/middle/end of range, current page highlighting, arrow disabling on first/last page |
+
+**Missing coverage:** `components/ui/AlertButton.tsx` has no test file yet — to be added.
 
 End-to-end coverage of the full authentication flow (login → session persistence →
 logout) requires a running backend and database, and is tracked separately from this

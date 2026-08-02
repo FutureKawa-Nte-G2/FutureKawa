@@ -89,7 +89,7 @@ a copy of the shapes here.
 | Endpoint | Used by |
 |---|---|
 | `POST /api/auth/login`, `/refresh`, `/logout`, `/me` | `lib/api/auth.ts` |
-| `GET /api/batches` | `lib/api/batches.ts` — sorted oldest-first, filterable by country/warehouse, excludes shipped batches |
+| `GET /api/batches` | `lib/api/batches.ts` — sorted oldest-first, filterable by country/warehouse, excludes shipped batches, server-side paginated (`page`/`pageSize` params, response includes `totalCount`/`totalPages`) |
 | `GET /api/countries` | `lib/api/batches.ts` |
 | `GET /api/warehouses` | `lib/api/batches.ts` — filterable by country |
 
@@ -112,6 +112,20 @@ calls — no backend or database connection is required.
 ```bash
 npm run test
 ```
+
+### Test coverage
+
+| File | Covers |
+|---|---|
+| `context/AuthContext.test.tsx` | Access token kept in memory only (never persisted) |
+| `components/auth/LoginForm.test.tsx` | Field validation, generic error messages on failure, password visibility toggle |
+| `lib/api/batches.test.ts` | Sorting, country/warehouse filtering, server-side pagination (page/pageSize defaults, partial last page, empty result set) |
+| `components/batches/LocationFilter.test.tsx` | Country → warehouse cascading selection, reset behavior, "all countries/warehouses" options |
+| `components/batches/BatchTable.test.tsx` | Empty state, row rendering, column headers |
+| `components/batches/BatchRow.test.tsx` | Displayed fields (ERP reference, not internal id), status badge, navigation to batch detail |
+| `components/ui/Badge.test.tsx` | French status labels, per-status color classes |
+| `components/ui/PageSizeSelector.test.tsx` | Available page size options, numeric (not string) value on change |
+| `components/ui/Pagination.test.tsx` | Ellipsis logic at start/middle/end of range, current page highlighting, arrow disabling on first/last page |
 
 End-to-end coverage of the full authentication flow (login → session persistence →
 logout) requires a running backend and database, and is tracked separately from this
@@ -141,46 +155,58 @@ Always re-run the test suite and manually verify the app after any dependency bu
 
 ## Project structure
 frontend/
-├── app/                       # Next.js App Router: routes and root layout
+├── app/                               # Next.js App Router: routes and root layout
 │   ├── fifo              
-│   │   └── page.tsx           # Batches FIFO listing screen
-│   ├── layout.tsx             # Root layout, font loading, AuthProvider
-│   ├── page.tsx               # "/" — login page (also the sole public entry point)
-│   └── globals.css            # Tailwind import, design tokens (colors, fonts)
+│   │   └── page.tsx                   # Batches FIFO listing screen
+│   ├── layout.tsx                     # Root layout, font loading, AuthProvider
+│   ├── page.tsx                       # "/" — login page (also the sole public entry point)
+│   └── globals.css                    # Tailwind import, design tokens (colors, fonts)
+│ 
 ├── components/
 │   ├── auth/
-│   │   ├── LoginForm.tsx      # Login form: validation, submit, error handling
-│   │   ├── LoginForm.test.tsx
-│   │   └── LoginGate.tsx      # Silent-reconnect gate shown at "/"
+│   │   ├── LoginForm.tsx              # Login form: validation, submit, error handling
+│   │   └── LoginGate.tsx              # Silent-reconnect gate shown at "/"
+│   │  
+│   ├── batches/
+│   │   ├── LocationFilter.tsx         # Country → warehouse cascading select sidebar
+│   │   ├── BatchTable.tsx             # Batch list table, empty state
+│   │   ├── BatchRow.tsx               # Single batch row, links to quality tracking
+│   │   ├── QualityTrackingButton.tsx  # Status-colored action button per row
+│   │   └── grid.ts                    # Shared grid-template-columns + row styling,
+│   │                                  # used by both BatchTable and BatchRow
 │   └── ui/
-│       ├── Button.tsx # Shared button component (variants: primary/alert/expired)
-│       ├── Badge.tsx # Status badge (compliant/alert/expired)
-│       ├── Badge.test.tsx
-│       └── Select.tsx # Generic labeled select
+│       ├── Button.tsx                 # Shared button component (variants: primary/alert/expired)
+│       ├── Badge.tsx                  # Status badge (compliant/alert/expired)
+│       ├── Select.tsx                 # Generic labeled select
+│       ├── PageSizeSelector.tsx       # Rows-per-page selector (10/15/20), reusable
+│       └── Pagination.tsx             # Page navigation bar, reusable
+│ 
 ├── context/
-│   ├── AuthContext.tsx        # In-memory auth state, silent refresh on mount
-│   └── AuthContext.test.tsx
+│   └── AuthContext.tsx                # In-memory auth state, silent refresh on mount
+│ 
 ├── lib/
 │   └── api/
-│       ├── mocks/             # Local fixture data used when NEXT_PUBLIC_USE_MOCKS=true
+│       ├── mocks/                     # Local fixture data used when NEXT_PUBLIC_USE_MOCKS=true
 │       │   ├── batches.json
 │       │   ├── countries.json
 │       │   ├── user.json
 │       │   └── warehouses.json
-│       ├── auth.ts            # login / refresh / logout / me functions
-│       ├── batches.ts         # getBatches / getCountries / getWarehouses,
-│       ├── client.ts          # Low-level fetch wrapper (ApiResponse unwrapping)
-│       ├── constants.ts       # API base URL
-│       └── types.ts           # Shared API request/response types
+│       ├── auth.ts                    # login / refresh / logout / me functions
+│       ├── batches.ts                 # getBatches / getCountries / getWarehouses, getBatches is server-side paginated
+│       ├── client.ts                  # Low-level fetch wrapper (ApiResponse unwrapping)
+│       ├── constants.ts               # API base URL
+│       └── types.ts                   # Shared API request/response types
+│ 
 ├── public/
-│   ├── images/                # Photos and illustrations (e.g. login hero image)
-│   └── icons/                 # Reusable SVG icons
-├── .env.local                 # Local environment variables (gitignored, not committed)
-├── .gitignore                 # List of files not committed
-├── package-lock.json          # Records the exact fully-resolved dependency tree installed
-├── package.json               # Project metadata and dependencies and version range
-├── README.md                  # You are here
-├── vitest.config.ts           # Test config files
+│   ├── images/                        # Photos and illustrations (e.g. login hero image)
+│   └── icons/                         # Reusable SVG icons
+│ 
+├── .env.local                         # Local environment variables (gitignored, not committed)
+├── .gitignore                         # List of files not committed
+├── package-lock.json                  # Records the exact fully-resolved dependency tree installed
+├── package.json                       # Project metadata and dependencies and version range
+├── README.md                          # You are here
+├── vitest.config.ts                   # Test config files
 └── vitest.setup.ts
 
 ## Security notes

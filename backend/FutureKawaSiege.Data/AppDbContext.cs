@@ -8,6 +8,12 @@ public class AppDbContext : DbContext
 {
     public DbSet<User> Users => Set<User>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<Country> Countries => Set<Country>();
+    public DbSet<Farm> Farms => Set<Farm>();
+    public DbSet<Warehouse> Warehouses => Set<Warehouse>();
+    public DbSet<Batch> Batches => Set<Batch>();
+    public DbSet<Order> Orders => Set<Order>();
+    public DbSet<OrderLine> OrderLines => Set<OrderLine>();
 
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
     {
@@ -19,5 +25,11 @@ public class AppDbContext : DbContext
 
         modelBuilder.ApplyConfiguration(new UserConfiguration());
         modelBuilder.ApplyConfiguration(new RefreshTokenConfiguration());
+        modelBuilder.ApplyConfiguration(new CountryConfiguration());
+        modelBuilder.ApplyConfiguration(new FarmConfiguration());
+        modelBuilder.ApplyConfiguration(new WarehouseConfiguration());
+        modelBuilder.ApplyConfiguration(new BatchConfiguration());
+        modelBuilder.ApplyConfiguration(new OrderConfiguration());
+        modelBuilder.ApplyConfiguration(new OrderLineConfiguration());
     }
 }

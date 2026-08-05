@@ -30,9 +30,8 @@ public class AuthServiceTests
         Id = Guid.NewGuid(),
         Email = "test@futurekawa.com",
         PasswordHash = "hashed_password",
-        Role = "Admin",
-        Country = "FR",
-        WarehouseId = Guid.NewGuid(),
+        Role = UserRole.Admin,
+        WarehouseId = 1,
     };
 
     [Fact]

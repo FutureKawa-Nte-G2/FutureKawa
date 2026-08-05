@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- ============================================================ -->
+    <!-- Extension of the sale.order form: FutureKawa tab             -->
+    <!-- ============================================================ -->
+    <record id="view_order_form_futurekawa" model="ir.ui.view">
+        <field name="name">sale.order.form.futurekawa</field>
+        <field name="model">sale.order</field>
+        <field name="inherit_id" ref="sale.view_order_form"/>
+        <field name="arch" type="xml">
+            <!-- Add a "FutureKawa" tab in the notebook -->
+            <xpath expr="//notebook" position="inside">
+                <page string="FutureKawa" name="futurekawa">
+                    <group>
+                        <group string="Informations Café">
+                            <field name="coffee_batch_ref"/>
+                            <field name="quality_grade"/>
+                            <field name="origin_country"/>
+                        </group>
+                        <group string="Intégration Backend">
+                            <field name="integration_status" readonly="1"/>
+                            <field name="integration_error_message"
+                                   readonly="1"
+                                   invisible="integration_status != 'error'"/>
+                            <button name="action_retry_webhook"
+                                    type="object"
+                                    string="Relancer la synchronisation"
+                                    class="btn-warning"
+                                    invisible="integration_status != 'error'"/>
+                        </group>
+                    </group>
+                </page>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- ============================================================ -->
+    <!-- Extension of the sale.order list view: additional columns    -->
+    <!-- ============================================================ -->
+    <record id="view_order_tree_futurekawa" model="ir.ui.view">
+        <field name="name">sale.order.tree.futurekawa</field>
+        <field name="model">sale.order</field>
+        <field name="inherit_id" ref="sale.view_order_tree"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='state']" position="before">
+                <field name="quality_grade" optional="show"/>
+                <field name="integration_status" optional="show"/>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- ============================================================ -->
+    <!-- Additional search filters                                    -->
+    <!-- ============================================================ -->
+    <record id="view_sales_order_filter_futurekawa" model="ir.ui.view">
+        <field name="name">sale.order.search.futurekawa</field>
+        <field name="model">sale.order</field>
+        <field name="inherit_id" ref="sale.view_sales_order_filter"/>
+        <field name="arch" type="xml">
+            <xpath expr="//search" position="inside">
+                <separator/>
+                <filter name="filter_grade_a"
+                        string="Grade A"
+                        domain="[('quality_grade', '=', 'a')]"/>
+                <filter name="filter_grade_b"
+                        string="Grade B"
+                        domain="[('quality_grade', '=', 'b')]"/>
+                <filter name="filter_grade_c"
+                        string="Grade C"
+                        domain="[('quality_grade', '=', 'c')]"/>
+                <separator/>
+                <filter name="filter_synced"
+                        string="Synchronisé"
+                        domain="[('integration_status', '=', 'synced')]"/>
+                <filter name="filter_shipped"
+                        string="Expédié"
+                        domain="[('integration_status', '=', 'shipped')]"/>
+                <filter name="filter_error"
+                        string="Erreur d'intégration"
+                        domain="[('integration_status', '=', 'error')]"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>

@@ -25,15 +25,9 @@ public static class ClaimsPrincipalExtensions
                ?? throw new InvalidOperationException("Role claim not found.");
     }
 
-    public static string GetCountry(this ClaimsPrincipal principal)
-    {
-        return principal.FindFirst("country")?.Value
-               ?? throw new InvalidOperationException("Country claim not found.");
-    }
-
-    public static Guid? GetWarehouseId(this ClaimsPrincipal principal)
+    public static int? GetWarehouseId(this ClaimsPrincipal principal)
     {
         var claim = principal.FindFirst("warehouse_id")?.Value;
-        return claim is not null ? Guid.Parse(claim) : null;
+        return claim is not null ? int.Parse(claim) : null;
     }
 }

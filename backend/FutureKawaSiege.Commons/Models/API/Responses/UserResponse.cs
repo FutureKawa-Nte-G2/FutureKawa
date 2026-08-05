@@ -4,5 +4,4 @@ public record UserResponse(
     Guid Id,
     string Email,
     string Role,
-    string Country,
-    Guid? WarehouseId);
+    int? WarehouseId);

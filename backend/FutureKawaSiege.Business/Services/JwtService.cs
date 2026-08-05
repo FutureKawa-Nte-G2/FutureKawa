@@ -41,8 +41,7 @@ public class JwtService : Abstraction.IJwtService
             new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
             new Claim(JwtRegisteredClaimNames.Email, user.Email),
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-            new Claim("role", user.Role),
-            new Claim("country", user.Country),
+            new Claim("role", user.Role.ToString()),
         };
 
         var claimsList = new List<Claim>(claims);

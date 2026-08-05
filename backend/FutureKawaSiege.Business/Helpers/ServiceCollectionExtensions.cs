@@ -9,11 +9,15 @@ public static class ServiceCollectionExtensions
 {
     public static IServiceCollection AddBusinessServices(this IServiceCollection services)
     {
-        // Services
+        // Auth services
         services.AddScoped<IPasswordHasher, PasswordHasher>();
         services.AddSingleton<IJwtService, JwtService>();
         services.AddScoped<IRefreshTokenService, RefreshTokenService>();
         services.AddScoped<IAuthService, AuthService>();
+
+        // Order & Odoo integration services
+        services.AddScoped<IOrderService, OrderService>();
+        services.AddHttpClient<IOdooIntegrationService, OdooIntegrationService>();
 
         return services;
     }

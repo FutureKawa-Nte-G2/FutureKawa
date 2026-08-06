@@ -11,8 +11,6 @@ public class FarmConfiguration : IEntityTypeConfiguration<Farm>
         builder.ToTable("Farms");
 
         builder.HasKey(f => f.Id);
-        builder.Property(f => f.Id)
-            .UseIdentityByDefaultColumn();
 
         builder.Property(f => f.Name)
             .IsRequired()

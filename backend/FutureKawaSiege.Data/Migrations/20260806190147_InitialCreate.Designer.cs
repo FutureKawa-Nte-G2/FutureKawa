@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace FutureKawaSiege.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260805212322_InitialCreate")]
+    [Migration("20260806190147_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -27,14 +27,12 @@ namespace FutureKawaSiege.Data.Migrations
 
             modelBuilder.Entity("FutureKawaSiege.Data.Entities.Batch", b =>
                 {
-                    b.Property<int>("Id")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("uuid");
 
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("FarmId")
-                        .HasColumnType("integer");
+                    b.Property<Guid>("FarmId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("QualityGrade")
                         .IsRequired()
@@ -57,8 +55,8 @@ namespace FutureKawaSiege.Data.Migrations
                     b.Property<DateTime>("StoredAt")
                         .HasColumnType("date");
 
-                    b.Property<int>("WarehouseId")
-                        .HasColumnType("integer");
+                    b.Property<Guid>("WarehouseId")
+                        .HasColumnType("uuid");
 
                     b.HasKey("Id");
 
@@ -74,11 +72,9 @@ namespace FutureKawaSiege.Data.Migrations
 
             modelBuilder.Entity("FutureKawaSiege.Data.Entities.Country", b =>
                 {
-                    b.Property<int>("Id")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("uuid");
 
                     b.Property<string>("Code")
                         .IsRequired()
@@ -116,14 +112,12 @@ namespace FutureKawaSiege.Data.Migrations
 
             modelBuilder.Entity("FutureKawaSiege.Data.Entities.Farm", b =>
                 {
-                    b.Property<int>("Id")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("uuid");
 
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("CountryId")
-                        .HasColumnType("integer");
+                    b.Property<Guid>("CountryId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -278,8 +272,8 @@ namespace FutureKawaSiege.Data.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
-                    b.Property<int?>("WarehouseId")
-                        .HasColumnType("integer");
+                    b.Property<Guid?>("WarehouseId")
+                        .HasColumnType("uuid");
 
                     b.HasKey("Id");
 
@@ -293,14 +287,12 @@ namespace FutureKawaSiege.Data.Migrations
 
             modelBuilder.Entity("FutureKawaSiege.Data.Entities.Warehouse", b =>
                 {
-                    b.Property<int>("Id")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("uuid");
 
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("CountryId")
-                        .HasColumnType("integer");
+                    b.Property<Guid>("CountryId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -324,8 +316,8 @@ namespace FutureKawaSiege.Data.Migrations
 
             modelBuilder.Entity("OrderBatches", b =>
                 {
-                    b.Property<int>("BatchId")
-                        .HasColumnType("integer");
+                    b.Property<Guid>("BatchId")
+                        .HasColumnType("uuid");
 
                     b.Property<Guid>("OrderId")
                         .HasColumnType("uuid");

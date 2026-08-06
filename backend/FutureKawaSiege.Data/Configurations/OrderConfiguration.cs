@@ -50,6 +50,11 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
             .UsingEntity<Dictionary<string, object>>(
                 "OrderBatches",
                 j => j.HasOne<Batch>().WithMany().HasForeignKey("BatchId"),
-                j => j.HasOne<Order>().WithMany().HasForeignKey("OrderId"));
+                j => j.HasOne<Order>().WithMany().HasForeignKey("OrderId"),
+                j =>
+                {
+                    j.Property<Guid>("BatchId");
+                    j.Property<Guid>("OrderId");
+                });
     }
 }

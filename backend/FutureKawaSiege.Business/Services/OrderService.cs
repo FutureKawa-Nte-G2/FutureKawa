@@ -256,7 +256,7 @@ public class OrderService : IOrderService
         return existingBatches;
     }
 
-    private async Task<(int WarehouseId, int FarmId)> EnsureDefaultBatchDependenciesAsync(
+    private async Task<(Guid WarehouseId, Guid FarmId)> EnsureDefaultBatchDependenciesAsync(
         CancellationToken cancellationToken)
     {
         var country = await _context.Countries.FirstOrDefaultAsync(cancellationToken)
@@ -289,7 +289,7 @@ public class OrderService : IOrderService
     }
 
     private async Task<Warehouse> CreateDefaultWarehouseAsync(
-        int countryId,
+        Guid countryId,
         CancellationToken cancellationToken)
     {
         var warehouse = new Warehouse
@@ -305,7 +305,7 @@ public class OrderService : IOrderService
     }
 
     private async Task<Farm> CreateDefaultFarmAsync(
-        int countryId,
+        Guid countryId,
         CancellationToken cancellationToken)
     {
         var farm = new Farm

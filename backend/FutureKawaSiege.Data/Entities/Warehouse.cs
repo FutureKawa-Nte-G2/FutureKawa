@@ -5,8 +5,8 @@ namespace FutureKawaSiege.Data.Entities;
 /// </summary>
 public class Warehouse
 {
-    public int Id { get; set; }
-    public int CountryId { get; set; }
+    public Guid Id { get; set; }
+    public Guid CountryId { get; set; }
     public string Name { get; set; } = null!;
     public string Reference { get; set; } = null!;
 

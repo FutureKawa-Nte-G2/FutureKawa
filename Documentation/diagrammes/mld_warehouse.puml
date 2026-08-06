@@ -1,0 +1,91 @@
+@startuml MLD_Warehouse_FutureKawa
+
+!theme plain
+
+title MLD - Base de données entrepôt FutureKawa (PostgreSQL)
+
+skinparam class {
+    BackgroundColor<<Table>> LightYellow
+    ArrowColor DarkSlateGray
+}
+
+class "users" as Users <<Table>> {
+  + user_id : uuid <<PK>>
+  + email : varchar(256) <<UQ>>
+  + password_hash : text
+  + role : varchar(32)
+  + warehouse_id : uuid? <<FK>>
+}
+
+class "countries" as Countries <<Table>> {
+  + country_id : uuid <<PK>>
+  + country_name : varchar(128)
+  + country_code : varchar(8) <<UQ>>
+  + nominal_temp : numeric(5,2)
+  + tolerance_temp : numeric(5,2)
+  + nominal_humidity : numeric(5,2)
+  + tolerance_humidity : numeric(5,2)
+}
+
+class "farms" as Farms <<Table>> {
+  + farm_id : uuid <<PK>>
+  + country_id : uuid <<FK>>
+  + farm_name : varchar(128)
+  + farm_ref : varchar(64) <<UQ>>
+}
+
+class "warehouses" as Warehouses <<Table>> {
+  + warehouse_id : uuid <<PK>>
+  + country_id : uuid <<FK>>
+  + warehouse_name : varchar(128)
+  + warehouse_ref : varchar(64) <<UQ>>
+}
+
+class "batches" as Batches <<Table>> {
+  + batch_id : uuid <<PK>>
+  + warehouse_id : uuid <<FK>>
+  + farm_id : uuid <<FK>>
+  + batch_ref : varchar(64) <<UQ>>
+  + stored_at : date
+  + shipped_at : date?
+  + quality_grade : varchar(8)
+  + batch_status : varchar(16)
+}
+
+class "sensors" as Sensors <<Table>> {
+  + sensor_id : uuid <<PK>>
+  + warehouse_id : uuid <<FK>>
+  + code : varchar(64) <<UQ>>
+  + is_active : bool
+}
+
+class "measurements" as Measurements <<Table>> {
+  + measurement_id : uuid <<PK>>
+  + sensor_id : uuid <<FK>>
+  + meas_date : timestamptz <<UQ>>
+  + meas_humidity : numeric(5,2)
+  + meas_temp : numeric(5,2)
+}
+
+class "alerts" as Alerts <<Table>> {
+  + alert_id : uuid <<PK>>
+  + warehouse_id : uuid <<FK>>
+  + batch_id : uuid? <<FK>>
+  + alert_type : varchar(32)
+  + alert_status : varchar(32)
+  + created_at : timestamptz
+  + resolved_at : timestamptz?
+}
+
+' Relations logiques (PK/FK)
+Countries "1" --> "0..*" Farms : country_id
+Countries "1" --> "0..*" Warehouses : country_id
+Farms "1" --> "0..*" Batches : farm_id
+Warehouses "1" --> "0..*" Batches : warehouse_id
+Warehouses "1" --> "0..*" Users : warehouse_id
+Warehouses "1" --> "0..*" Sensors : warehouse_id
+Warehouses "1" --> "0..*" Alerts : warehouse_id
+Sensors "1" --> "0..*" Measurements : sensor_id
+Batches "1" --> "0..*" Alerts : batch_id
+
+@enduml

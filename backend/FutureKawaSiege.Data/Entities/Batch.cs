@@ -5,9 +5,9 @@ namespace FutureKawaSiege.Data.Entities;
 /// </summary>
 public class Batch
 {
-    public int Id { get; set; }
-    public int WarehouseId { get; set; }
-    public int FarmId { get; set; }
+    public Guid Id { get; set; }
+    public Guid WarehouseId { get; set; }
+    public Guid FarmId { get; set; }
     public string Reference { get; set; } = null!;
     public DateTime StoredAt { get; set; }
     public DateTime? ShippedAt { get; set; }

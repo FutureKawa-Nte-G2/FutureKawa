@@ -5,7 +5,7 @@ namespace FutureKawaSiege.Commons.Models.API.Responses;
 /// </summary>
 public record BatchDto
 {
-    public int Id { get; init; }
+    public Guid Id { get; init; }
     public string Reference { get; init; } = null!;
     public string QualityGrade { get; init; } = null!;
     public string Status { get; init; } = null!;

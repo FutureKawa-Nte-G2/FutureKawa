@@ -11,8 +11,6 @@ public class BatchConfiguration : IEntityTypeConfiguration<Batch>
         builder.ToTable("Batches");
 
         builder.HasKey(b => b.Id);
-        builder.Property(b => b.Id)
-            .UseIdentityByDefaultColumn();
 
         builder.Property(b => b.Reference)
             .IsRequired()

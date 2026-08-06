@@ -1,6 +1,5 @@
 ﻿using System;
 using Microsoft.EntityFrameworkCore.Migrations;
-using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
@@ -16,8 +15,7 @@ namespace FutureKawaSiege.Data.Migrations
                 name: "Countries",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
                     Name = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: false),
                     Code = table.Column<string>(type: "character varying(8)", maxLength: 8, nullable: false),
                     NominalTemp = table.Column<decimal>(type: "numeric(5,2)", precision: 5, scale: 2, nullable: false),
@@ -53,9 +51,8 @@ namespace FutureKawaSiege.Data.Migrations
                 name: "Farms",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    CountryId = table.Column<int>(type: "integer", nullable: false),
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    CountryId = table.Column<Guid>(type: "uuid", nullable: false),
                     Name = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: false),
                     Reference = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false)
                 },
@@ -74,9 +71,8 @@ namespace FutureKawaSiege.Data.Migrations
                 name: "Warehouses",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    CountryId = table.Column<int>(type: "integer", nullable: false),
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    CountryId = table.Column<Guid>(type: "uuid", nullable: false),
                     Name = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: false),
                     Reference = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false)
                 },
@@ -115,10 +111,9 @@ namespace FutureKawaSiege.Data.Migrations
                 name: "Batches",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    WarehouseId = table.Column<int>(type: "integer", nullable: false),
-                    FarmId = table.Column<int>(type: "integer", nullable: false),
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    WarehouseId = table.Column<Guid>(type: "uuid", nullable: false),
+                    FarmId = table.Column<Guid>(type: "uuid", nullable: false),
                     Reference = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
                     StoredAt = table.Column<DateTime>(type: "date", nullable: false),
                     ShippedAt = table.Column<DateTime>(type: "date", nullable: true),
@@ -150,7 +145,7 @@ namespace FutureKawaSiege.Data.Migrations
                     Email = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
                     PasswordHash = table.Column<string>(type: "text", nullable: false),
                     Role = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
-                    WarehouseId = table.Column<int>(type: "integer", nullable: true),
+                    WarehouseId = table.Column<Guid>(type: "uuid", nullable: true),
                     CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     LastLoginAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
                 },
@@ -169,7 +164,7 @@ namespace FutureKawaSiege.Data.Migrations
                 name: "OrderBatches",
                 columns: table => new
                 {
-                    BatchId = table.Column<int>(type: "integer", nullable: false),
+                    BatchId = table.Column<Guid>(type: "uuid", nullable: false),
                     OrderId = table.Column<Guid>(type: "uuid", nullable: false)
                 },
                 constraints: table =>

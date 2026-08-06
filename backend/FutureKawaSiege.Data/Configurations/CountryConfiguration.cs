@@ -11,8 +11,6 @@ public class CountryConfiguration : IEntityTypeConfiguration<Country>
         builder.ToTable("Countries");
 
         builder.HasKey(c => c.Id);
-        builder.Property(c => c.Id)
-            .UseIdentityByDefaultColumn();
 
         builder.Property(c => c.Name)
             .IsRequired()

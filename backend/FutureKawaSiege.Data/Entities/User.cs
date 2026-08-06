@@ -9,7 +9,7 @@ public class User
     public string Email { get; set; } = null!;
     public string PasswordHash { get; set; } = null!;
     public UserRole Role { get; set; }
-    public int? WarehouseId { get; set; }
+    public Guid? WarehouseId { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? LastLoginAt { get; set; }
 

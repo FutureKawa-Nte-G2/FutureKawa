@@ -11,8 +11,6 @@ public class WarehouseConfiguration : IEntityTypeConfiguration<Warehouse>
         builder.ToTable("Warehouses");
 
         builder.HasKey(w => w.Id);
-        builder.Property(w => w.Id)
-            .UseIdentityByDefaultColumn();
 
         builder.Property(w => w.Name)
             .IsRequired()

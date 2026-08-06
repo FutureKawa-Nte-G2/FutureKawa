@@ -54,7 +54,6 @@ graph TB
   - `POST /api/integration/odoo/orders` — reçoit le webhook Odoo (token partagé)
   - `GET /api/orders` — liste des commandes (JWT)
   - `GET /api/orders/{id}` — détail d'une commande (JWT)
-  - `PATCH /api/orders/{id}/status` — mise à jour du statut (JWT, notifie Odoo si shipped)
 - **BDD** : PostgreSQL dédié (entités User, RefreshToken, Order, OrderLine)
 
 ### 3. Frontend Next.js 16
@@ -94,9 +93,12 @@ sequenceDiagram
     participant O as Odoo
     participant DB as BDD Applicative
 
-    API->>OS: UpdateOrderStatusAsync(id, {status: "Shipped"})
+    API->>OS: ScheduleShipmentAsync(order.Id, 5 s)
+    OS->>OS: OrderShipmentBackgroundService<br/>déclenche après 5 s
+    OS->>OS: ShipOrderAsync(order.Id)
     OS->>DB: Récupère Order (avec OdooOrderId)
     OS->>OS: Status = OrderStatus.Shipped
+    OS->>DB: UPDATE Batches (status, shippedAt)
     OS->>OIS: NotifyOrderShippedAsync(odooOrderId)
     OIS->>OIS: AuthenticateAsync() → uid
     OIS->>O: JSON-RPC execute_kw<br/>sale.order.action_mark_shipped
@@ -104,7 +106,6 @@ sequenceDiagram
     O-->>OIS: true
     OIS-->>OS: true
     OS->>DB: UpdateAsync(order)
-    OS-->>API: OrderResponseDto
 ```
 
 ## Sécurité

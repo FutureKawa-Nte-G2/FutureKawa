@@ -87,7 +87,7 @@ dotnet ef database update --project FutureKawaSiege.Data --startup-project Futur
 - Dans les logs .NET : `Order received from Odoo: ODOO-42 (OdooOrderId=42)`
 - Appeler `GET https://localhost:55648/api/orders` (avec JWT) → la commande apparaît
 
-### Scénario 2 : Marquer une commande comme expédiée → notification Odoo
+### Scénario 2 : Expédition automatique → notification Odoo
 
 **Étapes :**
 
@@ -98,23 +98,31 @@ dotnet ef database update --project FutureKawaSiege.Data --startup-project Futur
    { "email": "test@futurekawa.com", "password": "TestPass123" }
    ```
 
-2. Lister les commandes :
+2. Lister les commandes juste après confirmation dans Odoo :
 
    ```
    GET /api/orders
    Authorization: Bearer <token>
    ```
 
-3. Marquer la commande comme expédiée :
+   La commande apparaît avec le statut `Confirmed`.
+
+3. Attendre 5 secondes, puis rafraîchir la liste :
+
    ```
-   PATCH /api/orders/{id}/status
+   GET /api/orders
    Authorization: Bearer <token>
-   { "status": "Shipped" }
    ```
+
+   La commande est passée automatiquement au statut `Shipped`.
 
 **Points à expliquer au jury :**
 
-- **Code C#** (`OrderService.cs`, méthode `UpdateOrderStatusAsync`) : Quand le statut passe à `Shipped` et que la commande a un `OdooOrderId`, le service appelle `IOdooIntegrationService.NotifyOrderShippedAsync()`.
+- **Code C#** (`OrderService.cs`, méthode `ReceiveOrderFromOdooAsync`) : Dès qu'une commande est reçue d'Odoo, le service appelle `IOrderShipmentScheduler.ScheduleShipmentAsync` pour planifier une expédition différée de 5 s.
+
+- **Code C#** (`OrderService.cs`, méthode `ShipOrderAsync`) : Après le délai, le worker marque la commande et ses lots comme `Shipped`, puis appelle `IOdooIntegrationService.NotifyOrderShippedAsync()` si un `OdooOrderId` est présent.
+
+- **Code C#** (`OrderShipmentScheduler` et `OrderShipmentBackgroundService`) : Un `Channel<ShipmentJob>` en mémoire reçoit les jobs ; le service hébergé consomme la file et attend le délai demandé avant d'exécuter l'expédition.
 
 - **Code C#** (`OdooIntegrationService.cs`, méthode `NotifyOrderShippedAsync`) : Le service authentifie auprès d'Odoo via JSON-RPC (service "common", méthode "login"), puis appelle `execute_kw` pour déclencher `action_mark_shipped` sur le modèle `sale.order`.
 
@@ -122,8 +130,8 @@ dotnet ef database update --project FutureKawaSiege.Data --startup-project Futur
 
 **Vérification :**
 
-- Dans les logs .NET : `Odoo notified: order 42 marked as shipped`
-- Dans Odoo : le champ "Statut Intégration" passe à "Expédié"
+- Dans les logs .NET : `Order ... auto-shipped` puis `Odoo successfully notified that order ... was shipped`
+- Dans Odoo : le champ "Statut Intégration" passe à "Expédié" environ 5 s après la confirmation de la commande
 
 ---
 

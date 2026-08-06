@@ -21,17 +21,20 @@ public class OrderService : IOrderService
 {
     private readonly IOrderRepository _orderRepository;
     private readonly IOdooIntegrationService _odooIntegrationService;
+    private readonly IOrderShipmentScheduler _shipmentScheduler;
     private readonly AppDbContext _context;
     private readonly ILogger<OrderService> _logger;
 
     public OrderService(
         IOrderRepository orderRepository,
         IOdooIntegrationService odooIntegrationService,
+        IOrderShipmentScheduler shipmentScheduler,
         AppDbContext context,
         ILogger<OrderService> logger)
     {
         _orderRepository = orderRepository;
         _odooIntegrationService = odooIntegrationService;
+        _shipmentScheduler = shipmentScheduler;
         _context = context;
         _logger = logger;
     }
@@ -88,6 +91,11 @@ public class OrderService : IOrderService
 
         await _orderRepository.AddAsync(order, cancellationToken);
 
+        await _shipmentScheduler.ScheduleShipmentAsync(
+            order.Id,
+            TimeSpan.FromSeconds(5),
+            cancellationToken);
+
         _logger.LogInformation(
             "Order received from Odoo: {OrderReference} (OdooOrderId={OdooOrderId}) with {BatchCount} batches",
             order.OrderReference,
@@ -119,88 +127,81 @@ public class OrderService : IOrderService
         return order is null ? null : MapToDto(order);
     }
 
-    /// <inheritdoc/>
-    public async Task<OrderResponseDto?> UpdateOrderStatusAsync(
+    /// <inheritdoc/> 
+    public async Task ShipOrderAsync(
         Guid id,
-        OrderStatusUpdateDto dto,
         CancellationToken cancellationToken = default)
     {
         var order = await _orderRepository.GetByIdAsync(id, cancellationToken);
         if (order is null)
-            return null;
-
-        // Parse the status string to the enum
-        if (!Enum.TryParse<OrderStatus>(dto.Status, ignoreCase: true, out var newStatus))
         {
-            _logger.LogWarning("Invalid order status received: {Status}", dto.Status);
-            return null;
+            _logger.LogWarning("Cannot ship order {OrderId}: order not found", id);
+            return;
         }
 
-        order.Status = newStatus;
-
-        // If the order is being marked as shipped or delivered, update the
-        // associated batches and notify Odoo when shipped.
-        if (newStatus == OrderStatus.Shipped || newStatus == OrderStatus.Delivered)
+        if (order.Status == OrderStatus.Shipped || order.Status == OrderStatus.Delivered)
         {
-            var batchStatus = newStatus == OrderStatus.Delivered
-                ? BatchStatus.Delivered
-                : BatchStatus.Shipped;
-
-            foreach (var batch in order.Batches)
-            {
-                batch.Status = batchStatus;
-                if (batchStatus == BatchStatus.Shipped && !batch.ShippedAt.HasValue)
-                {
-                    batch.ShippedAt = DateTime.UtcNow.Date;
-                }
-            }
-
             _logger.LogInformation(
-                "Order {OrderReference} marked as {Status}. Updated {BatchCount} associated batches.",
+                "Order {OrderReference} is already {Status}; skipping shipment",
                 order.OrderReference,
-                newStatus,
-                order.Batches.Count);
+                order.Status);
+            return;
+        }
 
-            if (newStatus == OrderStatus.Shipped && order.OdooOrderId is not null)
+        order.Status = OrderStatus.Shipped;
+
+        foreach (var batch in order.Batches)
+        {
+            batch.Status = BatchStatus.Shipped;
+            if (!batch.ShippedAt.HasValue)
             {
-                _logger.LogInformation(
-                    "Order {OrderReference} marked as shipped, notifying Odoo...",
-                    order.OrderReference);
+                batch.ShippedAt = DateTime.UtcNow.Date;
+            }
+        }
 
-                try
-                {
-                    var success = await _odooIntegrationService.NotifyOrderShippedAsync(
-                        order.OdooOrderId.Value,
-                        cancellationToken);
+        _logger.LogInformation(
+            "Order {OrderReference} marked as shipped. Updated {BatchCount} associated batches.",
+            order.OrderReference,
+            order.Batches.Count);
 
-                    if (success)
-                    {
-                        order.IntegrationErrorMessage = null;
-                        _logger.LogInformation(
-                            "Odoo successfully notified that order {OrderReference} was shipped",
-                            order.OrderReference);
-                    }
-                    else
-                    {
-                        order.IntegrationErrorMessage =
-                            "Failed to notify Odoo of shipping status.";
-                        _logger.LogWarning(
-                            "Failed to notify Odoo that order {OrderReference} was shipped",
-                            order.OrderReference);
-                    }
-                }
-                catch (Exception ex)
+        if (order.OdooOrderId is not null)
+        {
+            _logger.LogInformation(
+                "Order {OrderReference} marked as shipped, notifying Odoo...",
+                order.OrderReference);
+
+            try
+            {
+                var success = await _odooIntegrationService.NotifyOrderShippedAsync(
+                    order.OdooOrderId.Value,
+                    cancellationToken);
+
+                if (success)
                 {
-                    order.IntegrationErrorMessage = ex.Message;
-                    _logger.LogError(ex,
-                        "Error notifying Odoo that order {OrderReference} was shipped",
+                    order.IntegrationErrorMessage = null;
+                    _logger.LogInformation(
+                        "Odoo successfully notified that order {OrderReference} was shipped",
                         order.OrderReference);
                 }
+                else
+                {
+                    order.IntegrationErrorMessage =
+                        "Failed to notify Odoo of shipping status.";
+                    _logger.LogWarning(
+                        "Failed to notify Odoo that order {OrderReference} was shipped",
+                        order.OrderReference);
+                }
+            }
+            catch (Exception ex)
+            {
+                order.IntegrationErrorMessage = ex.Message;
+                _logger.LogError(ex,
+                    "Error notifying Odoo that order {OrderReference} was shipped",
+                    order.OrderReference);
             }
         }
 
         await _orderRepository.UpdateAsync(order, cancellationToken);
-        return MapToDto(order);
     }
 
     /// <summary>

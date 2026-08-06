@@ -1,3 +1,4 @@
+using System.Threading.Channels;
 using FutureKawaSiege.Business.Services;
 using FutureKawaSiege.Business.Services.Abstraction;
 using FutureKawaSiege.Business.Validators;
@@ -18,6 +19,11 @@ public static class ServiceCollectionExtensions
         // Order & Odoo integration services
         services.AddScoped<IOrderService, OrderService>();
         services.AddHttpClient<IOdooIntegrationService, OdooIntegrationService>();
+
+        // Delayed order shipment infrastructure
+        services.AddSingleton(Channel.CreateUnbounded<ShipmentJob>());
+        services.AddSingleton<IOrderShipmentScheduler, OrderShipmentScheduler>();
+        services.AddHostedService<OrderShipmentBackgroundService>();
 
         return services;
     }

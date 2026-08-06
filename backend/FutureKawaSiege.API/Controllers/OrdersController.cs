@@ -1,6 +1,5 @@
 using FutureKawaSiege.Business.Services.Abstraction;
 using FutureKawaSiege.Commons.Models.API;
-using FutureKawaSiege.Commons.Models.API.Requests;
 using FutureKawaSiege.Commons.Models.API.Responses;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -10,8 +9,9 @@ namespace FutureKawaSiege.API.Controllers;
 /// <summary>
 /// Controller for managing sales orders.
 ///
-/// Provides endpoints to list, retrieve, and update the status of orders
-/// received from the Odoo ERP. All endpoints require JWT authentication.
+/// Provides endpoints to list and retrieve orders received from the Odoo ERP.
+/// Order status updates are now handled automatically by the business layer.
+/// All endpoints require JWT authentication.
 /// </summary>
 [ApiController]
 [Route("api/orders")]
@@ -55,22 +55,5 @@ public class OrdersController : ControllerBase
         return Ok(ApiResponse<OrderResponseDto>.Ok(order));
     }
 
-    /// <summary>
-    /// Updates the status of an order.
-    ///
-    /// When the status is set to "Shipped", the backend automatically
-    /// notifies the Odoo ERP via JSON-RPC (calls action_mark_shipped).
-    /// </summary>
-    [HttpPatch("{id:guid}/status")]
-    public async Task<ActionResult<ApiResponse<OrderResponseDto>>> UpdateStatus(
-        Guid id,
-        [FromBody] OrderStatusUpdateDto dto,
-        CancellationToken cancellationToken)
-    {
-        var order = await _orderService.UpdateOrderStatusAsync(id, dto, cancellationToken);
-        if (order is null)
-            return NotFound(ApiResponse<OrderResponseDto>.Fail("Order not found."));
 
-        return Ok(ApiResponse<OrderResponseDto>.Ok(order, "Order status updated."));
-    }
 }

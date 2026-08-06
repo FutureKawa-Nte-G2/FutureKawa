@@ -39,11 +39,13 @@ sequenceDiagram
     SVC-->>API: List<OrderResponseDto>
     API-->>U: 200 OK {success: true, data: [...]}
 
-    %% ── Étape 4 : Marquer comme expédiée ──
-    U->>API: PATCH /api/orders/{id}/status<br/>{status: "Shipped"}
-    API->>SVC: UpdateOrderStatusAsync(id, dto)
+    %% ── Étape 4 : Expédition automatique après 5 s ──
+    Note over SVC: ScheduleShipmentAsync(order.Id, 5 s)
+    SVC->>SVC: OrderShipmentBackgroundService<br/>consomme le job après délai
+    SVC->>SVC: ShipOrderAsync(order.Id)
     SVC->>DB: Récupère Order (avec OdooOrderId)
     SVC->>SVC: Status = Shipped
+    SVC->>DB: UPDATE Batches (status, shippedAt)
     SVC->>ODOO: NotifyOrderShippedAsync(odooOrderId)
 
     %% ── Étape 5 : JSON-RPC .NET → Odoo ──
@@ -56,8 +58,6 @@ sequenceDiagram
 
     %% ── Étape 6 : Finalisation ──
     SVC->>DB: UPDATE Order (status, updatedAt)
-    SVC-->>API: OrderResponseDto
-    API-->>U: 200 OK {success: true, data: {...}}
 ```
 
 ## Points clés pour la démonstration
@@ -68,6 +68,8 @@ sequenceDiagram
 
 3. **Idempotence** : Le `OrderService` vérifie si la commande existe déjà avant de l'insérer. Interpréter `ReceiveOrderFromOdooAsync()` dans `OrderService.cs`.
 
-4. **JSON-RPC (.NET → Odoo)** : Le `OdooIntegrationService` authentifie puis appelle `execute_kw` pour déclencher `action_mark_shipped`. Interpréter `NotifyOrderShippedAsync()` dans `OdooIntegrationService.cs`.
+4. **Expédition automatique** : Le `OrderShipmentBackgroundService` consomme le job planifié après 5 s et appelle `ShipOrderAsync()`. Interpréter `OrderShipmentScheduler`, `OrderShipmentBackgroundService` et `ShipOrderAsync()` dans `OrderService.cs`.
 
-5. **Pattern d'extension Odoo** : Le module surcharge `action_confirm()` en appelant `super()` puis ajoute un comportement. C'est le pattern standard d'extension d'un progiciel intégré.
+5. **JSON-RPC (.NET → Odoo)** : Le `OdooIntegrationService` authentifie puis appelle `execute_kw` pour déclencher `action_mark_shipped`. Interpréter `NotifyOrderShippedAsync()` dans `OdooIntegrationService.cs`.
+
+6. **Pattern d'extension Odoo** : Le module surcharge `action_confirm()` en appelant `super()` puis ajoute un comportement. C'est le pattern standard d'extension d'un progiciel intégré.

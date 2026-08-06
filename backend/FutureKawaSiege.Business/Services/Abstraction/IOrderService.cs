@@ -32,12 +32,11 @@ public interface IOrderService
     Task<OrderResponseDto?> GetOrderByIdAsync(Guid id, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Updates the status of an order. If the new status is "Shipped",
-    /// notifies Odoo via JSON-RPC.
+    /// Marks an order as shipped, updates its associated batches, and
+    /// notifies Odoo via JSON-RPC when applicable.
     /// </summary>
     /// <param name="id">The internal GUID of the order.</param>
-    /// <param name="dto">The status update request.</param>
     /// <param name="cancellationToken">Propagates notification that the operation should be cancelled.</param>
-    /// <returns>The updated order response DTO, or <c>null</c> if not found.</returns>
-    Task<OrderResponseDto?> UpdateOrderStatusAsync(Guid id, OrderStatusUpdateDto dto, CancellationToken cancellationToken = default);
+    /// <returns>A task representing the asynchronous operation.</returns>
+    Task ShipOrderAsync(Guid id, CancellationToken cancellationToken = default);
 }

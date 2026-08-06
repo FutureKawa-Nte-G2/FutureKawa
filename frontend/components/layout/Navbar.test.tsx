@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { Navbar } from "./Navbar";
+import { RefreshProvider } from "@/context/RefreshContext";
 
 const mockUseAuth = vi.fn();
 
@@ -17,10 +18,18 @@ vi.mock("@/lib/api/alerts", () => ({
   markAlertAsRead: () => Promise.resolve(undefined),
 }));
 
+function renderNavbar() {
+  return render(
+    <RefreshProvider>
+      <Navbar />
+    </RefreshProvider>
+  );
+}
+
 describe("Navbar", () => {
   it("renders nothing when no user is authenticated", () => {
     mockUseAuth.mockReturnValue({ user: null, logoutUser: vi.fn() });
-    const { container } = render(<Navbar />);
+    const { container } = renderNavbar();
 
     expect(container).toBeEmptyDOMElement();
   });
@@ -36,7 +45,7 @@ describe("Navbar", () => {
       },
       logoutUser: vi.fn(),
     });
-    render(<Navbar />);
+    renderNavbar();
 
     expect(await screen.findByText("Opérations & Supply Chain")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Rafraîchir les données" })).toBeInTheDocument();

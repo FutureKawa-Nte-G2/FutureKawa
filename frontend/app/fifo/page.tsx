@@ -32,6 +32,12 @@ export default function FifoPage() {
   }, [selection, page, pageSize]);
 
   useEffect(() => {
+    // fetchBatches is async; its setState calls happen after the await
+    // inside getBatches(), never synchronously in this effect body. This is
+    // the standard data-fetching-on-mount pattern documented by React itself.
+    // react-hooks/set-state-in-effect flags it anyway because it can't trace
+    // setState timing through an awaited call — known false positive here.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchBatches();
   }, [fetchBatches]);
 

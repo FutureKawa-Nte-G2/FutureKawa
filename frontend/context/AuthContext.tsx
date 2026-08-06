@@ -26,19 +26,21 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [accessToken, setAccessToken] = useState<string | null>(null);
-  const [user, setUser] = useState<UserResponse | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  // In mock mode, the app should already act as an authenticated HQ user
+  // from the very first render — no effect needed to reach that state.
+  const [accessToken, setAccessToken] = useState<string | null>(
+    USE_MOCKS ? "mock-access-token" : null
+  );
+  const [user, setUser] = useState<UserResponse | null>(
+    USE_MOCKS ? (mockUser as UserResponse) : null
+  );
+  const [isLoading, setIsLoading] = useState(!USE_MOCKS);
 
   // Attempt silent reconnection on initial mount (app load / page refresh).
-  // In mock mode, skip the network call entirely and act as an already-authenticated HQ user.
+  // In mock mode, this effect has nothing to do: initial state above already
+  // represents an already-authenticated HQ user.
   useEffect(() => {
-    if (USE_MOCKS) {
-      setAccessToken("mock-access-token");
-      setUser(mockUser as UserResponse);
-      setIsLoading(false);
-      return;
-    }
+    if (USE_MOCKS) return;
 
     let cancelled = false;
 

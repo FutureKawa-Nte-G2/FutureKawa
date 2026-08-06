@@ -27,11 +27,11 @@ export function LocationFilter({ onSelectionChange }: LocationFilterProps) {
     getCountries().then(setCountries);
   }, []);
 
+  // Fetch warehouses only when a country is actually selected.
+  // Clearing warehouses when no country is selected is handled directly
+  // in handleCountryChange (a user event), not here.
   useEffect(() => {
-    if (!countryCode) {
-      setWarehouses([]);
-      return;
-    }
+    if (!countryCode) return;
     getWarehouses(countryCode).then(setWarehouses);
   }, [countryCode]);
 
@@ -39,6 +39,7 @@ export function LocationFilter({ onSelectionChange }: LocationFilterProps) {
     if (next === ALL_COUNTRIES) {
       setCountryCode(null);
       setWarehouseId(null);
+      setWarehouses([]);
       onSelectionChange({ country: null, warehouse: null });
       return;
     }

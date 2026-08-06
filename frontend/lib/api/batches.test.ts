@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll } from "vitest";
-import type { Batch, BatchListResponse, Country, Warehouse } from "./types";
+import type { BatchListResponse, Country, Warehouse } from "./types";
 
 let getBatches: (params?: {
   countryCode?: string;

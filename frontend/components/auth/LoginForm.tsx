@@ -49,7 +49,7 @@ export function LoginForm() {
     setIsSubmitting(true);
     try {
       await loginUser({ email, password });
-      router.push("/dashboard");
+      router.push("/fifo");
     } catch (err) {
       if (err instanceof ApiError) {
         setFormError(GENERIC_ERROR);

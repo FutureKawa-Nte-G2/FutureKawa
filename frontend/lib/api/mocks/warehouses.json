@@ -1,0 +1,8 @@
+{
+  "warehouses": [
+    { "id": "BR-W1", "name": "Santos Warehouse", "countryCode": "BR" },
+    { "id": "BR-W2", "name": "Cerrado Warehouse", "countryCode": "BR" },
+    { "id": "EC-W1", "name": "Quito Warehouse", "countryCode": "EC" },
+    { "id": "CO-W1", "name": "Bogotá Warehouse", "countryCode": "CO" }
+  ]
+}

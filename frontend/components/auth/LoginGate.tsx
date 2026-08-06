@@ -6,7 +6,7 @@ import { useAuth } from "../../context/AuthContext";
 import { LoginForm } from "./LoginForm";
 import Image from "next/image";
 
-// Renders the login form, or redirects to /dashboard if a silent
+// Renders the login form, or redirects to /fifo if a silent
 // reconnection (via the refresh cookie) already succeeded on mount.
 export function LoginGate() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -14,7 +14,7 @@ export function LoginGate() {
 
   useEffect(() => {
     if (!isLoading && isAuthenticated) {
-      router.replace("/dashboard");
+      router.replace("/fifo");
     }
   }, [isLoading, isAuthenticated, router]);
 

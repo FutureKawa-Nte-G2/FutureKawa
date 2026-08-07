@@ -71,6 +71,7 @@ class "Orders" as Orders <<Entity>> {
   + OrderReference : varchar(64)
   + OrderDate : timestamptz
   + ClientName : varchar(256)
+  + CountryId : uuid? <<FK>>
   + Status : varchar(32)
   + IntegrationErrorMessage : varchar(1024)?
   + CreatedAt : timestamptz
@@ -97,6 +98,7 @@ Countries "1" --> "0..*" Warehouses : CountryId
 Farms "1" --> "0..*" Batches : FarmId
 Warehouses "1" --> "0..*" Batches : WarehouseId
 Orders "1" --> "0..*" OrderLines : OrderId
+Orders "0..*" --> "0..1" Countries : CountryId
 Orders "1" --> "0..*" OrderBatches : OrderId
 Batches "1" --> "0..*" OrderBatches : BatchId
 

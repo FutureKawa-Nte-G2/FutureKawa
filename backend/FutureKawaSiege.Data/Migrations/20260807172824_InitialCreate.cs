@@ -29,25 +29,6 @@ namespace FutureKawaSiege.Data.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "Orders",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    OdooOrderId = table.Column<int>(type: "integer", nullable: true),
-                    OrderReference = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
-                    OrderDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    ClientName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
-                    Status = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
-                    IntegrationErrorMessage = table.Column<string>(type: "character varying(1024)", maxLength: 1024, nullable: true),
-                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_Orders", x => x.Id);
-                });
-
-            migrationBuilder.CreateTable(
                 name: "Farms",
                 columns: table => new
                 {
@@ -65,6 +46,32 @@ namespace FutureKawaSiege.Data.Migrations
                         principalTable: "Countries",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Restrict);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "Orders",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    OdooOrderId = table.Column<int>(type: "integer", nullable: true),
+                    OrderReference = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
+                    OrderDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    ClientName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
+                    CountryId = table.Column<Guid>(type: "uuid", nullable: true),
+                    Status = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
+                    IntegrationErrorMessage = table.Column<string>(type: "character varying(1024)", maxLength: 1024, nullable: true),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Orders", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_Orders_Countries_CountryId",
+                        column: x => x.CountryId,
+                        principalTable: "Countries",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.SetNull);
                 });
 
             migrationBuilder.CreateTable(
@@ -250,6 +257,11 @@ namespace FutureKawaSiege.Data.Migrations
                 name: "IX_OrderLines_OrderId",
                 table: "OrderLines",
                 column: "OrderId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Orders_CountryId",
+                table: "Orders",
+                column: "CountryId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Orders_OdooOrderId",

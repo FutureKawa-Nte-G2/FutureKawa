@@ -10,6 +10,8 @@ public class Order
     public string OrderReference { get; set; } = null!;
     public DateTime OrderDate { get; set; }
     public string ClientName { get; set; } = null!;
+    public Guid? CountryId { get; set; }
+    public Country? Country { get; set; }
     public OrderStatus Status { get; set; }
     public string? IntegrationErrorMessage { get; set; }
     public DateTime CreatedAt { get; set; }

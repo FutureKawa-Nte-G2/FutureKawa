@@ -14,9 +14,10 @@ entity "Commande Client\n(sale.order)" as SaleOrder {
   date_order : datetime
   --
   <<extension FutureKawa>>
-  coffee_batch_ref : char
+  batch_count : integer
+  batch_ref : char
   quality_grade : selection
-  origin_country : char
+  country : selection
   integration_status : selection
   integration_error_message : text
 }

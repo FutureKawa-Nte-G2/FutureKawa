@@ -68,6 +68,8 @@ public class OrderService : IOrderService
                 : parsed.ToUniversalTime();
         }
 
+        var countryId = await ResolveCountryIdAsync(dto.Country, cancellationToken);
+
         var order = new Order
         {
             Id = Guid.NewGuid(),
@@ -75,6 +77,7 @@ public class OrderService : IOrderService
             OrderReference = $"ODOO-{dto.OrderId}",
             OrderDate = orderDate,
             ClientName = dto.Client ?? "Unknown",
+            CountryId = countryId,
             Status = OrderStatus.Confirmed,
             CreatedAt = DateTime.UtcNow,
             Lines = dto.Lines.Select(l => new OrderLine
@@ -85,8 +88,12 @@ public class OrderService : IOrderService
             }).ToList(),
         };
 
+        var qualityGrade = ParseQualityGrade(dto.QualityGrade);
+
         order.Batches = await ResolveBatchesAsync(
             dto.BatchReferences,
+            qualityGrade,
+            countryId,
             cancellationToken);
 
         await _orderRepository.AddAsync(order, cancellationToken);
@@ -210,6 +217,8 @@ public class OrderService : IOrderService
     /// </summary>
     private async Task<List<Batch>> ResolveBatchesAsync(
         IEnumerable<string> batchReferences,
+        BatchQualityGrade qualityGrade,
+        Guid? countryId,
         CancellationToken cancellationToken)
     {
         var references = batchReferences
@@ -229,7 +238,7 @@ public class OrderService : IOrderService
 
         if (missingReferences.Count > 0)
         {
-            var defaults = await EnsureDefaultBatchDependenciesAsync(cancellationToken);
+            var defaults = await EnsureDefaultBatchDependenciesAsync(countryId, cancellationToken);
 
             foreach (var reference in missingReferences)
             {
@@ -239,7 +248,7 @@ public class OrderService : IOrderService
                     WarehouseId = defaults.WarehouseId,
                     FarmId = defaults.FarmId,
                     StoredAt = DateTime.UtcNow.Date,
-                    QualityGrade = BatchQualityGrade.A,
+                    QualityGrade = qualityGrade,
                     Status = BatchStatus.Stored,
                 };
 
@@ -257,20 +266,102 @@ public class OrderService : IOrderService
         return existingBatches;
     }
 
+    private static BatchQualityGrade ParseQualityGrade(string? grade)
+    {
+        return grade?.ToUpperInvariant() switch
+        {
+            "B" => BatchQualityGrade.B,
+            "C" => BatchQualityGrade.C,
+            _ => BatchQualityGrade.A,
+        };
+    }
+
     private async Task<(Guid WarehouseId, Guid FarmId)> EnsureDefaultBatchDependenciesAsync(
+        Guid? countryId,
         CancellationToken cancellationToken)
     {
-        var country = await _context.Countries.FirstOrDefaultAsync(cancellationToken)
-            ?? await CreateDefaultCountryAsync(cancellationToken);
+        var country = countryId is not null
+            ? await _context.Countries.FindAsync(new object?[] { countryId.Value }, cancellationToken)
+                ?? await CreateDefaultCountryAsync(cancellationToken)
+            : await _context.Countries.FirstOrDefaultAsync(cancellationToken)
+                ?? await CreateDefaultCountryAsync(cancellationToken);
 
-        var warehouse = await _context.Warehouses.FirstOrDefaultAsync(cancellationToken)
+        var warehouse = await _context.Warehouses
+            .FirstOrDefaultAsync(w => w.CountryId == country.Id, cancellationToken)
             ?? await CreateDefaultWarehouseAsync(country.Id, cancellationToken);
 
-        var farm = await _context.Farms.FirstOrDefaultAsync(cancellationToken)
+        var farm = await _context.Farms
+            .FirstOrDefaultAsync(f => f.CountryId == country.Id, cancellationToken)
             ?? await CreateDefaultFarmAsync(country.Id, cancellationToken);
 
         return (warehouse.Id, farm.Id);
     }
+
+    private async Task<Guid?> ResolveCountryIdAsync(
+        string? countryCode,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(countryCode))
+            return null;
+
+        var normalizedCode = countryCode.Trim().ToUpperInvariant();
+        var country = await _context.Countries
+            .FirstOrDefaultAsync(c => c.Code == normalizedCode, cancellationToken);
+
+        if (country is not null)
+            return country.Id;
+
+        country = CreateCountryFromCode(normalizedCode);
+        _context.Countries.Add(country);
+        await _context.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation(
+            "Created country {CountryName} ({CountryCode}) from Odoo order",
+            country.Name,
+            country.Code);
+
+        return country.Id;
+    }
+
+    private static Country CreateCountryFromCode(string code) => code switch
+    {
+        "BR" => new Country
+        {
+            Name = "Brazil",
+            Code = "BR",
+            NominalTemp = 20,
+            ToleranceTemp = 2,
+            NominalHumidity = 60,
+            ToleranceHumidity = 5,
+        },
+        "EC" => new Country
+        {
+            Name = "Ecuador",
+            Code = "EC",
+            NominalTemp = 18,
+            ToleranceTemp = 2,
+            NominalHumidity = 65,
+            ToleranceHumidity = 5,
+        },
+        "CO" => new Country
+        {
+            Name = "Colombia",
+            Code = "CO",
+            NominalTemp = 19,
+            ToleranceTemp = 2,
+            NominalHumidity = 62,
+            ToleranceHumidity = 5,
+        },
+        _ => new Country
+        {
+            Name = code,
+            Code = code,
+            NominalTemp = 20,
+            ToleranceTemp = 2,
+            NominalHumidity = 60,
+            ToleranceHumidity = 5,
+        },
+    };
 
     private async Task<Country> CreateDefaultCountryAsync(CancellationToken cancellationToken)
     {
@@ -293,10 +384,14 @@ public class OrderService : IOrderService
         Guid countryId,
         CancellationToken cancellationToken)
     {
+        var country = await _context.Countries.FindAsync(new object?[] { countryId }, cancellationToken)
+            ?? throw new InvalidOperationException($"Country {countryId} not found.");
+
+        var suffix = country.Code.ToUpperInvariant();
         var warehouse = new Warehouse
         {
-            Name = "Default Warehouse",
-            Reference = "WH-DEFAULT",
+            Name = $"Default Warehouse ({country.Name})",
+            Reference = $"WH-{suffix}-DEFAULT",
             CountryId = countryId,
         };
 
@@ -309,10 +404,14 @@ public class OrderService : IOrderService
         Guid countryId,
         CancellationToken cancellationToken)
     {
+        var country = await _context.Countries.FindAsync(new object?[] { countryId }, cancellationToken)
+            ?? throw new InvalidOperationException($"Country {countryId} not found.");
+
+        var suffix = country.Code.ToUpperInvariant();
         var farm = new Farm
         {
-            Name = "Default Farm",
-            Reference = "FM-DEFAULT",
+            Name = $"Default Farm ({country.Name})",
+            Reference = $"FM-{suffix}-DEFAULT",
             CountryId = countryId,
         };
 
@@ -332,6 +431,7 @@ public class OrderService : IOrderService
             OrderReference = order.OrderReference,
             OrderDate = order.OrderDate,
             ClientName = order.ClientName,
+            Country = order.Country?.Name,
             Status = order.Status.ToString(),
             IntegrationErrorMessage = order.IntegrationErrorMessage,
             CreatedAt = order.CreatedAt,

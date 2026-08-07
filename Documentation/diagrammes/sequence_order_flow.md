@@ -14,7 +14,7 @@ sequenceDiagram
 
     %% ── Étape 1 : Création de commande dans Odoo ──
     U->>O: Crée une commande (sale.order)
-    U->>O: Renseigne champs FK<br/>(batch_ref, quality_grade, origin_country)
+    U->>O: Renseigne champs FK<br/>(batch_ref, quality_grade, country)
     U->>O: Clique "Confirmer"
 
     %% ── Étape 2 : Webhook Odoo → .NET ──

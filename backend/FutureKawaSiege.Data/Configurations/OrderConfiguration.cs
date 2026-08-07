@@ -27,6 +27,11 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
             .IsRequired()
             .HasMaxLength(256);
 
+        builder.HasOne(o => o.Country)
+            .WithMany()
+            .HasForeignKey(o => o.CountryId)
+            .OnDelete(DeleteBehavior.SetNull);
+
         builder.Property(o => o.Status)
             .HasConversion<string>()
             .IsRequired()

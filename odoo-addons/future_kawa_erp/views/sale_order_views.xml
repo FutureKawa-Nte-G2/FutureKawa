@@ -13,9 +13,10 @@
                 <page string="FutureKawa" name="futurekawa">
                     <group>
                         <group string="Informations Café">
-                            <field name="coffee_batch_ref"/>
+                            <field name="batch_count"/>
+                            <field name="batch_ref" readonly="1"/>
                             <field name="quality_grade"/>
-                            <field name="origin_country"/>
+                            <field name="country"/>
                         </group>
                         <group string="Intégration Backend">
                             <field name="integration_status" readonly="1"/>

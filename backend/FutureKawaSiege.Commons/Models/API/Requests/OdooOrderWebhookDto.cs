@@ -8,6 +8,8 @@ public record OdooOrderWebhookDto
     public int OrderId { get; init; }
     public string? Client { get; init; }
     public string? OrderDate { get; init; }
+    public string? Country { get; init; }
+    public string? QualityGrade { get; init; }
     public IEnumerable<string> BatchReferences { get; init; } = [];
     public IEnumerable<OdooOrderLineDto> Lines { get; init; } = [];
 }

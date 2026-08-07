@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace FutureKawaSiege.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260806190147_InitialCreate")]
+    [Migration("20260807172824_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -150,6 +150,9 @@ namespace FutureKawaSiege.Data.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
 
+                    b.Property<Guid?>("CountryId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -177,6 +180,8 @@ namespace FutureKawaSiege.Data.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CountryId");
 
                     b.HasIndex("OdooOrderId");
 
@@ -355,6 +360,16 @@ namespace FutureKawaSiege.Data.Migrations
                         .HasForeignKey("CountryId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.Navigation("Country");
+                });
+
+            modelBuilder.Entity("FutureKawaSiege.Data.Entities.Order", b =>
+                {
+                    b.HasOne("FutureKawaSiege.Data.Entities.Country", "Country")
+                        .WithMany()
+                        .HasForeignKey("CountryId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("Country");
                 });

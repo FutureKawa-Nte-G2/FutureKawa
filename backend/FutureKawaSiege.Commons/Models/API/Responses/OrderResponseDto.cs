@@ -10,6 +10,7 @@ public record OrderResponseDto
     public string OrderReference { get; init; } = null!;
     public DateTime OrderDate { get; init; }
     public string ClientName { get; init; } = null!;
+    public string? Country { get; init; }
     public string Status { get; init; } = null!;
     public string? IntegrationErrorMessage { get; init; }
     public DateTime CreatedAt { get; init; }

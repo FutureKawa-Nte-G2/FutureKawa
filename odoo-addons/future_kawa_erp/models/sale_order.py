@@ -19,9 +19,10 @@ class SaleOrder(models.Model):
     Extension of the sale.order model for FutureKawa.
 
     Adds business fields specific to coffee management:
-    - coffee_batch_ref: coffee batch reference(s), comma-separated
+    - batch_count: number of coffee batches to generate
+    - batch_ref: generated coffee batch reference(s), comma-separated (readonly)
     - quality_grade: quality grade (A, B, C) — informational on Odoo side
-    - origin_country: country of origin — informational on Odoo side
+    - country: country of origin — informational on Odoo side
     - integration_status: sync status with the .NET backend
 
     Overrides the action_confirm() method to trigger a webhook
@@ -32,11 +33,19 @@ class SaleOrder(models.Model):
 
     # ── FutureKawa specific business fields ──
 
-    coffee_batch_ref = fields.Char(
-        string="Coffee Batch References",
-        help="Coffee batch reference(s) associated with this order. "
+    batch_count = fields.Integer(
+        string="Number of Batches",
+        help="Number of coffee batches to generate for this order.",
+        default=1,
+        copy=False,
+    )
+
+    batch_ref = fields.Char(
+        string="Generated Batch References",
+        help="Coffee batch reference(s) generated for this order. "
              "Use commas to separate multiple references.",
         copy=False,
+        readonly=True,
     )
 
     quality_grade = fields.Selection(
@@ -49,8 +58,13 @@ class SaleOrder(models.Model):
         help="Quality grade of the ordered coffee",
     )
 
-    origin_country = fields.Char(
-        string="Origin Country",
+    country = fields.Selection(
+        selection=[
+            ("BR", "Brésil"),
+            ("EC", "Équateur"),
+            ("CO", "Colombie"),
+        ],
+        string="Country",
         help="Country of origin of the coffee",
     )
 
@@ -130,20 +144,29 @@ class SaleOrder(models.Model):
             )
             return
 
-        # Build batch references list from comma-separated coffee_batch_ref
+        # Generate batch references automatically if not already set
         batch_refs = []
-        if self.coffee_batch_ref:
+        if self.batch_ref:
             batch_refs = [
                 ref.strip()
-                for ref in self.coffee_batch_ref.split(",")
+                for ref in self.batch_ref.split(",")
                 if ref.strip()
             ]
+        elif self.batch_count and self.batch_count > 0:
+            sequence = self.env["ir.sequence"].sudo()
+            batch_refs = [
+                sequence.next_by_code("future_kawa.batch.reference")
+                for _ in range(self.batch_count)
+            ]
+            self.write({"batch_ref": ", ".join(batch_refs)})
 
         # Build JSON payload (camelCase to match .NET DTO)
         payload = {
             "orderId": self.id,
             "client": self.partner_id.name,
             "orderDate": self.date_order.isoformat() if self.date_order else None,
+            "country": self.country or None,
+            "qualityGrade": self.quality_grade or None,
             "batchReferences": batch_refs,
             "lines": [
                 {

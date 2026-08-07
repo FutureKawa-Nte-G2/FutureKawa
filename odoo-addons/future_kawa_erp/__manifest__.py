@@ -11,7 +11,7 @@ FutureKawa ERP Integration
 Custom Odoo module for coffee order and delivery management.
 
 Features:
-- Extension of the sale.order model with specific business fields (batch references, quality grade, origin country)
+- Extension of the sale.order model with specific business fields (batch references, quality grade, country)
 - Automatic webhook to the .NET backend on order confirmation, sending batch references as a list
 - Integration status tracking with the .NET backend
 - Extension of the stock.picking model for delivery tracking
@@ -30,6 +30,7 @@ Integration:
     ],
     "data": [
         "security/ir.model.access.csv",
+        "data/ir_sequence.xml",
         "data/ir_config_parameter.xml",
         "views/sale_order_views.xml",
     ],

@@ -52,6 +52,28 @@ entity "Lot" as Batch {
   * status : string
 }
 
+entity "Commande" as Order {
+  * id : UUID <<PK>>
+  --
+  odoo_order_id : int
+  * order_reference : string
+  * order_date : datetime
+  * client_name : string
+  country_id : UUID <<FK>>
+  * status : string
+  integration_error_message : string
+  * created_at : datetime
+  updated_at : datetime
+}
+
+entity "LigneCommande" as OrderLine {
+  * id : UUID <<PK>>
+  --
+  * order_id : UUID <<FK>>
+  * product_name : string
+  * quantity : decimal
+}
+
 entity "Capteur" as Sensor {
   * id : UUID <<PK>>
   --
@@ -90,5 +112,7 @@ Warehouse ||--o{ Sensor : "surveillé par"
 Sensor ||--|{ Measurement : "prend"
 Warehouse ||--o{ Alert : "lève alerte condition"
 Batch ||--o{ Alert : "lève alerte expiration"
+Order ||--|{ OrderLine : "contient"
+Order }o--o{ Batch : "associe"
 
 @enduml

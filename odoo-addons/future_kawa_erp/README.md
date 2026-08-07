@@ -13,9 +13,10 @@ Champs métier ajoutés :
 
 | Champ                       | Type              | Description                                    |
 | --------------------------- | ----------------- | ---------------------------------------------- |
-| `coffee_batch_ref`          | Char              | Référence du lot de café                       |
+| `batch_count`               | Integer           | Nombre de lots de café à générer               |
+| `batch_ref`                 | Char              | Références des lots générées (lecture seule)   |
 | `quality_grade`             | Selection (A/B/C) | Grade de qualité du café                       |
-| `origin_country`            | Char              | Pays d'origine                                 |
+| `country`                   | Char              | Pays d'origine                                 |
 | `integration_status`        | Selection         | Statut de synchronisation avec le backend .NET |
 | `integration_error_message` | Text              | Message d'erreur d'intégration                 |
 
@@ -35,12 +36,12 @@ un POST HTTP vers le backend .NET avec le payload suivant :
 
 ```json
 {
-  "order_id": 42,
+  "orderId": 42,
   "client": "Distributeur Café Europe SARL",
-  "order_date": "2026-08-03T10:30:00",
-  "batch_ref": "BATCH-2026-001",
-  "quality_grade": "a",
-  "origin_country": "Colombie",
+  "orderDate": "2026-08-03T10:30:00",
+  "country": "CO",
+  "qualityGrade": "a",
+  "batchReferences": ["LOT-008", "LOT-009"],
   "lines": [{ "product": "Café Arabica - Grade A", "quantity": 100.0 }]
 }
 ```

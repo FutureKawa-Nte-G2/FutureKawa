@@ -73,6 +73,7 @@ entity "Commande" as Order {
   * order_reference : string
   * order_date : datetime
   * client_name : string
+  country_id : UUID <<FK>>
   * status : string
   integration_error_message : string
   * created_at : datetime

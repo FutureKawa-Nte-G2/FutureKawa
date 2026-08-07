@@ -13,6 +13,8 @@ public static class ServiceCollectionExtensions
         var loginWindow = int.Parse(configuration["RateLimiting:Login:WindowSeconds"] ?? "60");
         var refreshLimit = int.Parse(configuration["RateLimiting:Refresh:PermitLimit"] ?? "10");
         var refreshWindow = int.Parse(configuration["RateLimiting:Refresh:WindowSeconds"] ?? "60");
+        var webhookLimit = int.Parse(configuration["RateLimiting:OdooWebhook:PermitLimit"] ?? "30");
+        var webhookWindow = int.Parse(configuration["RateLimiting:OdooWebhook:WindowSeconds"] ?? "60");
 
         services.AddRateLimiter(options =>
         {
@@ -40,6 +42,14 @@ public static class ServiceCollectionExtensions
             {
                 config.PermitLimit = refreshLimit;
                 config.Window = TimeSpan.FromSeconds(refreshWindow);
+                config.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+                config.QueueLimit = 0;
+            });
+
+            options.AddFixedWindowLimiter("odoo_webhook", config =>
+            {
+                config.PermitLimit = webhookLimit;
+                config.Window = TimeSpan.FromSeconds(webhookWindow);
                 config.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
                 config.QueueLimit = 0;
             });

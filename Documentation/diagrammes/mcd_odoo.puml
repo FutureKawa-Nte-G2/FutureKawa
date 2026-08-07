@@ -1,0 +1,100 @@
+@startuml MCD_Odoo_FutureKawa
+
+!theme plain
+
+title MCD - Odoo FutureKawa
+
+entity "Commande Client\n(sale.order)" as SaleOrder {
+  * id : int <<PK>>
+  --
+  * name : string
+  partner_id : int <<FK>>
+  company_id : int <<FK>>
+  * state : selection
+  date_order : datetime
+  --
+  <<extension FutureKawa>>
+  batch_count : integer
+  batch_ref : char
+  quality_grade : selection
+  country : selection
+  integration_status : selection
+  integration_error_message : text
+}
+
+entity "Ligne de Commande\n(sale.order.line)" as SaleOrderLine {
+  * id : int <<PK>>
+  --
+  * order_id : int <<FK>>
+  product_id : int <<FK>>
+  * product_uom_qty : float
+  price_unit : float
+}
+
+entity "Partenaire\n(res.partner)" as ResPartner {
+  * id : int <<PK>>
+  --
+  * name : string
+  email : string
+  phone : string
+  is_company : bool
+  customer_rank : int
+}
+
+entity "Société\n(res.company)" as ResCompany {
+  * id : int <<PK>>
+  --
+  * name : string
+  currency_id : int <<FK>>
+}
+
+entity "Opération de Stock\n(stock.picking)" as StockPicking {
+  * id : int <<PK>>
+  --
+  * name : string
+  sale_id : int <<FK>>
+  picking_type_id : int <<FK>>
+  * state : selection
+  scheduled_date : datetime
+  --
+  <<extension FutureKawa>>
+  delivery_reference : char
+  carrier_tracking_ref : char
+}
+
+entity "Mouvement de Stock\n(stock.move)" as StockMove {
+  * id : int <<PK>>
+  --
+  * picking_id : int <<FK>>
+  product_id : int <<FK>>
+  * product_uom_qty : float
+  * state : selection
+}
+
+entity "Type d'Opération\n(stock.picking.type)" as StockPickingType {
+  * id : int <<PK>>
+  --
+  * name : string
+  * code : selection
+  warehouse_id : int <<FK>>
+}
+
+entity "Produit\n(product.product)" as ProductProduct {
+  * id : int <<PK>>
+  --
+  * name : string
+  default_code : string
+  list_price : float
+}
+
+' Relations conceptuelles
+ResPartner ||--o{ SaleOrder : "passe"
+ResCompany ||--o{ SaleOrder : "appartient à"
+SaleOrder ||--|{ SaleOrderLine : "contient"
+SaleOrderLine }o--|| ProductProduct : "concernant"
+SaleOrder ||--o{ StockPicking : "génère"
+StockPickingType ||--o{ StockPicking : "typifie"
+StockPicking ||--|{ StockMove : "contient"
+StockMove }o--|| ProductProduct : "sur"
+
+@enduml

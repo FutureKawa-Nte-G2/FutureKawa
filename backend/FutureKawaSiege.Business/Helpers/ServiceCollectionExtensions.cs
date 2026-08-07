@@ -1,3 +1,4 @@
+using System.Threading.Channels;
 using FutureKawaSiege.Business.Services;
 using FutureKawaSiege.Business.Services.Abstraction;
 using FutureKawaSiege.Business.Validators;
@@ -9,11 +10,20 @@ public static class ServiceCollectionExtensions
 {
     public static IServiceCollection AddBusinessServices(this IServiceCollection services)
     {
-        // Services
+        // Auth services
         services.AddScoped<IPasswordHasher, PasswordHasher>();
         services.AddSingleton<IJwtService, JwtService>();
         services.AddScoped<IRefreshTokenService, RefreshTokenService>();
         services.AddScoped<IAuthService, AuthService>();
+
+        // Order & Odoo integration services
+        services.AddScoped<IOrderService, OrderService>();
+        services.AddHttpClient<IOdooIntegrationService, OdooIntegrationService>();
+
+        // Delayed order shipment infrastructure
+        services.AddSingleton(Channel.CreateUnbounded<ShipmentJob>());
+        services.AddSingleton<IOrderShipmentScheduler, OrderShipmentScheduler>();
+        services.AddHostedService<OrderShipmentBackgroundService>();
 
         return services;
     }

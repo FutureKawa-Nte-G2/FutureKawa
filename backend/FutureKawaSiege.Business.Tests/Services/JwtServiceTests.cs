@@ -28,8 +28,7 @@ public class JwtServiceTests
     {
         Id = Guid.NewGuid(),
         Email = "test@futurekawa.com",
-        Role = "Admin",
-        Country = "FR",
+        Role = UserRole.Admin,
         WarehouseId = Guid.NewGuid(),
     };
 

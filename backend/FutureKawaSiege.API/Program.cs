@@ -29,6 +29,7 @@ else
 
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
+builder.Services.AddScoped<IOrderRepository, OrderRepository>();
 
 builder.Services.AddBusinessServices();
 
@@ -97,8 +98,7 @@ if (args.Contains("--seed"))
         Id = Guid.NewGuid(),
         Email = "test@futurekawa.com",
         PasswordHash = hasher.Hash("TestPass123"),
-        Role = "Admin",
-        Country = "FR",
+        Role = FutureKawaSiege.Data.Entities.UserRole.Admin,
         CreatedAt = DateTime.UtcNow,
     };
 
@@ -124,6 +124,23 @@ app.UseHttpsRedirection();
 
 app.UseAuthentication();
 app.UseAuthorization();
+
+// Middleware: validate Odoo webhook token for /api/integration/odoo/* endpoints
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/api/integration/odoo"))
+    {
+        var configToken = builder.Configuration["Odoo:WebhookToken"];
+        var headerToken = context.Request.Headers["X-Webhook-Token"].FirstOrDefault();
+
+        if (!string.IsNullOrEmpty(configToken) && headerToken == configToken)
+        {
+            context.Items["OdooWebhookToken"] = configToken;
+        }
+    }
+
+    await next();
+});
 
 app.MapControllers();
 

@@ -23,14 +23,16 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
             .IsRequired();
 
         builder.Property(u => u.Role)
+            .HasConversion<string>()
             .IsRequired()
-            .HasMaxLength(64);
-
-        builder.Property(u => u.Country)
-            .IsRequired()
-            .HasMaxLength(64);
+            .HasMaxLength(32);
 
         builder.Property(u => u.CreatedAt)
             .IsRequired();
+
+        builder.HasOne(u => u.Warehouse)
+            .WithMany(w => w.Users)
+            .HasForeignKey(u => u.WarehouseId)
+            .OnDelete(DeleteBehavior.SetNull);
     }
 }

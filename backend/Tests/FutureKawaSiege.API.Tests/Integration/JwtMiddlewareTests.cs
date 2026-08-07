@@ -37,8 +37,7 @@ public class JwtMiddlewareTests : IClassFixture<CustomWebApplicationFactory>
             Id = Guid.NewGuid(),
             Email = "keytest@futurekawa.com",
             PasswordHash = hasher.Hash("KeyTest123"),
-            Role = "Admin",
-            Country = "FR",
+            Role = UserRole.Admin,
             CreatedAt = DateTime.UtcNow,
         };
         db.Users.Add(user);

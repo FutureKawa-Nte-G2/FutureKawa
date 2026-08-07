@@ -55,7 +55,10 @@ class SaleOrder(models.Model):
             ("c", "Grade C"),
         ],
         string="Quality Grade",
-        help="Quality grade of the ordered coffee",
+        help="Quality grade inferred from the selected coffee product",
+        compute="_compute_quality_grade",
+        store=True,
+        readonly=True,
     )
 
     country = fields.Selection(
@@ -87,6 +90,30 @@ class SaleOrder(models.Model):
         copy=False,
         readonly=True,
     )
+
+    # ── Compute quality grade from product ──
+
+    @api.depends("order_line", "order_line.product_id", "order_line.product_id.default_code")
+    def _compute_quality_grade(self):
+        """
+        Infer the quality grade from the first FutureKawa coffee product
+        listed on the order lines. This avoids asking the user to select
+        the grade twice (once via the product, once via the FutureKawa tab).
+        """
+        for order in self:
+            grade = False
+            for line in order.order_line:
+                code = (line.product_id.default_code or "").upper()
+                if code == "COFFEE-A":
+                    grade = "a"
+                    break
+                elif code == "COFFEE-B":
+                    grade = "b"
+                    break
+                elif code == "COFFEE-C":
+                    grade = "c"
+                    break
+            order.quality_grade = grade
 
     # ── Override of action_confirm ──
 

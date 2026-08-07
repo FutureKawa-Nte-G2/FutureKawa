@@ -14,8 +14,6 @@
                     <group>
                         <group string="Informations Café">
                             <field name="batch_count"/>
-                            <field name="batch_ref" readonly="1"/>
-                            <field name="quality_grade"/>
                             <field name="country"/>
                         </group>
                         <group string="Intégration Backend">

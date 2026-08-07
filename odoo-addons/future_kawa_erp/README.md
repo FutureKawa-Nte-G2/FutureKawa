@@ -15,7 +15,7 @@ Champs métier ajoutés :
 | --------------------------- | ----------------- | ---------------------------------------------- |
 | `batch_count`               | Integer           | Nombre de lots de café à générer               |
 | `batch_ref`                 | Char              | Références des lots générées (lecture seule)   |
-| `quality_grade`             | Selection (A/B/C) | Grade de qualité du café                       |
+| `quality_grade`             | Selection (A/B/C) | Grade déduit automatiquement du produit choisi |
 | `country`                   | Char              | Pays d'origine                                 |
 | `integration_status`        | Selection         | Statut de synchronisation avec le backend .NET |
 | `integration_error_message` | Text              | Message d'erreur d'intégration                 |

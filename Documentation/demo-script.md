@@ -67,8 +67,8 @@ dotnet ef database update --project FutureKawaSiege.Data --startup-project Futur
 3. Ajouter une ligne : "Café Arabica - Grade A", quantité 100
 4. Aller dans l'onglet **FutureKawa** :
    - Référence Lot : `LOT-001`
-   - Grade Qualité : `Grade A`
    - Pays d'Origine : `Colombie`
+   - _Le Grade Qualité se remplit automatiquement d'après le produit choisi._
 5. Cliquer **Confirmer**
 
 **Points à expliquer au jury :**

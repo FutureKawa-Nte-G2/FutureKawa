@@ -2,7 +2,7 @@
 
 {
     "name": "FutureKawa ERP Integration",
-    "version": "18.0.1.0.0",
+    "version": "18.0.1.1.0",
     "summary": "Custom module for coffee order and delivery management",
     "description": """
 FutureKawa ERP Integration

@@ -13,4 +13,5 @@ public class Warehouse
     public Country Country { get; set; } = null!;
     public ICollection<Batch> Batches { get; set; } = new List<Batch>();
     public ICollection<User> Users { get; set; } = new List<User>();
+    public ICollection<Measurement> Measurements { get; set; } = new List<Measurement>();
 }

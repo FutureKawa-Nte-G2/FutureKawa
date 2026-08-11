@@ -20,6 +20,11 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IOrderService, OrderService>();
         services.AddHttpClient<IOdooIntegrationService, OdooIntegrationService>();
 
+        // Measurement sync services
+        services.AddHttpClient<ILocalMeasurementApiService, LocalMeasurementApiService>();
+        services.AddScoped<IMeasurementSyncService, MeasurementSyncService>();
+        services.AddHostedService<MeasurementSyncBackgroundService>();
+
         // Delayed order shipment infrastructure
         services.AddSingleton(Channel.CreateUnbounded<ShipmentJob>());
         services.AddSingleton<IOrderShipmentScheduler, OrderShipmentScheduler>();

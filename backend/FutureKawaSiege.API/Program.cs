@@ -30,6 +30,7 @@ else
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
 builder.Services.AddScoped<IOrderRepository, OrderRepository>();
+builder.Services.AddScoped<IMeasurementRepository, MeasurementRepository>();
 
 builder.Services.AddBusinessServices();
 

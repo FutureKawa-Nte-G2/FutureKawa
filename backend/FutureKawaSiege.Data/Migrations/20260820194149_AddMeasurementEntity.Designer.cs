@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace FutureKawaSiege.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260810194654_AddMeasurementEntity")]
+    [Migration("20260820194149_AddMeasurementEntity")]
     partial class AddMeasurementEntity
     {
         /// <inheritdoc />
@@ -161,8 +161,8 @@ namespace FutureKawaSiege.Data.Migrations
                         .HasPrecision(5, 2)
                         .HasColumnType("numeric(5,2)");
 
-                    b.Property<DateTime>("MeasDate")
-                        .HasColumnType("timestamptz");
+                    b.Property<DateOnly>("MeasDate")
+                        .HasColumnType("date");
 
                     b.Property<decimal>("MinMeasHumidity")
                         .HasPrecision(5, 2)

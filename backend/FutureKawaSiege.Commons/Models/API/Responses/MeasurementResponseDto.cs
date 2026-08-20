@@ -8,7 +8,7 @@ public record MeasurementResponseDto
     public Guid Id { get; init; }
     public Guid WarehouseId { get; init; }
     public string WarehouseName { get; init; } = null!;
-    public DateTime MeasDate { get; init; }
+    public DateOnly MeasDate { get; init; }
     public decimal AvgMeasTemp { get; init; }
     public decimal MaxMeasTemp { get; init; }
     public decimal MinMeasTemp { get; init; }

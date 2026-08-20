@@ -21,9 +21,9 @@ public class Measurement
     public Guid WarehouseId { get; set; }
 
     /// <summary>
-    /// Date of the measurement (aggregated for that day).
+    /// Date of the measurement (aggregated for that day, no time component).
     /// </summary>
-    public DateTime MeasDate { get; set; }
+    public DateOnly MeasDate { get; set; }
 
     /// <summary>
     /// Average temperature measured (°C).

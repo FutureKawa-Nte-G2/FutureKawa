@@ -16,6 +16,7 @@ public class MeasurementRepository : IMeasurementRepository
     public async Task<IEnumerable<Measurement>> GetByWarehouseAsync(Guid warehouseId, CancellationToken cancellationToken = default)
     {
         return await _context.Measurements
+            .Where(m => m.WarehouseId == warehouseId)
             .Include(m => m.Warehouse)
             .AsNoTracking()
             .OrderByDescending(m => m.MeasDate)
@@ -33,7 +34,7 @@ public class MeasurementRepository : IMeasurementRepository
     }
 
     /// <inheritdoc/>
-    public async Task<Measurement?> GetExistingAsync(Guid warehouseId, DateTime measDate, CancellationToken cancellationToken = default)
+    public async Task<Measurement?> GetExistingAsync(Guid warehouseId, DateOnly measDate, CancellationToken cancellationToken = default)
     {
         return await _context.Measurements
             .FirstOrDefaultAsync(m => m.WarehouseId == warehouseId && m.MeasDate == measDate, cancellationToken);

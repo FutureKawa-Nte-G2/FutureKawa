@@ -18,7 +18,7 @@ public interface IMeasurementRepository
     /// Checks whether a measurement already exists for the given warehouse and date.
     /// Used for idempotency during sync.
     /// </summary>
-    Task<Measurement?> GetExistingAsync(Guid warehouseId, DateTime measDate, CancellationToken cancellationToken = default);
+    Task<Measurement?> GetExistingAsync(Guid warehouseId, DateOnly measDate, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Adds a new measurement to the data store.

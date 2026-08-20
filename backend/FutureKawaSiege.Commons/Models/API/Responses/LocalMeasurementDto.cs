@@ -11,5 +11,5 @@ public record LocalMeasurementDto
     public decimal AvgHumidity { get; init; }
     public decimal MaxHumidity { get; init; }
     public decimal MinHumidity { get; init; }
-    public DateTime MeasDate { get; init; }
+    public DateOnly MeasDate { get; init; }
 }

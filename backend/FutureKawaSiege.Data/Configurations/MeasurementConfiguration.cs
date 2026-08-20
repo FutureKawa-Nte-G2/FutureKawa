@@ -31,7 +31,7 @@ public class MeasurementConfiguration : IEntityTypeConfiguration<Measurement>
             .HasPrecision(5, 2);
 
         builder.Property(m => m.MeasDate)
-            .HasColumnType("timestamptz");
+            .HasColumnType("date");
 
         builder.HasOne(m => m.Warehouse)
             .WithMany(w => w.Measurements)

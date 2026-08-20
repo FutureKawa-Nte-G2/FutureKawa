@@ -106,7 +106,7 @@ public class LocalMeasurementApiService : ILocalMeasurementApiService
             AvgHumidity = baseHumidity + humidityVariance,
             MaxHumidity = baseHumidity + humidityVariance + 4.0m,
             MinHumidity = baseHumidity + humidityVariance - 4.0m,
-            MeasDate = DateTime.UtcNow,
+            MeasDate = DateOnly.FromDateTime(DateTime.UtcNow),
         };
     }
 }

@@ -158,8 +158,8 @@ namespace FutureKawaSiege.Data.Migrations
                         .HasPrecision(5, 2)
                         .HasColumnType("numeric(5,2)");
 
-                    b.Property<DateTime>("MeasDate")
-                        .HasColumnType("timestamptz");
+                    b.Property<DateOnly>("MeasDate")
+                        .HasColumnType("date");
 
                     b.Property<decimal>("MinMeasHumidity")
                         .HasPrecision(5, 2)

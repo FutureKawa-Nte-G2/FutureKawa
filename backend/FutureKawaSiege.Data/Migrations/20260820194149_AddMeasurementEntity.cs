@@ -17,7 +17,7 @@ namespace FutureKawaSiege.Data.Migrations
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     WarehouseId = table.Column<Guid>(type: "uuid", nullable: false),
-                    MeasDate = table.Column<DateTime>(type: "timestamptz", nullable: false),
+                    MeasDate = table.Column<DateOnly>(type: "date", nullable: false),
                     AvgMeasTemp = table.Column<decimal>(type: "numeric(5,2)", precision: 5, scale: 2, nullable: false),
                     MaxMeasTemp = table.Column<decimal>(type: "numeric(5,2)", precision: 5, scale: 2, nullable: false),
                     MinMeasTemp = table.Column<decimal>(type: "numeric(5,2)", precision: 5, scale: 2, nullable: false),

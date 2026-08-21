@@ -53,6 +53,66 @@ Odoo accessible sur `http://localhost:8069`.
 
 Voir [Documentation/demo-script.md](Documentation/demo-script.md) pour la procédure complète.
 
+## Module ERP Odoo (`future_kawa_erp`)
+
+Module personnalisé Odoo 18 pour la gestion des commandes et livraisons de café, situé dans `odoo-addons/future_kawa_erp/`.
+
+### Fonctionnalités
+
+- **Extension de `sale.order`** : champs métier `batch_count`, `batch_ref`, `quality_grade` (A/B/C, déduit du produit), `country`, `integration_status` et `integration_error_message` (synchronisation avec le backend .NET)
+- **Extension de `stock.picking`** : champs `delivery_reference` et `carrier_tracking_ref`
+
+### Intégration avec le backend .NET
+
+**Flux Odoo → .NET (webhook)** : lors de la confirmation d'une commande (`action_confirm()`), le module envoie un POST HTTP vers le backend .NET avec le payload de commande (client, date, pays, grade, lots, lignes).
+
+**Flux .NET → Odoo (JSON-RPC)** : le backend .NET appelle l'API JSON-RPC d'Odoo pour marquer une commande comme expédiée via `action_mark_shipped()`.
+
+### Installation du module
+
+1. Démarrer les conteneurs Docker : `docker compose up -d`
+2. Créer la base de données Odoo via l'interface web : `http://localhost:8069`
+
+   Les valeurs doivent correspondre à la section `Odoo` du fichier `backend/FutureKawaSiege.API/appsettings.Development.json` (utilisée par le backend pour se connecter à Odoo en JSON-RPC) :
+
+   | Champ du formulaire Odoo | Valeur (dev)      | Clé `appsettings.Development.json` |
+   | ------------------------ | ----------------- | ---------------------------------- |
+   | Nom de la base           | `futurekawa`      | `Odoo:Db`                          |
+   | Email                    | `admin@admin.com` | `Odoo:Username`                    |
+   | Mot de passe             | `Not24get`        | `Odoo:Password`                    |
+
+3. Installer les modules de base Odoo : **Sales**, **Inventory**
+4. Installer le module FutureKawa :
+
+   ```bash
+   docker compose exec odoo odoo -u future_kawa_erp -d futurekawa --stop-after-init
+   ```
+
+### Paramétrage
+
+Configurer les paramètres système Odoo (**Paramètres → Technique → Paramètres → Paramètres Système**) :
+
+| Paramètre                   | Description                              |
+| --------------------------- | ---------------------------------------- |
+| `future_kawa.webhook_url`   | URL du endpoint backend .NET             |
+| `future_kawa.webhook_token` | Token partagé (header `X-Webhook-Token`) |
+
+En environnement de développement, le token doit correspondre à `Odoo:WebhookToken` du `appsettings.Development.json` : `futurekawa-webhook-shared-token`.
+
+### Créer une commande de café
+
+1. Dans Odoo, aller dans **Ventes → Nouveau** pour créer un devis
+2. Renseigner le **client** (Customer)
+3. Ajouter une ligne de commande : choisir un **produit** (café) et une **quantité**
+   - Le `quality_grade` (A/B/C) est déduit automatiquement du produit choisi
+4. Ouvrir l'onglet **FutureKawa** de la commande et renseigner :
+   - **Nombre de lots** (`batch_count`) : nombre de lots de café à générer
+   - **Pays de provenance** (`country`) : pays d'origine du café
+5. Cliquer sur **Confirmer** : la commande est confirmée, les lots sont générés (`batch_ref`) et le webhook est envoyé vers le backend .NET
+6. Vérifier le champ **Statut d'intégration** (`integration_status`) dans l'onglet FutureKawa : il indique si la synchronisation avec le backend a réussi (le message d'erreur éventuel est visible dans `integration_error_message`)
+
+Détails complets : [odoo-addons/future_kawa_erp/README.md](odoo-addons/future_kawa_erp/README.md)
+
 ## Repository Structure
 
 ```

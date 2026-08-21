@@ -22,13 +22,23 @@ EPSI MSPR Project Competency Block 4: Design and develop business and specific a
 │  (BDD Odoo) │     JSON-RPC (status=shipped)    │  + PostgreSQL    │
 └─────────────┘                                  │  (BDD applicative)│
        │                                        └──────────────────┘
-       │ (interface native Odoo                        │ HTTP API
-       │  pour démo jury)                              ▼
+       │                                               │ HTTP API
+       │                                               ▼
        │                                        ┌──────────────────┐
        │                                        │  Frontend Next.js │
        │                                        │  (portal web)     │
        │                                        └──────────────────┘
+       │
+       │     local API (measurements)           ┌──────────────────┐
+       └──────────────────────────────────────► │  Entrepôt local  │
+                                                 │  capteurs IoT    │
+                                                 └──────────────────┘
 ```
+
+- **Odoo 18** gère les commandes et déclenche un webhook vers le backend à la confirmation.
+- **Backend .NET 10** expose l'API métier, reçoit les commandes Odoo, synchronise les mesures des entrepôts et sert le frontend.
+- **Frontend Next.js** consomme l'API backend (portail web).
+- **Entrepôts locaux** fournissent les mesures agrégées quotidiennes de température et d'humidité.
 
 Voir [Documentation/diagrammes/architecture_odoo_integration.md](Documentation/diagrammes/architecture_odoo_integration.md) pour le détail.
 
@@ -52,6 +62,43 @@ docker compose up -d
 Odoo accessible sur `http://localhost:8069`.
 
 Voir [Documentation/demo-script.md](Documentation/demo-script.md) pour la procédure complète.
+
+## Synchronisation des mesures d'entrepôt
+
+Le backend récupère périodiquement les **mesures agrégées quotidiennes** (température et humidité) de chaque entrepôt local via une API locale, et les stocke dans la base applicative PostgreSQL.
+
+### Entités mesurées
+
+Pour chaque entrepôt et chaque journée, les valeurs suivantes sont conservées :
+
+| Valeur            | Description               |
+| ----------------- | ------------------------- |
+| `AvgMeasTemp`     | Température moyenne (°C)  |
+| `MinMeasTemp`     | Température minimale (°C) |
+| `MaxMeasTemp`     | Température maximale (°C) |
+| `AvgMeasHumidity` | Humidité moyenne (%)      |
+| `MinMeasHumidity` | Humidité minimale (%)     |
+| `MaxMeasHumidity` | Humidité maximale (%)     |
+| `MeasDate`        | Date de la mesure agrégée |
+
+### Fonctionnement
+
+- Un `MeasurementSyncBackgroundService` exécute la synchronisation à intervalle régulier (par défaut toutes les 24 h en dev, configurable via `MeasurementSync:IntervalMinutes`).
+- `LocalMeasurementApiService` appelle l'URL configurée dans `MeasurementSync:LocalApiUrl` pour chaque entrepôt.
+- En l'absence d'API réelle, le mode `MeasurementSync:UseMockData: true` génère des données fictives autour de 25 °C / 60 % d'humidité (conditions type stockage café).
+- Une vérification d'idempotence empêche d'insérer deux mesures pour le même entrepôt et la même date.
+
+### Endpoints API (JWT requis)
+
+| Méthode | Endpoint                          | Description                                        |
+| ------- | --------------------------------- | -------------------------------------------------- |
+| `GET`   | `/api/measurements`               | Liste toutes les mesures stockées                  |
+| `GET`   | `/api/measurements/{warehouseId}` | Liste les mesures d'un entrepôt donné              |
+| `POST`  | `/api/measurements/sync`          | Déclenche manuellement un cycle de synchronisation |
+
+### Mock local (dev uniquement)
+
+Le endpoint non sécurisé `GET /api/mock/measurements` est disponible en environnement de développement pour simuler l'API d'un entrepôt local sans matériel IoT.
 
 ## Module ERP Odoo (`future_kawa_erp`)
 
@@ -113,6 +160,33 @@ En environnement de développement, le token doit correspondre à `Odoo:WebhookT
 
 Détails complets : [odoo-addons/future_kawa_erp/README.md](odoo-addons/future_kawa_erp/README.md)
 
+## Configuration backend
+
+Le backend utilise les sections suivantes dans `appsettings.json` / `appsettings.Development.json` :
+
+| Section             | Clé                      | Description                                                        |
+| ------------------- | ------------------------ | ------------------------------------------------------------------ |
+| `ConnectionStrings` | `DefaultConnection`      | Chaîne de connexion PostgreSQL applicative                         |
+| `Jwt`               | `Secret`, `Issuer`, etc. | Paramètres d'authentification JWT                                  |
+| `Odoo`              | `Db`, `Username`, etc.   | Connexion JSON-RPC à Odoo et token du webhook                      |
+| `MeasurementSync`   | `LocalApiUrl`            | URL de l'API locale d'un entrepôt                                  |
+|                     | `IntervalMinutes`        | Intervalle entre deux synchronisations (défaut 60 min)             |
+|                     | `UseMockData`            | `true` pour générer des données fictives sans appeler d'API réelle |
+
+### Configuration de développement pour les mesures
+
+```json
+"MeasurementSync": {
+  "LocalApiUrl": "https://localhost:55648/api/mock/measurements",
+  "IntervalMinutes": 1440,
+  "UseMockData": true
+}
+```
+
+- `UseMockData: true` permet de tester le workflow de synchronisation sans API IoT réelle.
+- `LocalApiUrl` pointe vers le mock inclus dans le backend (`MockMeasurementsController`) pour la démo en local.
+- `IntervalMinutes: 1440` déclenche une synchronisation par jour en dev.
+
 ## Repository Structure
 
 ```
@@ -121,9 +195,22 @@ FutureKawa/
 │
 ├── backend/                            # C# .NET 10 application
 │   ├── FutureKawaSiege.API/            # Web API (controllers, Program.cs)
+│   │   └── Controllers/
+│   │       ├── MeasurementsController.cs        # API mesures (JWT)
+│   │       └── MockMeasurementsController.cs    # Mock local API (dev)
 │   ├── FutureKawaSiege.Business/       # Business logic (services, validators)
+│   │   └── Services/
+│   │       ├── LocalMeasurementApiService.cs    # Appel API locale
+│   │       ├── MeasurementSyncService.cs        # Orchestration sync
+│   │       └── MeasurementSyncBackgroundService.cs  # Sync périodique
 │   ├── FutureKawaSiege.Data/           # Data access (EF Core, repositories)
+│   │   ├── Entities/
+│   │   │   └── Measurement.cs          # Entité mesure
+│   │   └── Repositories/
+│   │       └── MeasurementRepository.cs
 │   ├── FutureKawaSiege.Commons/        # Shared (DTOs, exceptions)
+│   │   └── Models/API/Responses/
+│   │       └── MeasurementResponseDto.cs
 │   └── Tests/                          # Unit & integration tests
 │
 ├── frontend/                           # Next.js 16 application

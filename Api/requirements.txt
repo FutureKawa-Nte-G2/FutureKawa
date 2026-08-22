@@ -8,3 +8,6 @@ uvicorn[standard]==0.52.4
 SQLAlchemy==2.0.51
 # The async PostgreSQL driver behind postgresql+asyncpg://
 asyncpg==0.31.0
+# Schema migrations. Runtime and not dev-only: the schema has to be
+# created wherever the API is deployed.
+alembic==1.19.1

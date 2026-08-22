@@ -1,28 +1,34 @@
-from dataclasses import dataclass
+import hmac
+import os
+
+from fastapi import Header, HTTPException, status
+
+API_KEY_ENV_VAR = "LOCAL_API_KEY"
 
 
-@dataclass(frozen=True)
-class CurrentUser:
-    """The logged-in user, as read from the JWT. `warehouse_id` and `id` are the
-    only claims this endpoint needs.
+async def require_api_key(x_api_key: str | None = Header(default=None)) -> None:
+    """Authenticate head office on the routes it pulls.
+
+    The caller is a machine, not a person: there is no user to log in, no
+    warehouse claim to read, and no session. A shared secret is the whole
+    mechanism, carried in `X-API-Key` as agreed with the head office team.
+
+    Refuses to serve when the secret is not configured, rather than serving
+    unauthenticated. A route reachable from outside the country network must
+    never fall back to open: an unset variable is a deployment mistake, and it
+    should look like one.
     """
+    expected = os.environ.get(API_KEY_ENV_VAR)
+    if not expected:
+        raise RuntimeError(
+            f"{API_KEY_ENV_VAR} is not set. Configure it before serving the "
+            "routes head office pulls."
+        )
 
-    id: int
-    warehouse_id: int
-
-
-async def get_current_user() -> CurrentUser:
-    """Resolve the caller from the Authorization header.
-
-    Left unimplemented on purpose: JWT decoding belongs to the auth work, which
-    owns the signing key and the claim names. Whoever wires it must return a
-    CurrentUser built from the token's `sub` (user id) and `warehouse_id`
-    claims, and reject the request when either claim is missing.
-
-    Raising rather than returning a placeholder is deliberate: a wrong
-    warehouse_id would silently file batches into the wrong warehouse.
-    """
-    raise NotImplementedError(
-        "JWT decoding is not wired yet. Provide get_current_user before serving "
-        "POST /api/batches."
-    )
+    # compare_digest rather than ==: key comparison should not leak its length
+    # or its first differing byte through timing.
+    if x_api_key is None or not hmac.compare_digest(x_api_key, expected):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "invalid_api_key", "message": "Missing or invalid API key."},
+        )

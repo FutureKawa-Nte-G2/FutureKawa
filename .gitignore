@@ -1,0 +1,32 @@
+# Racine du dépôt. Chaque sous-projet garde le sien pour ce qui lui est propre
+# (Api/, backend/, frontend/, odoo-addons/) ; ici, ce qui traîne partout.
+
+# Systèmes
+.DS_Store
+Thumbs.db
+
+# Éditeurs
+.idea/
+*.swp
+*~
+
+# Python — caches et environnements virtuels, où qu'ils soient
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+venv/
+.venv/
+env/
+
+# Secrets. Les exemples et le fichier docker du compose restent suivis :
+# ils ne contiennent aucune valeur réelle.
+.env
+.env.*
+!.env.example
+!.env.docker

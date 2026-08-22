@@ -1,49 +1,41 @@
-from datetime import datetime
-from enum import Enum
+from datetime import date
 
-from pydantic import BaseModel, ConfigDict
-
-
-class QualityGrade(str, Enum):
-    """Values accepted for a batch quality.
-
-    Must mirror the `quality_grade` enum type in the database exactly. The
-    grades below follow the SCA green-coffee scale and are NOT confirmed by the
-    spec — this is the single place to change once the team fixes the list.
-    """
-
-    GRADE_1_SPECIALTY = "grade_1_specialty"
-    GRADE_2_PREMIUM = "grade_2_premium"
-    GRADE_3_EXCHANGE = "grade_3_exchange"
-    GRADE_4_STANDARD = "grade_4_standard"
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class BatchCreate(BaseModel):
-    """Batch as submitted by a logged-in warehouse user.
+    """Batch as described by an ERP reception file.
 
-    Only these two fields are read. Everything else the batch needs is imposed
-    by the server, so any other key in the body — including warehouse_id or
-    user_id — is dropped instead of overriding the server's own values.
+    Everything comes from the file. A batch is no longer typed in by a human,
+    so nothing is derived from a caller identity: the warehouse is named by the
+    file, not carried by a token.
+
+    Farm and warehouse are given by their ERP reference, never by our internal
+    id: the ERP does not know our ids, and no callback ever tells it. Extra keys
+    are dropped rather than allowed to set a server-owned field.
     """
 
     model_config = ConfigDict(extra="ignore")
 
-    farm_id: int
-    quality: QualityGrade
+    batch_ref: str = Field(min_length=1)
+    farm_ref: str = Field(min_length=1)
+    warehouse_ref: str = Field(min_length=1)
+    stored_at: date
+    quality_grade: str | None = None
 
 
 class BatchRead(BaseModel):
-    """Batch as persisted. Complete, so the frontend can redirect and display
-    it without a second request.
+    """Batch as persisted, complete, so the watcher can log what it created
+    without a second request.
     """
 
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    batch_ref: str
     farm_id: int
     warehouse_id: int
-    user_id: int
-    quality: QualityGrade
-    entered_at: datetime
+    quality_grade: str | None
+    stored_at: date
+    shipped_at: date | None
     status: str
-    is_compliant: bool

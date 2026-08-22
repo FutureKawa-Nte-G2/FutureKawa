@@ -1,6 +1,6 @@
 # FutureKawa
 
-EPSI MSPR Project Competency Block 4: Design and develop business and specific application solutions (mobile, embedded and ERP)
+Projet EPSI MSPR Bloc de compétences 4 : Concevoir et développer des solutions applicatives métier et spécifiques (mobiles, embarquées et ERP)
 
 ## Stack technique
 

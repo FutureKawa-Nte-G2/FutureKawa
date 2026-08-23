@@ -139,17 +139,27 @@ class Sensor(Base):
     )
     # The MQTT topic the device publishes on.
     code: Mapped[str] = mapped_column(String(64), unique=True)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=text("true")
+    )
 
 
 class Measurement(Base):
     __tablename__ = "measurements"
 
+    # Composite PK: TimescaleDB requires the partitioning column (meas_date)
+    # in every unique constraint, PK included. The server_default lets non-ORM
+    # writers (ingestion consumer, psql) omit the id — client defaults only
+    # exist for Python callers.
     measurement_id: Mapped[uuid.UUID] = mapped_column(
-        primary_key=True, default=uuid.uuid4
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=text("gen_random_uuid()"),
     )
     sensor_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("sensors.sensor_id"))
-    meas_date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    meas_date: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), primary_key=True
+    )
     meas_humidity: Mapped[Decimal] = mapped_column(Numeric(5, 2))
     meas_temp: Mapped[Decimal] = mapped_column(Numeric(5, 2))
 
@@ -179,8 +189,10 @@ class Alert(Base):
         ForeignKey("batches.batch_id"), nullable=True
     )
     alert_type: Mapped[str] = mapped_column(String(32))
-    alert_status: Mapped[str] = mapped_column(String(32))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    alert_status: Mapped[str] = mapped_column(String(32), server_default="active")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("CURRENT_TIMESTAMP")
+    )
     resolved_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -219,7 +231,9 @@ class Order(Base):
     integration_error_message: Mapped[str | None] = mapped_column(
         String(1024), nullable=True
     )
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("CURRENT_TIMESTAMP")
+    )
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

@@ -66,8 +66,7 @@ public class RateLimiterTests
             Id = Guid.NewGuid(),
             Email = email,
             PasswordHash = hasher.Hash(password),
-            Role = "Admin",
-            Country = "FR",
+            Role = UserRole.Admin,
             CreatedAt = DateTime.UtcNow,
         });
         await db.SaveChangesAsync();

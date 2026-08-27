@@ -1,0 +1,101 @@
+@startuml MCD_Backend_FutureKawa
+
+!theme plain
+
+title MCD - Backend siège FutureKawa (.NET)
+
+entity "Utilisateur" as User {
+  * id : UUID <<PK>>
+  --
+  * email : string
+  * password_hash : string
+  * role : string
+  warehouse_id : UUID <<FK>>
+  * created_at : datetime
+  last_login_at : datetime
+}
+
+entity "RefreshToken" as RefreshToken {
+  * id : UUID <<PK>>
+  --
+  * user_id : UUID <<FK>>
+  * token_hash : string
+  * expires_at : datetime
+  * created_at : datetime
+  is_revoked : bool
+  revoked_at : datetime
+  replaced_by_token_hash : string
+}
+
+entity "Pays" as Country {
+  * id : UUID <<PK>>
+  --
+  * name : string
+  * code : string
+  * nominal_temp : decimal
+  * tolerance_temp : decimal
+  * nominal_humidity : decimal
+  * tolerance_humidity : decimal
+}
+
+entity "Ferme" as Farm {
+  * id : UUID <<PK>>
+  --
+  * country_id : UUID <<FK>>
+  * name : string
+  * reference : string
+}
+
+entity "Entrepôt" as Warehouse {
+  * id : UUID <<PK>>
+  --
+  * country_id : UUID <<FK>>
+  * name : string
+  * reference : string
+}
+
+entity "Lot" as Batch {
+  * id : UUID <<PK>>
+  --
+  * farm_id : UUID <<FK>>
+  * warehouse_id : UUID <<FK>>
+  * reference : string
+  * stored_at : date
+  shipped_at : date
+  * quality_grade : string
+  * status : string
+}
+
+entity "Commande" as Order {
+  * id : UUID <<PK>>
+  --
+  odoo_order_id : int
+  * order_reference : string
+  * order_date : datetime
+  * client_name : string
+  country_id : UUID <<FK>>
+  * status : string
+  integration_error_message : string
+  * created_at : datetime
+  updated_at : datetime
+}
+
+entity "LigneCommande" as OrderLine {
+  * id : UUID <<PK>>
+  --
+  * order_id : UUID <<FK>>
+  * product_name : string
+  * quantity : decimal
+}
+
+' Relations conceptuelles
+User ||--o{ RefreshToken : "possède"
+Warehouse ||--o{ User : "emploie"
+Country ||--o{ Farm : "contient"
+Country ||--o{ Warehouse : "contient"
+Farm ||--o{ Batch : "produit"
+Warehouse ||--o{ Batch : "stocke"
+Order ||--|{ OrderLine : "contient"
+Order }o--o{ Batch : "associe"
+
+@enduml

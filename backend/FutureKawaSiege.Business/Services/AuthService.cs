@@ -73,7 +73,6 @@ public class AuthService : IAuthService
             Id: principal.GetUserId(),
             Email: principal.GetEmail(),
             Role: principal.GetRole(),
-            Country: principal.GetCountry(),
             WarehouseId: principal.GetWarehouseId());
 
         return Task.FromResult(userResponse);
@@ -83,7 +82,6 @@ public class AuthService : IAuthService
         new(
             Id: user.Id,
             Email: user.Email,
-            Role: user.Role,
-            Country: user.Country,
+            Role: user.Role.ToString(),
             WarehouseId: user.WarehouseId);
 }

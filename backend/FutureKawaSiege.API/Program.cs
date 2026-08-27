@@ -30,6 +30,7 @@ else
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
 builder.Services.AddScoped<IOrderRepository, OrderRepository>();
+builder.Services.AddScoped<IMeasurementRepository, MeasurementRepository>();
 
 builder.Services.AddBusinessServices();
 
@@ -82,32 +83,8 @@ if (args.Contains("--seed"))
         throw new InvalidOperationException("--seed is only allowed in Development or Testing.");
 
     using var scope = app.Services.CreateScope();
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    var hasher = scope.ServiceProvider.GetRequiredService<FutureKawaSiege.Business.Services.Abstraction.IPasswordHasher>();
-    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-
-    var existing = await db.Users.FirstOrDefaultAsync(u => u.Email == "test@futurekawa.com");
-    if (existing is not null)
-    {
-        logger.LogInformation("User already exists: test@futurekawa.com / TestPass123");
-        return;
-    }
-
-    var user = new FutureKawaSiege.Data.Entities.User
-    {
-        Id = Guid.NewGuid(),
-        Email = "test@futurekawa.com",
-        PasswordHash = hasher.Hash("TestPass123"),
-        Role = FutureKawaSiege.Data.Entities.UserRole.Admin,
-        CreatedAt = DateTime.UtcNow,
-    };
-
-    db.Users.Add(user);
-    await db.SaveChangesAsync();
-
-    logger.LogInformation("Seed user created:");
-    logger.LogInformation("  Email:    test@futurekawa.com");
-    logger.LogInformation("  Password: TestPass123");
+    var seeder = ActivatorUtilities.CreateInstance<FutureKawaSiege.API.Seed.DevelopmentSeeder>(scope.ServiceProvider);
+    await seeder.RunAsync();
     return;
 }
 

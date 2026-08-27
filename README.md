@@ -49,7 +49,10 @@ Voir [Documentation/diagrammes/architecture_odoo_integration.md](Documentation/d
 ```bash
 cd backend
 dotnet restore
+# pour installer l'outil dotnet-ef à la 1ère execution
+dotnet tool install --global dotnet-ef
 dotnet ef database update --project FutureKawaSiege.Data --startup-project FutureKawaSiege.API
+# Pour peupler la base de données locale à la 1ère execution
 dotnet run --project FutureKawaSiege.API
 ```
 

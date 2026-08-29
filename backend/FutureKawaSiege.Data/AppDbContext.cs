@@ -14,6 +14,7 @@ public class AppDbContext : DbContext
     public DbSet<Batch> Batches => Set<Batch>();
     public DbSet<Order> Orders => Set<Order>();
     public DbSet<OrderLine> OrderLines => Set<OrderLine>();
+    public DbSet<Measurement> Measurements => Set<Measurement>();
 
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
     {
@@ -31,5 +32,6 @@ public class AppDbContext : DbContext
         modelBuilder.ApplyConfiguration(new BatchConfiguration());
         modelBuilder.ApplyConfiguration(new OrderConfiguration());
         modelBuilder.ApplyConfiguration(new OrderLineConfiguration());
+        modelBuilder.ApplyConfiguration(new MeasurementConfiguration());
     }
 }

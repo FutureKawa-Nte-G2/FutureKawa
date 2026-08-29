@@ -67,6 +67,14 @@ expédiée via la méthode `action_mark_shipped()`.
 
 2. Créer la base de données Odoo via l'interface web : `http://localhost:8069`
 
+   Les valeurs doivent correspondre à la section `Odoo` du fichier `backend/FutureKawaSiege.API/appsettings.Development.json` (utilisée par le backend pour se connecter à Odoo en JSON-RPC) :
+
+   | Champ du formulaire Odoo | Valeur (dev)      | Clé `appsettings.Development.json` |
+   | ------------------------ | ----------------- | ---------------------------------- |
+   | Nom de la base           | `futurekawa`      | `Odoo:Db`                          |
+   | Email                    | `admin@admin.com` | `Odoo:Username`                    |
+   | Mot de passe             | `Not24get`        | `Odoo:Password`                    |
+
 3. Installer les modules de base : Sales, Inventory
 
 4. Installer le module FutureKawa :

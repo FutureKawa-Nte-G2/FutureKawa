@@ -6,12 +6,11 @@ Le backend Head Office (.NET) consomme cet endpoint. Le contrat est imposé par
 le siège : toute déviation casse l'intégration, et elle la casse **en silence**.
 
 > **Ce document décrit le code, pas le document de spécification reçu.** Les
-> deux divergent sur plusieurs points, dont un bloquant. Source de vérité :
+> deux divergent sur plusieurs points ; **le code fait foi**. Source de vérité :
 > `backend/FutureKawaSiege.Business/Services/LocalMeasurementApiService.cs` et
 > `backend/FutureKawaSiege.Commons/Models/API/Responses/LocalMeasurementDto.cs`,
-> sur la branche `features/48_retrieve-local-measurement`. Les comportements
-> ci-dessous ont été vérifiés en exécutant le désérialiseur .NET avec le DTO et
-> les options réels, pas déduits.
+> mergés sur `develop` par #48. Les comportements ci-dessous ont été vérifiés en
+> exécutant le désérialiseur .NET avec le DTO et les options réels, pas déduits.
 
 ### Réponse `200 OK`
 
@@ -33,11 +32,14 @@ le siège : toute déviation casse l'intégration, et elle la casse **en silence
 | `avgHumidity` / `maxHumidity` / `minHumidity` | `decimal` | %, 2 décimales |
 | `measDate` | **`DateOnly`** | **`yyyy-MM-dd` uniquement** |
 
-### ⚠️ `measDate` : le document reçu est faux
+### `measDate` : `DateOnly`, décidé après le document de spécification
 
-Le document annonce `"measDate": "2026-08-11T00:00:00Z"` et « ISO 8601, UTC ».
-Le DTO déclare `DateOnly`, dont le convertisseur n'accepte que `yyyy-MM-dd`.
-Vérifié :
+Le passage de `datetime` à `DateOnly` est une **décision de conception**, prise
+avec Laurent : le siège ne récupère que des agrégats **quotidiens**, l'heure n'y
+porte aucune information. Le document de spécification, rédigé avant cette
+décision, annonce encore `"measDate": "2026-08-11T00:00:00Z"` et « ISO 8601,
+UTC » — il est périmé sur ce point, il n'y a pas de désaccord à arbitrer. Le DTO
+fait foi, et son convertisseur n'accepte que `yyyy-MM-dd`. Vérifié :
 
 ```
 "measDate":"2026-08-11T00:00:00Z"   ->  JsonException
@@ -47,8 +49,8 @@ Vérifié :
 
 Et l'appel est enveloppé dans `try { ... } catch (Exception) { return null; }` :
 l'exception est avalée, l'entrepôt est sauté, la seule trace est une ligne de
-log. Suivre le document à la lettre produit exactement l'échec silencieux
-contre lequel il met en garde.
+log. Envoyer le format du document plutôt que celui du DTO échoue donc sans
+aucun signal de notre côté — d'où ce paragraphe.
 
 **Renvoyer `"2026-08-11"`.**
 
@@ -121,6 +123,12 @@ propre `MockMeasurementsController` (`/api/mock/measurements`). Le siège ne nou
 appelle donc pas encore : il fabrique ses données en mémoire. Pour un essai
 réel, il faut passer `UseMockData` à `false` et pointer l'URL sur nous.
 
+Depuis #48, le siège ne fait plus que consommer : il **persiste** ce qu'il pull
+(`MeasurementConfiguration`, unique sur `(WarehouseId, MeasDate)`) et le
+ré-expose par son propre `MeasurementsController`. Notre réponse devient donc
+une donnée stockée chez eux, pas un affichage éphémère : un agrégat renvoyé une
+fois n'est plus corrigeable depuis notre base.
+
 ---
 
 ## Points encore ouverts
@@ -132,3 +140,31 @@ réel, il faut passer `UseMockData` à `false` et pointer l'URL sur nous.
    UTC-3) : change les min/max sur un cycle jour/nuit.
 4. **`warehouseRef` en paramètre** — nécessaire dès qu'un deuxième entrepôt
    existe, puisqu'une seule URL sert tout le monde.
+
+---
+
+## Vocabulaire des statuts : `batch_status`
+
+Les deux bases nomment le même cycle de vie différemment, et rien ne convertit
+aujourd'hui.
+
+| Où | Valeurs | Porté par |
+|---|---|---|
+| Base pays (ici) | `stored` / `shipped` / `delivered` / `expired` | `BATCH_STATUSES`, `app/models.py` |
+| Siège (.NET) | `Stored` / `Shipped` / `Delivered` / `Expired` | `enum BatchStatus` + `HasConversion<string>()` — stocké tel quel en base |
+
+Le MLD (`Documentation/diagrammes/mld_warehouse.puml`) type la colonne en
+`varchar(16)` sans fixer le vocabulaire : il ne tranche pas.
+
+**Règle retenue** — minuscules en base pays, PascalCase au siège, et la
+conversion est une simple bascule de casse faite **à la frontière**, au moment
+de servir le siège, jamais en base. Un lot créé depuis un fichier de réception
+ERP entre en `stored`.
+
+> ⚠️ Cette règle est cohérente avec le code en place (`OrderService.ShipOrderAsync`
+> écrit `BatchStatus.Shipped`, la création écrit `BatchStatus.Stored`) mais n'a
+> jamais été actée collectivement : à confirmer avant que la synchronisation des
+> lots soit codée. À noter aussi, le frontend utilise un vocabulaire différent
+> **et sur un autre axe** — `compliant` / `alert` / `expired`, de la conformité
+> et non du cycle de vie, hérité d'un schéma jamais mergé. Divergence réelle, à
+> traiter séparément.

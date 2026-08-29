@@ -61,8 +61,8 @@ class "sensors" as Sensors <<Table>> {
 
 class "measurements" as Measurements <<Table>> {
   + measurement_id : uuid <<PK>>
-  + sensor_id : uuid <<FK>>
-  + meas_date : timestamptz <<UQ>>
+  + sensor_id : uuid <<FK, UQ>>
+  + meas_date : timestamptz <<PK, UQ>>
   + meas_humidity : numeric(5,2)
   + meas_temp : numeric(5,2)
 }

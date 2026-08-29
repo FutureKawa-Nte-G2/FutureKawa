@@ -13,6 +13,7 @@ from fastapi.exceptions import RequestValidationError
 
 from app.db import dispose_engine
 from app.errors import validation_error_handler
+from app.routers.measurements import router as measurements_router
 
 
 @asynccontextmanager
@@ -42,6 +43,7 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
     app.add_exception_handler(RequestValidationError, validation_error_handler)
+    app.include_router(measurements_router)
 
     @app.get("/health", tags=["ops"])
     async def health() -> dict[str, str]:

@@ -60,6 +60,26 @@ aucun signal de notre côté — d'où ce paragraphe.
 tolérée, **le nom lui-même ne l'est pas**. Un champ mal nommé n'est pas une
 erreur — il arrive à `0` côté siège.
 
+### Nombres : jamais entre guillemets
+
+Les six agrégats sont des `decimal`. Leurs `JsonSerializerOptions` ne posent
+**pas** `NumberHandling.AllowReadingFromString` : un nombre entre guillemets est
+refusé. Vérifié en exécutant leur DTO avec leurs options :
+
+```
+{"avgTemp":"25.30", …}   ->  JsonException
+                             "could not be converted to System.Decimal"
+{"avgTemp":25.30,   …}   ->  OK
+```
+
+Le piège est côté Python : **Pydantic sérialise un `Decimal` en chaîne par
+défaut**. Sans traitement, on envoie `"25.30"`, leur client lève, avale
+l'exception et saute l'entrepôt. `app/schemas/measurement.py` force donc la
+sortie en nombre JSON (`WireDecimal`), et un test l'affirme sur le JSON brut.
+
+Le zéro final se perd au passage (`28.10` part en `28.1`) : sans importance,
+c'est le même nombre et leur `decimal` le lit sans broncher.
+
 ### Absence de mesures
 
 | Réponse | Ce qui se passe réellement |

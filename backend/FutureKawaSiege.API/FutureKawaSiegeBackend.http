@@ -26,7 +26,7 @@ Authorization: Bearer {{login.response.body.$.data.accessToken}}
 
 ### Measurements: Récupérer toutes les mesures
 # @name getMeasurements
-GET {{HostAddress}}/api/measurements
+GET http://127.0.0.1:8000/api/measurements
 Authorization: Bearer {{login.response.body.$.data.accessToken}}
 
 ### Measurements: Récupérer les mesures du premier warehouse retourné ci-dessus

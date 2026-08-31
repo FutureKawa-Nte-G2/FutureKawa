@@ -44,7 +44,33 @@ Voir [Documentation/diagrammes/architecture_odoo_integration.md](Documentation/d
 
 ## Démarrage
 
-### 1. Backend .NET
+### 1. Les bases de données (Docker)
+
+```bash
+make env    # crée .env à partir de .env.example, à faire une seule fois
+make db     # démarre odoo-db et siege-db
+```
+
+`make` seul liste toutes les cibles disponibles.
+
+Les bases sont exposées sur la machine hôte, pour que chacun continue à
+développer nativement :
+
+| Base | Rôle | Port hôte |
+| ---- | ---- | --------- |
+| `odoo-db` | base d'Odoo | 5433 |
+| `siege-db` | base applicative du backend siège | 5435 |
+
+> **Si tu n'as pas de PostgreSQL installé sur ta machine**, mets
+> `SIEGE_DB_PORT=5432` dans ton `.env` : `appsettings.Development.json`
+> fonctionnera alors sans aucune modification. Sinon, garde 5435 et surcharge
+> ta chaîne de connexion locale :
+>
+> ```bash
+> export ConnectionStrings__Default="Host=localhost;Port=5435;Database=FutureKawaSiege;Username=postgres;Password=Not24get"
+> ```
+
+### 2. Backend .NET
 
 ```bash
 cd backend
@@ -56,10 +82,10 @@ dotnet ef database update --project FutureKawaSiege.Data --startup-project Futur
 dotnet run --project FutureKawaSiege.API
 ```
 
-### 2. ERP Odoo (Docker)
+### 3. ERP Odoo (Docker)
 
 ```bash
-docker compose up -d
+make up
 ```
 
 Odoo accessible sur `http://localhost:8069`.

@@ -31,6 +31,10 @@ builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
 builder.Services.AddScoped<IOrderRepository, OrderRepository>();
 builder.Services.AddScoped<IMeasurementRepository, MeasurementRepository>();
+builder.Services.AddScoped<IBatchRepository, BatchRepository>();
+builder.Services.AddScoped<ICountryRepository, CountryRepository>();
+builder.Services.AddScoped<IWarehouseRepository, WarehouseRepository>();
+builder.Services.AddScoped<IBatchAlertRepository, BatchAlertRepository>();
 
 builder.Services.AddBusinessServices();
 
@@ -113,6 +117,27 @@ app.Use(async (context, next) =>
         if (!string.IsNullOrEmpty(configToken) && headerToken == configToken)
         {
             context.Items["OdooWebhookToken"] = configToken;
+        }
+    }
+
+    await next();
+});
+
+// Middleware: validate API key for /api/alerts endpoint (local warehouse API)
+// Note: Disabled when LocalApi:ApiKey is not configured (empty or missing)
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/api/alerts") && context.Request.Method == "POST")
+    {
+        var configKey = builder.Configuration["LocalApi:ApiKey"];
+        var headerKey = context.Request.Headers["X-Api-Key"].FirstOrDefault();
+
+        // Only validate if a key is configured
+        if (!string.IsNullOrEmpty(configKey) && headerKey != configKey)
+        {
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            await context.Response.WriteAsync("Unauthorized: invalid or missing X-Api-Key.");
+            return;
         }
     }
 

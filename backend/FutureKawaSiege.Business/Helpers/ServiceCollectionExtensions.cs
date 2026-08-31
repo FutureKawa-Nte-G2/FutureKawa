@@ -30,6 +30,14 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IOrderShipmentScheduler, OrderShipmentScheduler>();
         services.AddHostedService<OrderShipmentBackgroundService>();
 
+        // Batch and alert services
+        services.AddScoped<IBatchService, BatchService>();
+        services.AddScoped<IAlertService, AlertService>();
+
+        // Country and warehouse services
+        services.AddScoped<ICountryService, CountryService>();
+        services.AddScoped<IWarehouseService, WarehouseService>();
+
         return services;
     }
 }

@@ -17,6 +17,7 @@ public class Batch
     public Warehouse Warehouse { get; set; } = null!;
     public Farm Farm { get; set; } = null!;
     public ICollection<Order> Orders { get; set; } = new List<Order>();
+    public ICollection<BatchAlert> Alerts { get; set; } = new List<BatchAlert>();
 }
 
 /// <summary>

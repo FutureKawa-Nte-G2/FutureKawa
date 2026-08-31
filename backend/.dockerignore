@@ -1,0 +1,10 @@
+# Sans ces exclusions, COPY . . écrase les obj/ produits par le restore de
+# l'étape build avec ceux de la machine hôte, et --no-restore échoue.
+**/bin/
+**/obj/
+**/logs/
+**/TestResults/
+**/.vs/
+**/*.user
+Dockerfile
+.dockerignore

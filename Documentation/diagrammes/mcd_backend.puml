@@ -2,9 +2,9 @@
 
 !theme plain
 
-title MCD - Backend siège FutureKawa (.NET)
+title MCD - Head-office Backend FutureKawa (.NET)
 
-entity "Utilisateur" as User {
+entity "User" as User {
   * id : UUID <<PK>>
   --
   * email : string
@@ -27,7 +27,7 @@ entity "RefreshToken" as RefreshToken {
   replaced_by_token_hash : string
 }
 
-entity "Pays" as Country {
+entity "Country" as Country {
   * id : UUID <<PK>>
   --
   * name : string
@@ -38,7 +38,7 @@ entity "Pays" as Country {
   * tolerance_humidity : decimal
 }
 
-entity "Ferme" as Farm {
+entity "Farm" as Farm {
   * id : UUID <<PK>>
   --
   * country_id : UUID <<FK>>
@@ -46,7 +46,7 @@ entity "Ferme" as Farm {
   * reference : string
 }
 
-entity "Entrepôt" as Warehouse {
+entity "Warehouse" as Warehouse {
   * id : UUID <<PK>>
   --
   * country_id : UUID <<FK>>
@@ -54,7 +54,7 @@ entity "Entrepôt" as Warehouse {
   * reference : string
 }
 
-entity "Lot" as Batch {
+entity "Batch" as Batch {
   * id : UUID <<PK>>
   --
   * farm_id : UUID <<FK>>
@@ -66,7 +66,19 @@ entity "Lot" as Batch {
   * status : string
 }
 
-entity "Commande" as Order {
+entity "BatchAlert" as BatchAlert {
+  * id : UUID <<PK>>
+  --
+  * warehouse_id : UUID <<FK>>
+  * batch_id : UUID <<FK>>
+  * type : string
+  * status : string
+  * created_at : datetime
+  resolved_at : datetime
+  measured_at : datetime
+}
+
+entity "Order" as Order {
   * id : UUID <<PK>>
   --
   odoo_order_id : int
@@ -80,7 +92,7 @@ entity "Commande" as Order {
   updated_at : datetime
 }
 
-entity "LigneCommande" as OrderLine {
+entity "OrderLine" as OrderLine {
   * id : UUID <<PK>>
   --
   * order_id : UUID <<FK>>
@@ -88,14 +100,16 @@ entity "LigneCommande" as OrderLine {
   * quantity : decimal
 }
 
-' Relations conceptuelles
-User ||--o{ RefreshToken : "possède"
-Warehouse ||--o{ User : "emploie"
-Country ||--o{ Farm : "contient"
-Country ||--o{ Warehouse : "contient"
-Farm ||--o{ Batch : "produit"
-Warehouse ||--o{ Batch : "stocke"
-Order ||--|{ OrderLine : "contient"
-Order }o--o{ Batch : "associe"
+' Conceptual relationships
+User ||--o{ RefreshToken : "owns"
+Warehouse ||--o{ User : "employs"
+Country ||--o{ Farm : "contains"
+Country ||--o{ Warehouse : "contains"
+Farm ||--o{ Batch : "produces"
+Warehouse ||--o{ Batch : "stores"
+Warehouse ||--o{ BatchAlert : "raises"
+Batch ||--o{ BatchAlert : "raises"
+Order ||--|{ OrderLine : "contains"
+Order }o--o{ Batch : "associates"
 
 @enduml

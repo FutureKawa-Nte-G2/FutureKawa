@@ -2,7 +2,7 @@
 
 !theme plain
 
-title MLD - Backend siège FutureKawa (.NET / PostgreSQL)
+title MLD - Head-office Backend FutureKawa (.NET / PostgreSQL)
 
 skinparam class {
     BackgroundColor<<Entity>> LightYellow
@@ -65,6 +65,17 @@ class "Batches" as Batches <<Entity>> {
   + Status : varchar(16)
 }
 
+class "BatchAlerts" as BatchAlerts <<Entity>> {
+  + Id : uuid <<PK>>
+  + WarehouseId : uuid <<FK>>
+  + BatchId : uuid <<FK>>
+  + Type : varchar(16)
+  + Status : varchar(16)
+  + CreatedAt : timestamptz
+  + ResolvedAt : timestamptz?
+  + MeasuredAt : timestamptz?
+}
+
 class "Orders" as Orders <<Entity>> {
   + Id : uuid <<PK>>
   + OdooOrderId : int? <<IX>>
@@ -90,13 +101,15 @@ class "OrderBatches" as OrderBatches <<Entity>> {
   + OrderId : uuid <<PK, FK>>
 }
 
-' Relations logiques (PK/FK)
+' Logical relationships (PK/FK)
 Users "1" --> "0..*" RefreshTokens : UserId
 Warehouses "1" --> "0..*" Users : WarehouseId
 Countries "1" --> "0..*" Farms : CountryId
 Countries "1" --> "0..*" Warehouses : CountryId
 Farms "1" --> "0..*" Batches : FarmId
 Warehouses "1" --> "0..*" Batches : WarehouseId
+Warehouses "1" --> "0..*" BatchAlerts : WarehouseId
+Batches "1" --> "0..*" BatchAlerts : BatchId
 Orders "1" --> "0..*" OrderLines : OrderId
 Orders "0..*" --> "0..1" Countries : CountryId
 Orders "1" --> "0..*" OrderBatches : OrderId

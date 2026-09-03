@@ -9,8 +9,8 @@ public interface IAlertService
 {
     /// <summary>
     /// Receives an alert from the local warehouse API.
-    /// Validates the batch and warehouse exist, and ensures idempotency 
-    /// (no duplicate active alerts for the same batch and type).
+    /// Validates the warehouse exists, and ensures idempotency 
+    /// (no duplicate active alerts for the same warehouse and type).
     /// </summary>
     Task<bool> ReceiveAlertAsync(CreateAlertRequest request, CancellationToken cancellationToken = default);
 }

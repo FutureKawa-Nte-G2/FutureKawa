@@ -52,6 +52,23 @@ public class CountriesControllerIntegrationTests : IClassFixture<CustomWebApplic
         return loginBody!.Data!.AccessToken;
     }
 
+    private async Task SeedCountriesAsync()
+    {
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        if (db.Countries.Any())
+        {
+            return;
+        }
+
+        db.Countries.AddRange(
+            new Country { Id = Guid.NewGuid(), Code = "BR", Name = "Brazil", NominalTemp = 29.0m, ToleranceTemp = 3.0m, NominalHumidity = 55.0m, ToleranceHumidity = 2.0m },
+            new Country { Id = Guid.NewGuid(), Code = "EC", Name = "Ecuador", NominalTemp = 31.0m, ToleranceTemp = 3.0m, NominalHumidity = 60.0m, ToleranceHumidity = 2.0m },
+            new Country { Id = Guid.NewGuid(), Code = "CO", Name = "Colombia", NominalTemp = 26.0m, ToleranceTemp = 3.0m, NominalHumidity = 80.0m, ToleranceHumidity = 2.0m });
+        await db.SaveChangesAsync();
+    }
+
     [Fact]
     public async Task GetAll_Should_Return401_When_NoAuth()
     {
@@ -82,6 +99,7 @@ public class CountriesControllerIntegrationTests : IClassFixture<CustomWebApplic
     public async Task GetAll_Should_ReturnCountries_WithCodeAndName()
     {
         // Arrange
+        await SeedCountriesAsync();
         var token = await GetAccessTokenAsync();
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
@@ -93,6 +111,7 @@ public class CountriesControllerIntegrationTests : IClassFixture<CustomWebApplic
         var body = await response.Content.ReadFromJsonAsync<ApiResponse<CountryListResponseDto>>();
         Assert.NotNull(body);
         Assert.True(body.Success);
+        Assert.NotEmpty(body.Data!.Countries);
         
         foreach (var country in body.Data!.Countries)
         {

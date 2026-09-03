@@ -57,7 +57,7 @@ public class BatchService : IBatchService
     }
 
     /// <summary>
-    /// Computes the compliance status of a batch based on storage duration and active alerts.
+    /// Computes the compliance status of a batch based on storage duration.
     /// </summary>
     private static string ComputeStatus(Batch batch)
     {
@@ -66,12 +66,6 @@ public class BatchService : IBatchService
         if (daysInStorage >= 365)
         {
             return "expired";
-        }
-
-        // Alert: has any active alert
-        if (batch.Alerts.Any(a => a.Status == AlertStatus.Active))
-        {
-            return "alert";
         }
 
         // Compliant: no issues

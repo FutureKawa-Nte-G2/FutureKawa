@@ -102,67 +102,6 @@ public class BatchServiceTests
         Assert.Equal(expectedStatus, batchDto.Status);
     }
 
-    [Fact]
-    public async Task GetBatchesAsync_Should_ReturnAlertStatus_WhenBatchHasActiveAlert()
-    {
-        // Arrange
-        var country = new Country { Id = Guid.NewGuid(), Code = "BR", Name = "Brésil" };
-        var warehouse = new Warehouse { Id = Guid.NewGuid(), Name = "Santos", Country = country };
-        var farm = new Farm { Id = Guid.NewGuid(), Name = "Fazenda Boa Vista" };
-        
-        var batch = CreateBatch(Guid.NewGuid(), warehouse, farm, DateTime.UtcNow.AddDays(-10));
-        batch.Alerts.Add(new BatchAlert
-        {
-            Id = Guid.NewGuid(),
-            BatchId = batch.Id,
-            WarehouseId = warehouse.Id,
-            Type = AlertType.Temperature,
-            Status = AlertStatus.Active,
-            CreatedAt = DateTime.UtcNow
-        });
-        
-        _batchRepository.GetPagedAsync(null, null, 1, 10, Arg.Any<CancellationToken>())
-            .Returns(([batch], 1));
-
-        // Act
-        var result = await _service.GetBatchesAsync(null, null, 1, 10);
-        var batchDto = result.Batches.First();
-
-        // Assert
-        Assert.Equal("alert", batchDto.Status);
-    }
-
-    [Fact]
-    public async Task GetBatchesAsync_Should_ReturnExpiredStatus_WhenBothConditionsMet()
-    {
-        // Arrange - batch is both expired AND has active alert
-        // Expired takes precedence based on ComputeStatus order
-        var country = new Country { Id = Guid.NewGuid(), Code = "BR", Name = "Brésil" };
-        var warehouse = new Warehouse { Id = Guid.NewGuid(), Name = "Santos", Country = country };
-        var farm = new Farm { Id = Guid.NewGuid(), Name = "Fazenda Boa Vista" };
-        
-        var batch = CreateBatch(Guid.NewGuid(), warehouse, farm, DateTime.UtcNow.AddDays(-400));
-        batch.Alerts.Add(new BatchAlert
-        {
-            Id = Guid.NewGuid(),
-            BatchId = batch.Id,
-            WarehouseId = warehouse.Id,
-            Type = AlertType.Temperature,
-            Status = AlertStatus.Active,
-            CreatedAt = DateTime.UtcNow
-        });
-        
-        _batchRepository.GetPagedAsync(null, null, 1, 10, Arg.Any<CancellationToken>())
-            .Returns(([batch], 1));
-
-        // Act
-        var result = await _service.GetBatchesAsync(null, null, 1, 10);
-        var batchDto = result.Batches.First();
-
-        // Assert - expired takes precedence over alert
-        Assert.Equal("expired", batchDto.Status);
-    }
-
     private static Batch CreateBatch(Guid id, Warehouse warehouse, Farm farm, DateTime storedAt)
     {
         return new Batch
@@ -176,8 +115,7 @@ public class BatchServiceTests
             StoredAt = storedAt,
             ShippedAt = null,
             QualityGrade = BatchQualityGrade.A,
-            Status = BatchStatus.Stored,
-            Alerts = new List<BatchAlert>()
+            Status = BatchStatus.Stored
         };
     }
 }

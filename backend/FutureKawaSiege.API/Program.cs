@@ -34,7 +34,7 @@ builder.Services.AddScoped<IMeasurementRepository, MeasurementRepository>();
 builder.Services.AddScoped<IBatchRepository, BatchRepository>();
 builder.Services.AddScoped<ICountryRepository, CountryRepository>();
 builder.Services.AddScoped<IWarehouseRepository, WarehouseRepository>();
-builder.Services.AddScoped<IBatchAlertRepository, BatchAlertRepository>();
+builder.Services.AddScoped<IAlertRepository, AlertRepository>();
 
 builder.Services.AddBusinessServices();
 
@@ -124,7 +124,7 @@ app.Use(async (context, next) =>
 });
 
 // Middleware: validate API key for /api/alerts endpoint (local warehouse API)
-// Note: Disabled when LocalApi:ApiKey is not configured (empty or missing)
+// Note: Rejects the request when LocalApi:ApiKey is not configured (fail-closed).
 app.Use(async (context, next) =>
 {
     if (context.Request.Path.StartsWithSegments("/api/alerts") && context.Request.Method == "POST")
@@ -132,8 +132,8 @@ app.Use(async (context, next) =>
         var configKey = builder.Configuration["LocalApi:ApiKey"];
         var headerKey = context.Request.Headers["X-Api-Key"].FirstOrDefault();
 
-        // Only validate if a key is configured
-        if (!string.IsNullOrEmpty(configKey) && headerKey != configKey)
+        // Reject when no key is configured (fail-closed) or when the header does not match
+        if (string.IsNullOrEmpty(configKey) || headerKey != configKey)
         {
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;
             await context.Response.WriteAsync("Unauthorized: invalid or missing X-Api-Key.");

@@ -6,18 +6,17 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace FutureKawaSiege.Data.Migrations
 {
     /// <inheritdoc />
-    public partial class AddBatchAlerts : Migration
+    public partial class AddAlerts : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.CreateTable(
-                name: "BatchAlerts",
+                name: "Alerts",
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     WarehouseId = table.Column<Guid>(type: "uuid", nullable: false),
-                    BatchId = table.Column<Guid>(type: "uuid", nullable: false),
                     Type = table.Column<string>(type: "character varying(16)", maxLength: 16, nullable: false),
                     Status = table.Column<string>(type: "character varying(16)", maxLength: 16, nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
@@ -26,15 +25,9 @@ namespace FutureKawaSiege.Data.Migrations
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_BatchAlerts", x => x.Id);
+                    table.PrimaryKey("PK_Alerts", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_BatchAlerts_Batches_BatchId",
-                        column: x => x.BatchId,
-                        principalTable: "Batches",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Restrict);
-                    table.ForeignKey(
-                        name: "FK_BatchAlerts_Warehouses_WarehouseId",
+                        name: "FK_Alerts_Warehouses_WarehouseId",
                         column: x => x.WarehouseId,
                         principalTable: "Warehouses",
                         principalColumn: "Id",
@@ -42,21 +35,16 @@ namespace FutureKawaSiege.Data.Migrations
                 });
 
             migrationBuilder.CreateIndex(
-                name: "IX_BatchAlerts_BatchId_Type_Status",
-                table: "BatchAlerts",
-                columns: new[] { "BatchId", "Type", "Status" });
-
-            migrationBuilder.CreateIndex(
-                name: "IX_BatchAlerts_WarehouseId",
-                table: "BatchAlerts",
-                column: "WarehouseId");
+                name: "IX_Alerts_WarehouseId_Type_Status",
+                table: "Alerts",
+                columns: new[] { "WarehouseId", "Type", "Status" });
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(
-                name: "BatchAlerts");
+                name: "Alerts");
         }
     }
 }

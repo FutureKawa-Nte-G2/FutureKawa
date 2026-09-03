@@ -14,5 +14,5 @@ public class Warehouse
     public ICollection<Batch> Batches { get; set; } = new List<Batch>();
     public ICollection<User> Users { get; set; } = new List<User>();
     public ICollection<Measurement> Measurements { get; set; } = new List<Measurement>();
-    public ICollection<BatchAlert> Alerts { get; set; } = new List<BatchAlert>();
+    public ICollection<Alert> Alerts { get; set; } = new List<Alert>();
 }

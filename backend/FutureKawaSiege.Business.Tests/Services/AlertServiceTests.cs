@@ -9,15 +9,14 @@ namespace FutureKawaSiege.Business.Tests.Services;
 
 public class AlertServiceTests
 {
-    private readonly IBatchAlertRepository _alertRepository = Substitute.For<IBatchAlertRepository>();
-    private readonly IBatchRepository _batchRepository = Substitute.For<IBatchRepository>();
+    private readonly IAlertRepository _alertRepository = Substitute.For<IAlertRepository>();
     private readonly IWarehouseRepository _warehouseRepository = Substitute.For<IWarehouseRepository>();
     private readonly ILogger<AlertService> _logger = Substitute.For<ILogger<AlertService>>();
     private readonly AlertService _service;
 
     public AlertServiceTests()
     {
-        _service = new AlertService(_alertRepository, _batchRepository, _warehouseRepository, _logger);
+        _service = new AlertService(_alertRepository, _warehouseRepository, _logger);
     }
 
     [Fact]
@@ -25,19 +24,15 @@ public class AlertServiceTests
     {
         // Arrange
         var warehouseId = Guid.NewGuid();
-        var batchId = Guid.NewGuid();
         
         _warehouseRepository.GetByIdAsync(warehouseId, Arg.Any<CancellationToken>())
             .Returns(new Warehouse { Id = warehouseId, Name = "Test Warehouse" });
-        _batchRepository.GetByIdAsync(batchId, Arg.Any<CancellationToken>())
-            .Returns(new Batch { Id = batchId, Reference = "BATCH-001" });
-        _alertRepository.ExistsActiveAsync(batchId, AlertType.Temperature, Arg.Any<CancellationToken>())
+        _alertRepository.ExistsActiveAsync(warehouseId, AlertType.Temperature, Arg.Any<CancellationToken>())
             .Returns(false);
 
         var request = new CreateAlertRequest
         {
             WarehouseId = warehouseId,
-            BatchId = batchId,
             Type = "temperature",
             MeasuredAt = DateTime.UtcNow
         };
@@ -48,9 +43,8 @@ public class AlertServiceTests
         // Assert
         Assert.True(result);
         await _alertRepository.Received(1).AddAsync(
-            Arg.Is<BatchAlert>(a => 
+            Arg.Is<Alert>(a => 
                 a.WarehouseId == warehouseId && 
-                a.BatchId == batchId && 
                 a.Type == AlertType.Temperature &&
                 a.Status == AlertStatus.Active),
             Arg.Any<CancellationToken>());
@@ -61,7 +55,6 @@ public class AlertServiceTests
     {
         // Arrange
         var warehouseId = Guid.NewGuid();
-        var batchId = Guid.NewGuid();
         
         _warehouseRepository.GetByIdAsync(warehouseId, Arg.Any<CancellationToken>())
             .Returns((Warehouse?)null);
@@ -69,7 +62,6 @@ public class AlertServiceTests
         var request = new CreateAlertRequest
         {
             WarehouseId = warehouseId,
-            BatchId = batchId,
             Type = "temperature"
         };
 
@@ -78,34 +70,7 @@ public class AlertServiceTests
 
         // Assert
         Assert.False(result);
-        await _alertRepository.DidNotReceive().AddAsync(Arg.Any<BatchAlert>(), Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task ReceiveAlertAsync_Should_ReturnFalse_When_BatchNotFound()
-    {
-        // Arrange
-        var warehouseId = Guid.NewGuid();
-        var batchId = Guid.NewGuid();
-        
-        _warehouseRepository.GetByIdAsync(warehouseId, Arg.Any<CancellationToken>())
-            .Returns(new Warehouse { Id = warehouseId, Name = "Test Warehouse" });
-        _batchRepository.GetByIdAsync(batchId, Arg.Any<CancellationToken>())
-            .Returns((Batch?)null);
-
-        var request = new CreateAlertRequest
-        {
-            WarehouseId = warehouseId,
-            BatchId = batchId,
-            Type = "temperature"
-        };
-
-        // Act
-        var result = await _service.ReceiveAlertAsync(request);
-
-        // Assert
-        Assert.False(result);
-        await _alertRepository.DidNotReceive().AddAsync(Arg.Any<BatchAlert>(), Arg.Any<CancellationToken>());
+        await _alertRepository.DidNotReceive().AddAsync(Arg.Any<Alert>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -113,17 +78,13 @@ public class AlertServiceTests
     {
         // Arrange
         var warehouseId = Guid.NewGuid();
-        var batchId = Guid.NewGuid();
         
         _warehouseRepository.GetByIdAsync(warehouseId, Arg.Any<CancellationToken>())
             .Returns(new Warehouse { Id = warehouseId, Name = "Test Warehouse" });
-        _batchRepository.GetByIdAsync(batchId, Arg.Any<CancellationToken>())
-            .Returns(new Batch { Id = batchId, Reference = "BATCH-001" });
 
         var request = new CreateAlertRequest
         {
             WarehouseId = warehouseId,
-            BatchId = batchId,
             Type = "invalid_type"
         };
 
@@ -132,7 +93,7 @@ public class AlertServiceTests
 
         // Assert
         Assert.False(result);
-        await _alertRepository.DidNotReceive().AddAsync(Arg.Any<BatchAlert>(), Arg.Any<CancellationToken>());
+        await _alertRepository.DidNotReceive().AddAsync(Arg.Any<Alert>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -140,19 +101,15 @@ public class AlertServiceTests
     {
         // Arrange
         var warehouseId = Guid.NewGuid();
-        var batchId = Guid.NewGuid();
         
         _warehouseRepository.GetByIdAsync(warehouseId, Arg.Any<CancellationToken>())
             .Returns(new Warehouse { Id = warehouseId, Name = "Test Warehouse" });
-        _batchRepository.GetByIdAsync(batchId, Arg.Any<CancellationToken>())
-            .Returns(new Batch { Id = batchId, Reference = "BATCH-001" });
-        _alertRepository.ExistsActiveAsync(batchId, AlertType.Temperature, Arg.Any<CancellationToken>())
+        _alertRepository.ExistsActiveAsync(warehouseId, AlertType.Temperature, Arg.Any<CancellationToken>())
             .Returns(true); // Alert already exists
 
         var request = new CreateAlertRequest
         {
             WarehouseId = warehouseId,
-            BatchId = batchId,
             Type = "temperature"
         };
 
@@ -161,7 +118,7 @@ public class AlertServiceTests
 
         // Assert
         Assert.True(result); // Returns true for idempotency
-        await _alertRepository.DidNotReceive().AddAsync(Arg.Any<BatchAlert>(), Arg.Any<CancellationToken>());
+        await _alertRepository.DidNotReceive().AddAsync(Arg.Any<Alert>(), Arg.Any<CancellationToken>());
     }
 
     [Theory]
@@ -176,19 +133,15 @@ public class AlertServiceTests
     {
         // Arrange
         var warehouseId = Guid.NewGuid();
-        var batchId = Guid.NewGuid();
         
         _warehouseRepository.GetByIdAsync(warehouseId, Arg.Any<CancellationToken>())
             .Returns(new Warehouse { Id = warehouseId, Name = "Test Warehouse" });
-        _batchRepository.GetByIdAsync(batchId, Arg.Any<CancellationToken>())
-            .Returns(new Batch { Id = batchId, Reference = "BATCH-001" });
-        _alertRepository.ExistsActiveAsync(batchId, expectedType, Arg.Any<CancellationToken>())
+        _alertRepository.ExistsActiveAsync(warehouseId, expectedType, Arg.Any<CancellationToken>())
             .Returns(false);
 
         var request = new CreateAlertRequest
         {
             WarehouseId = warehouseId,
-            BatchId = batchId,
             Type = inputType
         };
 
@@ -198,7 +151,7 @@ public class AlertServiceTests
         // Assert
         Assert.True(result);
         await _alertRepository.Received(1).AddAsync(
-            Arg.Is<BatchAlert>(a => a.Type == expectedType),
+            Arg.Is<Alert>(a => a.Type == expectedType),
             Arg.Any<CancellationToken>());
     }
 
@@ -207,20 +160,16 @@ public class AlertServiceTests
     {
         // Arrange
         var warehouseId = Guid.NewGuid();
-        var batchId = Guid.NewGuid();
         var measuredAt = new DateTime(2026, 8, 1, 12, 0, 0, DateTimeKind.Utc);
         
         _warehouseRepository.GetByIdAsync(warehouseId, Arg.Any<CancellationToken>())
             .Returns(new Warehouse { Id = warehouseId, Name = "Test Warehouse" });
-        _batchRepository.GetByIdAsync(batchId, Arg.Any<CancellationToken>())
-            .Returns(new Batch { Id = batchId, Reference = "BATCH-001" });
-        _alertRepository.ExistsActiveAsync(batchId, AlertType.Temperature, Arg.Any<CancellationToken>())
+        _alertRepository.ExistsActiveAsync(warehouseId, AlertType.Temperature, Arg.Any<CancellationToken>())
             .Returns(false);
 
         var request = new CreateAlertRequest
         {
             WarehouseId = warehouseId,
-            BatchId = batchId,
             Type = "temperature",
             MeasuredAt = measuredAt
         };
@@ -231,7 +180,7 @@ public class AlertServiceTests
         // Assert
         Assert.True(result);
         await _alertRepository.Received(1).AddAsync(
-            Arg.Is<BatchAlert>(a => a.MeasuredAt == measuredAt),
+            Arg.Is<Alert>(a => a.MeasuredAt == measuredAt),
             Arg.Any<CancellationToken>());
     }
 
@@ -240,20 +189,16 @@ public class AlertServiceTests
     {
         // Arrange
         var warehouseId = Guid.NewGuid();
-        var batchId = Guid.NewGuid();
         var beforeTest = DateTime.UtcNow.AddSeconds(-1);
         
         _warehouseRepository.GetByIdAsync(warehouseId, Arg.Any<CancellationToken>())
             .Returns(new Warehouse { Id = warehouseId, Name = "Test Warehouse" });
-        _batchRepository.GetByIdAsync(batchId, Arg.Any<CancellationToken>())
-            .Returns(new Batch { Id = batchId, Reference = "BATCH-001" });
-        _alertRepository.ExistsActiveAsync(batchId, AlertType.Temperature, Arg.Any<CancellationToken>())
+        _alertRepository.ExistsActiveAsync(warehouseId, AlertType.Temperature, Arg.Any<CancellationToken>())
             .Returns(false);
 
         var request = new CreateAlertRequest
         {
             WarehouseId = warehouseId,
-            BatchId = batchId,
             Type = "temperature"
         };
 
@@ -264,7 +209,7 @@ public class AlertServiceTests
         // Assert
         Assert.True(result);
         await _alertRepository.Received(1).AddAsync(
-            Arg.Is<BatchAlert>(a => a.CreatedAt >= beforeTest && a.CreatedAt <= afterTest),
+            Arg.Is<Alert>(a => a.CreatedAt >= beforeTest && a.CreatedAt <= afterTest),
             Arg.Any<CancellationToken>());
     }
 }

@@ -75,33 +75,13 @@ public class AlertsControllerIntegrationTests : IClassFixture<CustomWebApplicati
             db.Farms.Add(farm);
         }
 
-        // Create batch if not exists
-        var batch = db.Batches.FirstOrDefault(b => b.WarehouseId == warehouse.Id);
-        if (batch == null)
-        {
-            batch = new Batch
-            {
-                Id = Guid.NewGuid(),
-                WarehouseId = warehouse.Id,
-                FarmId = farm.Id,
-                Reference = "BATCH-TEST-001",
-                StoredAt = DateTime.UtcNow.AddDays(-10),
-                ShippedAt = null,
-                QualityGrade = BatchQualityGrade.A,
-                Status = BatchStatus.Stored
-            };
-            db.Batches.Add(batch);
-        }
-
         await db.SaveChangesAsync();
 
-        // Store IDs for tests
+        // Store ID for tests
         _testWarehouseId = warehouse.Id;
-        _testBatchId = batch.Id;
     }
 
     private Guid _testWarehouseId;
-    private Guid _testBatchId;
 
     [Fact]
     public async Task Create_Should_Return401_When_NoApiKey()
@@ -111,7 +91,6 @@ public class AlertsControllerIntegrationTests : IClassFixture<CustomWebApplicati
         var request = new CreateAlertRequest
         {
             WarehouseId = _testWarehouseId,
-            BatchId = _testBatchId,
             Type = "temperature"
         };
 
@@ -131,7 +110,6 @@ public class AlertsControllerIntegrationTests : IClassFixture<CustomWebApplicati
         var request = new CreateAlertRequest
         {
             WarehouseId = _testWarehouseId,
-            BatchId = _testBatchId,
             Type = "temperature"
         };
 
@@ -151,27 +129,9 @@ public class AlertsControllerIntegrationTests : IClassFixture<CustomWebApplicati
         await SeedTestDataAsync();
         AddApiKeyHeader();
 
-        // Generate unique batch ID to avoid idempotency conflicts
-        using var scope = _factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var newBatch = new Batch
-        {
-            Id = Guid.NewGuid(),
-            WarehouseId = _testWarehouseId,
-            FarmId = db.Farms.First().Id,
-            Reference = $"BATCH-TEST-{Guid.NewGuid().ToString()[..8]}",
-            StoredAt = DateTime.UtcNow.AddDays(-5),
-            ShippedAt = null,
-            QualityGrade = BatchQualityGrade.A,
-            Status = BatchStatus.Stored
-        };
-        db.Batches.Add(newBatch);
-        await db.SaveChangesAsync();
-
         var request = new CreateAlertRequest
         {
             WarehouseId = _testWarehouseId,
-            BatchId = newBatch.Id,
             Type = "temperature",
             MeasuredAt = DateTime.UtcNow
         };
@@ -196,28 +156,6 @@ public class AlertsControllerIntegrationTests : IClassFixture<CustomWebApplicati
         var request = new CreateAlertRequest
         {
             WarehouseId = Guid.NewGuid(), // Non-existent warehouse
-            BatchId = _testBatchId,
-            Type = "temperature"
-        };
-
-        // Act
-        var response = await _client.PostAsJsonAsync("/api/alerts", request);
-
-        // Assert
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-    }
-
-    [Fact]
-    public async Task Create_Should_Return400_When_BatchNotFound()
-    {
-        // Arrange
-        await SeedTestDataAsync();
-        AddApiKeyHeader();
-
-        var request = new CreateAlertRequest
-        {
-            WarehouseId = _testWarehouseId,
-            BatchId = Guid.NewGuid(), // Non-existent batch
             Type = "temperature"
         };
 
@@ -238,7 +176,6 @@ public class AlertsControllerIntegrationTests : IClassFixture<CustomWebApplicati
         var request = new CreateAlertRequest
         {
             WarehouseId = _testWarehouseId,
-            BatchId = _testBatchId,
             Type = "invalid_type"
         };
 
@@ -260,27 +197,9 @@ public class AlertsControllerIntegrationTests : IClassFixture<CustomWebApplicati
         await SeedTestDataAsync();
         AddApiKeyHeader();
 
-        // Create a new batch for each test to avoid idempotency
-        using var scope = _factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var newBatch = new Batch
-        {
-            Id = Guid.NewGuid(),
-            WarehouseId = _testWarehouseId,
-            FarmId = db.Farms.First().Id,
-            Reference = $"BATCH-TEST-{Guid.NewGuid().ToString()[..8]}",
-            StoredAt = DateTime.UtcNow.AddDays(-5),
-            ShippedAt = null,
-            QualityGrade = BatchQualityGrade.A,
-            Status = BatchStatus.Stored
-        };
-        db.Batches.Add(newBatch);
-        await db.SaveChangesAsync();
-
         var request = new CreateAlertRequest
         {
             WarehouseId = _testWarehouseId,
-            BatchId = newBatch.Id,
             Type = type
         };
 
@@ -298,27 +217,23 @@ public class AlertsControllerIntegrationTests : IClassFixture<CustomWebApplicati
         await SeedTestDataAsync();
         AddApiKeyHeader();
 
-        // Create a new batch
+        // Create a fresh warehouse to guarantee no pre-existing alert
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var newBatch = new Batch
+        var country = db.Countries.First(c => c.Code == "BR");
+        var freshWarehouse = new Warehouse
         {
             Id = Guid.NewGuid(),
-            WarehouseId = _testWarehouseId,
-            FarmId = db.Farms.First().Id,
-            Reference = $"BATCH-TEST-{Guid.NewGuid().ToString()[..8]}",
-            StoredAt = DateTime.UtcNow.AddDays(-5),
-            ShippedAt = null,
-            QualityGrade = BatchQualityGrade.A,
-            Status = BatchStatus.Stored
+            CountryId = country.Id,
+            Name = $"WH-IDEM-{Guid.NewGuid().ToString()[..8]}",
+            Reference = $"WH-IDEM-{Guid.NewGuid().ToString()[..8]}"
         };
-        db.Batches.Add(newBatch);
+        db.Warehouses.Add(freshWarehouse);
         await db.SaveChangesAsync();
 
         var request = new CreateAlertRequest
         {
-            WarehouseId = _testWarehouseId,
-            BatchId = newBatch.Id,
+            WarehouseId = freshWarehouse.Id,
             Type = "temperature"
         };
 

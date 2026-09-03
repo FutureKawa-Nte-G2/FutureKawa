@@ -66,11 +66,10 @@ entity "Batch" as Batch {
   * status : string
 }
 
-entity "BatchAlert" as BatchAlert {
+entity "Alert" as Alert {
   * id : UUID <<PK>>
   --
   * warehouse_id : UUID <<FK>>
-  * batch_id : UUID <<FK>>
   * type : string
   * status : string
   * created_at : datetime
@@ -107,8 +106,7 @@ Country ||--o{ Farm : "contains"
 Country ||--o{ Warehouse : "contains"
 Farm ||--o{ Batch : "produces"
 Warehouse ||--o{ Batch : "stores"
-Warehouse ||--o{ BatchAlert : "raises"
-Batch ||--o{ BatchAlert : "raises"
+Warehouse ||--o{ Alert : "raises"
 Order ||--|{ OrderLine : "contains"
 Order }o--o{ Batch : "associates"
 

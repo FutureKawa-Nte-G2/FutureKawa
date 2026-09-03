@@ -22,6 +22,41 @@ namespace FutureKawaSiege.Data.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("FutureKawaSiege.Data.Entities.Alert", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("MeasuredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("ResolvedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid>("WarehouseId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("WarehouseId", "Type", "Status");
+
+                    b.ToTable("Alerts", (string)null);
+                });
+
             modelBuilder.Entity("FutureKawaSiege.Data.Entities.Batch", b =>
                 {
                     b.Property<Guid>("Id")
@@ -65,46 +100,6 @@ namespace FutureKawaSiege.Data.Migrations
                     b.HasIndex("WarehouseId");
 
                     b.ToTable("Batches", (string)null);
-                });
-
-            modelBuilder.Entity("FutureKawaSiege.Data.Entities.BatchAlert", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("BatchId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("MeasuredAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("ResolvedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(16)
-                        .HasColumnType("character varying(16)");
-
-                    b.Property<string>("Type")
-                        .IsRequired()
-                        .HasMaxLength(16)
-                        .HasColumnType("character varying(16)");
-
-                    b.Property<Guid>("WarehouseId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("WarehouseId");
-
-                    b.HasIndex("BatchId", "Type", "Status");
-
-                    b.ToTable("BatchAlerts", (string)null);
                 });
 
             modelBuilder.Entity("FutureKawaSiege.Data.Entities.Country", b =>
@@ -415,6 +410,17 @@ namespace FutureKawaSiege.Data.Migrations
                     b.ToTable("OrderBatches");
                 });
 
+            modelBuilder.Entity("FutureKawaSiege.Data.Entities.Alert", b =>
+                {
+                    b.HasOne("FutureKawaSiege.Data.Entities.Warehouse", "Warehouse")
+                        .WithMany("Alerts")
+                        .HasForeignKey("WarehouseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Warehouse");
+                });
+
             modelBuilder.Entity("FutureKawaSiege.Data.Entities.Batch", b =>
                 {
                     b.HasOne("FutureKawaSiege.Data.Entities.Farm", "Farm")
@@ -430,25 +436,6 @@ namespace FutureKawaSiege.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Farm");
-
-                    b.Navigation("Warehouse");
-                });
-
-            modelBuilder.Entity("FutureKawaSiege.Data.Entities.BatchAlert", b =>
-                {
-                    b.HasOne("FutureKawaSiege.Data.Entities.Batch", "Batch")
-                        .WithMany("Alerts")
-                        .HasForeignKey("BatchId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("FutureKawaSiege.Data.Entities.Warehouse", "Warehouse")
-                        .WithMany("Alerts")
-                        .HasForeignKey("WarehouseId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Batch");
 
                     b.Navigation("Warehouse");
                 });
@@ -541,11 +528,6 @@ namespace FutureKawaSiege.Data.Migrations
                         .HasForeignKey("OrderId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-                });
-
-            modelBuilder.Entity("FutureKawaSiege.Data.Entities.Batch", b =>
-                {
-                    b.Navigation("Alerts");
                 });
 
             modelBuilder.Entity("FutureKawaSiege.Data.Entities.Country", b =>

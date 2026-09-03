@@ -19,16 +19,14 @@ public enum AlertStatus
 }
 
 /// <summary>
-/// Represents an alert triggered for a batch when measurements exceed thresholds.
+/// Represents an alert triggered for a warehouse when measurements exceed thresholds.
 /// Created by the local warehouse API when temperature or humidity is out of bounds.
 /// </summary>
-public class BatchAlert
+public class Alert
 {
     public Guid Id { get; set; }
     
     public Guid WarehouseId { get; set; }
-    
-    public Guid BatchId { get; set; }
     
     public AlertType Type { get; set; }
     
@@ -41,5 +39,4 @@ public class BatchAlert
     public DateTime? MeasuredAt { get; set; }
 
     public Warehouse Warehouse { get; set; } = null!;
-    public Batch Batch { get; set; } = null!;
 }

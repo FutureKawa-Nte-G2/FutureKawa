@@ -6,7 +6,6 @@ namespace FutureKawaSiege.Commons.Models.API.Requests;
 public record CreateAlertRequest
 {
     public Guid WarehouseId { get; init; }
-    public Guid BatchId { get; init; }
     public string Type { get; init; } = null!; // "temperature" or "humidity"
     public DateTime? MeasuredAt { get; init; }
 }

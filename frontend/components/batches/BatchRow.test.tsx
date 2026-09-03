@@ -53,8 +53,8 @@ describe("BatchRow", () => {
   });
 
   it("displays the status badge", () => {
-    render(<BatchRow batch={makeBatch({ status: "alert" })} />);
-    expect(screen.getByText("alerte")).toBeInTheDocument();
+    render(<BatchRow batch={makeBatch({ status: "expired" })} />);
+    expect(screen.getByText("périmé")).toBeInTheDocument();
   });
 
   it("navigates to the batch detail route on click", async () => {

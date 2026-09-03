@@ -26,7 +26,6 @@ public class BatchRepository : IBatchRepository
             .Include(b => b.Warehouse)
                 .ThenInclude(w => w.Country)
             .Include(b => b.Farm)
-            .Include(b => b.Alerts)
             .AsQueryable();
 
         if (!string.IsNullOrEmpty(countryCode))
@@ -58,7 +57,6 @@ public class BatchRepository : IBatchRepository
             .Include(b => b.Warehouse)
                 .ThenInclude(w => w.Country)
             .Include(b => b.Farm)
-            .Include(b => b.Alerts)
             .FirstOrDefaultAsync(b => b.Id == id, cancellationToken);
     }
 

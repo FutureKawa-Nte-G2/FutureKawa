@@ -65,10 +65,9 @@ class "Batches" as Batches <<Entity>> {
   + Status : varchar(16)
 }
 
-class "BatchAlerts" as BatchAlerts <<Entity>> {
+class "Alerts" as Alerts <<Entity>> {
   + Id : uuid <<PK>>
   + WarehouseId : uuid <<FK>>
-  + BatchId : uuid <<FK>>
   + Type : varchar(16)
   + Status : varchar(16)
   + CreatedAt : timestamptz
@@ -108,8 +107,7 @@ Countries "1" --> "0..*" Farms : CountryId
 Countries "1" --> "0..*" Warehouses : CountryId
 Farms "1" --> "0..*" Batches : FarmId
 Warehouses "1" --> "0..*" Batches : WarehouseId
-Warehouses "1" --> "0..*" BatchAlerts : WarehouseId
-Batches "1" --> "0..*" BatchAlerts : BatchId
+Warehouses "1" --> "0..*" Alerts : WarehouseId
 Orders "1" --> "0..*" OrderLines : OrderId
 Orders "0..*" --> "0..1" Countries : CountryId
 Orders "1" --> "0..*" OrderBatches : OrderId

@@ -54,6 +54,84 @@ public class BatchesControllerIntegrationTests : IClassFixture<CustomWebApplicat
         return loginBody!.Data!.AccessToken;
     }
 
+    private async Task SeedBatchesAsync()
+    {
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        if (db.Batches.Any())
+        {
+            return;
+        }
+
+        var country = new Country
+        {
+            Id = Guid.NewGuid(),
+            Code = "BR",
+            Name = "Brazil",
+            NominalTemp = 29.0m,
+            ToleranceTemp = 3.0m,
+            NominalHumidity = 55.0m,
+            ToleranceHumidity = 2.0m
+        };
+        db.Countries.Add(country);
+
+        var warehouse = new Warehouse
+        {
+            Id = Guid.NewGuid(),
+            CountryId = country.Id,
+            Name = "Santos Warehouse",
+            Reference = "WH-BR-SANTOS"
+        };
+        db.Warehouses.Add(warehouse);
+
+        var farm = new Farm
+        {
+            Id = Guid.NewGuid(),
+            CountryId = country.Id,
+            Name = "Fazenda Boa Vista",
+            Reference = "FARM-BR-001"
+        };
+        db.Farms.Add(farm);
+
+        db.Batches.AddRange(
+            new Batch
+            {
+                Id = Guid.NewGuid(),
+                WarehouseId = warehouse.Id,
+                FarmId = farm.Id,
+                Reference = "BATCH-BR-001",
+                StoredAt = DateTime.UtcNow.AddDays(-10),
+                ShippedAt = null,
+                QualityGrade = BatchQualityGrade.A,
+                Status = BatchStatus.Stored
+            },
+            new Batch
+            {
+                Id = Guid.NewGuid(),
+                WarehouseId = warehouse.Id,
+                FarmId = farm.Id,
+                Reference = "BATCH-BR-002",
+                StoredAt = DateTime.UtcNow.AddDays(-5),
+                ShippedAt = null,
+                QualityGrade = BatchQualityGrade.B,
+                Status = BatchStatus.Stored
+            },
+            new Batch
+            {
+                Id = Guid.NewGuid(),
+                WarehouseId = warehouse.Id,
+                FarmId = farm.Id,
+                Reference = "BATCH-BR-003",
+                StoredAt = DateTime.UtcNow.AddDays(-1),
+                ShippedAt = null,
+                QualityGrade = BatchQualityGrade.C,
+                Status = BatchStatus.Stored
+            });
+
+        await db.SaveChangesAsync();
+    }
+
     [Fact]
     public async Task GetAll_Should_Return401_When_NoAuth()
     {
@@ -160,6 +238,7 @@ public class BatchesControllerIntegrationTests : IClassFixture<CustomWebApplicat
     public async Task GetAll_Should_ReturnBatchesSortedByEnteredAt_Ascending()
     {
         // Arrange
+        await SeedBatchesAsync();
         var token = await GetAccessTokenAsync();
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
@@ -173,14 +252,13 @@ public class BatchesControllerIntegrationTests : IClassFixture<CustomWebApplicat
         Assert.True(body.Success);
         
         var batches = body.Data!.Batches.ToList();
-        if (batches.Count > 1)
+        Assert.NotEmpty(batches);
+
+        // Verify FIFO order (oldest first)
+        for (int i = 1; i < batches.Count; i++)
         {
-            // Verify FIFO order (oldest first)
-            for (int i = 1; i < batches.Count; i++)
-            {
-                Assert.True(batches[i - 1].EnteredAt <= batches[i].EnteredAt,
-                    "Batches should be sorted by EnteredAt in ascending order (FIFO)");
-            }
+            Assert.True(batches[i - 1].EnteredAt <= batches[i].EnteredAt,
+                "Batches should be sorted by EnteredAt in ascending order (FIFO)");
         }
     }
 }

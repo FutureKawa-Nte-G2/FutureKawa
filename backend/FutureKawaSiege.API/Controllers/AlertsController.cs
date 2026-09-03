@@ -41,7 +41,7 @@ public class AlertsController : ControllerBase
         if (!success)
         {
             return BadRequest(ApiResponse<string>.Fail(
-                "Failed to create alert. Ensure warehouse and batch exist, and type is valid (temperature/humidity)."));
+                "Failed to create alert. Ensure warehouse exists, and type is valid (temperature/humidity)."));
         }
 
         return Ok(ApiResponse<string>.Ok("Alert created successfully.", "Alert received and processed."));

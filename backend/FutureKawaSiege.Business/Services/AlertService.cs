@@ -8,19 +8,16 @@ namespace FutureKawaSiege.Business.Services;
 
 public class AlertService : IAlertService
 {
-    private readonly IBatchAlertRepository _alertRepository;
-    private readonly IBatchRepository _batchRepository;
+    private readonly IAlertRepository _alertRepository;
     private readonly IWarehouseRepository _warehouseRepository;
     private readonly ILogger<AlertService> _logger;
 
     public AlertService(
-        IBatchAlertRepository alertRepository,
-        IBatchRepository batchRepository,
+        IAlertRepository alertRepository,
         IWarehouseRepository warehouseRepository,
         ILogger<AlertService> logger)
     {
         _alertRepository = alertRepository;
-        _batchRepository = batchRepository;
         _warehouseRepository = warehouseRepository;
         _logger = logger;
     }
@@ -36,14 +33,6 @@ public class AlertService : IAlertService
             return false;
         }
 
-        // Validate batch exists
-        var batch = await _batchRepository.GetByIdAsync(request.BatchId, cancellationToken);
-        if (batch == null)
-        {
-            _logger.LogWarning("Alert rejected: batch {BatchId} not found", request.BatchId);
-            return false;
-        }
-
         // Parse alert type
         if (!Enum.TryParse<AlertType>(request.Type, true, out var alertType))
         {
@@ -51,22 +40,21 @@ public class AlertService : IAlertService
             return false;
         }
 
-        // Check for idempotency: active alert already exists for this batch and type
-        var exists = await _alertRepository.ExistsActiveAsync(request.BatchId, alertType, cancellationToken);
+        // Check for idempotency: active alert already exists for this warehouse and type
+        var exists = await _alertRepository.ExistsActiveAsync(request.WarehouseId, alertType, cancellationToken);
         if (exists)
         {
             _logger.LogInformation(
-                "Alert ignored: active alert already exists for batch {BatchId} and type {Type}",
-                request.BatchId, alertType);
+                "Alert ignored: active alert already exists for warehouse {WarehouseId} and type {Type}",
+                request.WarehouseId, alertType);
             return true; // Idempotent success
         }
 
         // Create the alert
-        var alert = new BatchAlert
+        var alert = new Alert
         {
             Id = Guid.NewGuid(),
             WarehouseId = request.WarehouseId,
-            BatchId = request.BatchId,
             Type = alertType,
             Status = AlertStatus.Active,
             CreatedAt = DateTime.UtcNow,
@@ -76,8 +64,8 @@ public class AlertService : IAlertService
         await _alertRepository.AddAsync(alert, cancellationToken);
 
         _logger.LogInformation(
-            "Alert created: {AlertId} for batch {BatchId}, type {Type}, warehouse {WarehouseId}",
-            alert.Id, request.BatchId, alertType, request.WarehouseId);
+            "Alert created: {AlertId} for warehouse {WarehouseId}, type {Type}",
+            alert.Id, request.WarehouseId, alertType);
 
         return true;
     }

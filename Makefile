@@ -20,7 +20,7 @@ up: env ## Démarre toute la stack
 	@$(COMPOSE) ps
 
 db: env ## Démarre uniquement les bases de données
-	$(COMPOSE) up -d odoo-db siege-db
+	$(COMPOSE) up -d odoo-db siege-db warehouse-db
 	@$(COMPOSE) ps
 
 ps: ## Liste l'état des services

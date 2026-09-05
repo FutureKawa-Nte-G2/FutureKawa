@@ -24,9 +24,8 @@ venv/
 .venv/
 env/
 
-# Secrets. Les exemples et le fichier docker du compose restent suivis :
-# ils ne contiennent aucune valeur réelle.
+# Secrets. Le fichier d'exemple du compose reste suivi : il ne contient
+# aucune valeur réelle.
 .env
 .env.*
 !.env.example
-!.env.docker

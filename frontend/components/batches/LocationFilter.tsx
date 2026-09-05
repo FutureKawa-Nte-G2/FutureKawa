@@ -74,7 +74,7 @@ export function LocationFilter({ onSelectionChange }: LocationFilterProps) {
     : [];
 
   return (
-    <aside className="flex w-[224px] flex-col gap-4 bg-background-secondary p-4">
+    <aside className="flex w-(--sidebar-width) flex-col gap-4 bg-background-secondary p-4">
       <Select
         label="Pays"
         value={countryCode ?? ALL_COUNTRIES}

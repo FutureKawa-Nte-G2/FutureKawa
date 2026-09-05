@@ -1,3 +1,5 @@
+name: futurekawa
+
 services:
   odoo-db:
     image: postgres:16
@@ -59,7 +61,28 @@ services:
       timeout: 5s
       retries: 5
 
+  # Base applicative du backend siège. Identifiants alignés sur
+  # appsettings.Development.json.
+  siege-db:
+    image: postgres:16
+    container_name: futurekawa-siege-db
+    ports:
+      - "127.0.0.1:${SIEGE_DB_PORT:-5435}:5432"
+    environment:
+      POSTGRES_DB: ${SIEGE_DB_NAME:-FutureKawaSiege}
+      POSTGRES_USER: ${SIEGE_DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${SIEGE_DB_PASSWORD:-Not24get}
+    volumes:
+      - siege-db-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${SIEGE_DB_USER:-postgres} -d ${SIEGE_DB_NAME:-FutureKawaSiege}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
 volumes:
   odoo-db-data:
   odoo-data:
   warehouse-db-data:
+  siege-db-data:

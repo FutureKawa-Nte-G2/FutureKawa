@@ -22,7 +22,7 @@ public class BatchServiceTests
         var country = new Country { Id = Guid.NewGuid(), Code = "BR", Name = "Brésil" };
         var warehouse = new Warehouse { Id = Guid.NewGuid(), Name = "Santos", Country = country };
         var farm = new Farm { Id = Guid.NewGuid(), Name = "Fazenda Boa Vista" };
-        
+
         var batches = new List<Batch>
         {
             CreateBatch(Guid.NewGuid(), warehouse, farm, DateTime.UtcNow.AddDays(-10)),
@@ -48,7 +48,7 @@ public class BatchServiceTests
     {
         // Arrange
         var countryCode = "BR";
-        
+
         _batchRepository.GetPagedAsync(countryCode, null, 1, 10, Arg.Any<CancellationToken>())
             .Returns((new List<Batch>(), 0));
 
@@ -64,7 +64,7 @@ public class BatchServiceTests
     {
         // Arrange
         var warehouseId = Guid.NewGuid();
-        
+
         _batchRepository.GetPagedAsync(null, warehouseId, 1, 10, Arg.Any<CancellationToken>())
             .Returns((new List<Batch>(), 0));
 
@@ -88,9 +88,9 @@ public class BatchServiceTests
         var country = new Country { Id = Guid.NewGuid(), Code = "BR", Name = "Brésil" };
         var warehouse = new Warehouse { Id = Guid.NewGuid(), Name = "Santos", Country = country };
         var farm = new Farm { Id = Guid.NewGuid(), Name = "Fazenda Boa Vista" };
-        
+
         var batch = CreateBatch(Guid.NewGuid(), warehouse, farm, DateTime.UtcNow.AddDays(-daysInStorage));
-        
+
         _batchRepository.GetPagedAsync(null, null, 1, 10, Arg.Any<CancellationToken>())
             .Returns(([batch], 1));
 
@@ -101,7 +101,85 @@ public class BatchServiceTests
         // Assert
         Assert.Equal(expectedStatus, batchDto.Status);
     }
-
+    [Fact]
+    public async Task GetBatchesAsync_Should_ReturnAlertStatus_When_WarehouseHasActiveAlert()
+    {
+        // Arrange: batch well within the 365-day window, but its warehouse has an
+        // active sensor alert -> the display status must be "alert", not "compliant".
+        var country = new Country { Id = Guid.NewGuid(), Code = "BR", Name = "Brésil" };
+        var warehouse = new Warehouse { Id = Guid.NewGuid(), Name = "Santos", Country = country };
+        warehouse.Alerts.Add(new Alert
+        {
+            Id = Guid.NewGuid(),
+            WarehouseId = warehouse.Id,
+            Warehouse = warehouse,
+            Type = AlertType.Temperature,
+            Status = AlertStatus.Active,
+            CreatedAt = DateTime.UtcNow
+        });
+        var farm = new Farm { Id = Guid.NewGuid(), Name = "Fazenda Boa Vista" };
+        var batch = CreateBatch(Guid.NewGuid(), warehouse, farm, DateTime.UtcNow.AddDays(-10));
+        _batchRepository.GetPagedAsync(null, null, 1, 10, Arg.Any<CancellationToken>())
+            .Returns(([batch], 1));
+        // Act
+        var result = await _service.GetBatchesAsync(null, null, 1, 10);
+        // Assert
+        Assert.Equal("alert", result.Batches.First().Status);
+    }
+    [Fact]
+    public async Task GetBatchesAsync_Should_ReturnAlertStatus_OverExpired_When_BothApply()
+    {
+        // Arrange: a batch older than 365 days AND stored in a warehouse with an
+        // active alert. Assumed priority (to confirm with the team): the active
+        // alert wins over the age-based "expired" status.
+        var country = new Country { Id = Guid.NewGuid(), Code = "BR", Name = "Brésil" };
+        var warehouse = new Warehouse { Id = Guid.NewGuid(), Name = "Santos", Country = country };
+        warehouse.Alerts.Add(new Alert
+        {
+            Id = Guid.NewGuid(),
+            WarehouseId = warehouse.Id,
+            Warehouse = warehouse,
+            Type = AlertType.Humidity,
+            Status = AlertStatus.Active,
+            CreatedAt = DateTime.UtcNow
+        });
+        var farm = new Farm { Id = Guid.NewGuid(), Name = "Fazenda Boa Vista" };
+        var batch = CreateBatch(Guid.NewGuid(), warehouse, farm, DateTime.UtcNow.AddDays(-400));
+        _batchRepository.GetPagedAsync(null, null, 1, 10, Arg.Any<CancellationToken>())
+            .Returns(([batch], 1));
+        // Act
+        var result = await _service.GetBatchesAsync(null, null, 1, 10);
+        // Assert
+        Assert.Equal("alert", result.Batches.First().Status);
+    }
+    [Fact]
+    public async Task GetBatchesAsync_Should_IgnoreResolvedAlerts_When_ComputingStatus()
+    {
+        // Arrange: the warehouse only has a resolved alert -> should not show "alert".
+        // This also covers the "status must come back to compliant" expectation for
+        // the part that IS implemented today (resolved alerts are simply ignored);
+        // the resolution mechanism itself (Active -> Resolved) is tracked separately.
+        var country = new Country { Id = Guid.NewGuid(), Code = "BR", Name = "Brésil" };
+        var warehouse = new Warehouse { Id = Guid.NewGuid(), Name = "Santos", Country = country };
+        warehouse.Alerts.Add(new Alert
+        {
+            Id = Guid.NewGuid(),
+            WarehouseId = warehouse.Id,
+            Warehouse = warehouse,
+            Type = AlertType.Temperature,
+            Status = AlertStatus.Resolved,
+            CreatedAt = DateTime.UtcNow.AddDays(-3),
+            ResolvedAt = DateTime.UtcNow.AddDays(-1)
+        });
+        var farm = new Farm { Id = Guid.NewGuid(), Name = "Fazenda Boa Vista" };
+        var batch = CreateBatch(Guid.NewGuid(), warehouse, farm, DateTime.UtcNow.AddDays(-10));
+        _batchRepository.GetPagedAsync(null, null, 1, 10, Arg.Any<CancellationToken>())
+            .Returns(([batch], 1));
+        // Act
+        var result = await _service.GetBatchesAsync(null, null, 1, 10);
+        // Assert
+        Assert.Equal("compliant", result.Batches.First().Status);
+    }
     private static Batch CreateBatch(Guid id, Warehouse warehouse, Farm farm, DateTime storedAt)
     {
         return new Batch

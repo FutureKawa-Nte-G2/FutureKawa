@@ -188,3 +188,106 @@ ERP entre en `stored`.
 > **et sur un autre axe** — `compliant` / `alert` / `expired`, de la conformité
 > et non du cycle de vie, hérité d'un schéma jamais mergé. Divergence réelle, à
 > traiter séparément.
+
+---
+
+## Contrat maison : `POST /api/batches`
+
+Enregistre un lot décrit par un **fichier de réception ERP**. Contrairement à
+`/api/measurements`, ce contrat n'est imposé par personne : aucun appelant
+n'existe encore (voir plus bas). Il est donc choisi, et modifiable tant que
+personne ne l'a branché.
+
+### Requête
+
+En-tête `X-API-Key` obligatoire.
+
+```json
+{
+  "batchRef":     "BR-2026-00042",
+  "farmRef":      "BR-EXP-01",
+  "warehouseRef": "BR-ENT-01",
+  "storedAt":     "2026-07-30",
+  "qualityGrade": "a"
+}
+```
+
+`qualityGrade` est facultatif. Toute clé supplémentaire est **ignorée** :
+`batchId`, `batchStatus` et `shippedAt` appartiennent au serveur, un fichier qui
+les porte est honoré pour le reste et les perd silencieusement.
+
+### Réponse `201 Created`
+
+Le lot complet — `batchId`, `batchRef`, `farmId`, `warehouseId`, `storedAt`,
+`shippedAt`, `qualityGrade`, `batchStatus` — pour que le watcher puisse
+journaliser ce qu'il a créé sans seconde requête.
+
+### Rejets
+
+| Code | Cas | `detail.code` |
+|---|---|---|
+| `401` | clé absente ou invalide | `invalid_api_key` |
+| `409` | `batchRef` déjà en base | `batch_already_exists` |
+| `422` | exploitation inconnue | `farm_ref_unknown` |
+| `422` | entrepôt inconnu | `warehouse_ref_unknown` |
+| `422` | payload malformé | `schema_invalid` |
+
+La séparation `409` / `422` est faite pour le watcher : `409` signifie « fichier
+déjà traité, à archiver », `422` signifie « fichier fautif, à router vers
+`error/` ». Les deux portent leur raison dans `detail.code`, jamais en prose.
+
+`422` plutôt que `404` pour une référence inconnue : l'URL existe, c'est le
+contenu du fichier qui décrit quelque chose qu'on ne connaît pas.
+
+### camelCase
+
+Comme `/api/measurements`, et comme le type `Batch` du frontend
+(`frontend/lib/api/types.ts`, qui écrit déjà `batchRef` et `qualityGrade`). Tous
+les consommateurs du projet parlent camelCase. `populate_by_name` laisse le
+snake_case accepté en entrée : personne n'est puni pour avoir lu `models.py`
+d'abord.
+
+### Authentification : `X-API-Key`, ici et pas sur les mesures
+
+Cette route **écrit**. Les raisons qui laissent `/api/measurements` ouvert — leur
+client n'envoie aucun en-tête, un `401` ferait sauter l'entrepôt en silence — ne
+valent pas pour un appelant qu'on écrit nous-mêmes.
+
+`LOCAL_API_KEY` non configurée fait **refuser de servir** plutôt que servir
+ouvert : une variable absente est une erreur de déploiement, elle doit en avoir
+l'air.
+
+### `quality_grade` devient nullable
+
+Migration `a0a66fe318a0`. Odoo déduit le grade du code produit
+(`_compute_quality_grade`) et envoie `null` pour tout produit qui n'est pas
+`COFFEE-A/B/C`. Un lot existe physiquement que son grade soit connu ou non ;
+refuser le lot coûterait la traçabilité de l'ensemble pour un attribut
+secondaire.
+
+Odoo exporte `"a"` en minuscule, notre vocabulaire est `("A","B","C")` : la
+bascule de casse se fait **à la frontière**, comme pour `batch_status`. Une
+chaîne vide vaut « pas de grade », pas un grade à part entière.
+
+Aucune contrainte `CHECK` ne protège la colonne en base — la PR #54 les a
+renvoyées à une PR de suite — donc le validateur Pydantic est aujourd'hui le
+seul rempart contre un grade inventé.
+
+### ⚠️ Aucun appelant ne peut encore utiliser cette route
+
+Le payload réel d'Odoo (`odoo-addons/future_kawa_erp/models/sale_order.py`) est :
+
+```
+orderId, client, orderDate, country, qualityGrade, batchReferences, lines
+```
+
+Ni exploitation, ni entrepôt, ni date de stockage. Le siège s'en sort en
+**fabriquant** des valeurs par défaut (`EnsureDefaultBatchDependenciesAsync` dans
+`OrderService.cs`, puis `StoredAt = DateTime.UtcNow.Date`).
+
+Nos colonnes `warehouse_id` et `farm_id` sont `NOT NULL` : on ne *peut pas*
+accepter un lot sans elles. Le contrat est donc imposé par notre propre schéma,
+et c'est à l'appelant de résoudre ce qu'Odoo ne dit pas — exactement comme le
+siège le fait de son côté.
+
+Le watcher de fichier de réception, lui, n'existe nulle part dans le dépôt.

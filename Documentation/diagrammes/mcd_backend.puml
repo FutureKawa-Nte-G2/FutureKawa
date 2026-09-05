@@ -60,8 +60,8 @@ entity "Batch" as Batch {
   * farm_id : UUID <<FK>>
   * warehouse_id : UUID <<FK>>
   * reference : string
-  * stored_at : date
-  shipped_at : date
+  * stored_at : datetime
+  shipped_at : datetime
   * quality_grade : string
   * status : string
 }
@@ -75,6 +75,19 @@ entity "Alert" as Alert {
   * created_at : datetime
   resolved_at : datetime
   measured_at : datetime
+}
+
+entity "Measurement" as Measurement {
+  * id : UUID <<PK>>
+  --
+  * warehouse_id : UUID <<FK>>
+  * meas_date : date
+  * avg_meas_temp : decimal
+  * max_meas_temp : decimal
+  * min_meas_temp : decimal
+  * avg_meas_humidity : decimal
+  * min_meas_humidity : decimal
+  * max_meas_humidity : decimal
 }
 
 entity "Order" as Order {
@@ -107,6 +120,7 @@ Country ||--o{ Warehouse : "contains"
 Farm ||--o{ Batch : "produces"
 Warehouse ||--o{ Batch : "stores"
 Warehouse ||--o{ Alert : "raises"
+Warehouse ||--o{ Measurement : "measures"
 Order ||--|{ OrderLine : "contains"
 Order }o--o{ Batch : "associates"
 

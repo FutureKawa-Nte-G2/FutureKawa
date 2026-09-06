@@ -1,0 +1,16 @@
+# Everything in requirements.txt, plus what the test suite needs.
+#
+#   ./venv/bin/pip install -r requirements-dev.txt
+#   ./venv/bin/python -m pytest
+
+-r requirements.txt
+
+# The suite runs on SQLite in memory: no container to start, and each test gets
+# a database of its own.
+aiosqlite==0.22.1
+# SQLAlchemy asyncio runs its sync layer inside greenlets.
+greenlet==3.5.4
+httpx==0.28.1
+pytest==9.1.1
+pytest-asyncio==1.4.0
+pytest-cov==7.1.0

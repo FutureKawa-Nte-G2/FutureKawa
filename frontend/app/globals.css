@@ -9,10 +9,10 @@
 
   /* Tokens/Border */
   --border-primary: #e4e4e4;
-
+  
   /* Tokens/Background */
   --background-secondary: #f9f9f9;
-
+  
   /* Tokens/Status */
   --status-compliant-text: #259800;
   --status-compliant-bg: #f0feed;
@@ -20,12 +20,21 @@
   --status-alert-bg: #feeded;
   --status-expired-text: #c2410c;
   --status-expired-bg: #fff1e8;
-
+  
   /* Tokens/Action (status-driven buttons) */
   --action-alert-bg: #dc2626;      /* = status-alert-text, reused as a solid button background */
   --action-alert-bg-hover: #b91c1c;
   --action-expired-bg: #c2410c;    /* = status-expired-text, reused as a solid button background */
   --action-expired-bg-hover: #9a3412;
+
+  /* Tokens/Layout */
+ --sidebar-width: 224px;
+ --navbar-height: 64px;
+ --nav-icon-size: 32px;
+ --user-menu-width: 192px;
+
+   /* Tokens/Typography */
+  --font-size-logo: 26px;
 }
 
 @theme inline {
@@ -53,6 +62,13 @@
   --font-sans: var(--font-poppins);
   --font-mono: var(--font-geist-mono);
   --font-input: var(--font-rem);
+
+  --spacing-sidebar-width: var(--sidebar-width);
+  --spacing-navbar-height: var(--navbar-height);
+  --spacing-avatar-size: var(--avatar-size);
+  --spacing-user-menu-width: var(--user-menu-width);
+
+    --text-logo: var(--font-size-logo);
 }
 
 body {

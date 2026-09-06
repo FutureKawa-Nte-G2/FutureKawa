@@ -43,6 +43,30 @@ services:
       PASSWORD: ${POSTGRES_PASSWORD:-odoo}
     restart: unless-stopped
 
+  # Base d'un pays, lue par l'API locale (Api/). Séparée de celle d'Odoo :
+  # l'architecture prévoit un backend autonome par pays, et le siège vient les
+  # interroger par HTTP. Port 5434 pour ne pas heurter odoo-db (5433) ni un
+  # PostgreSQL installé sur la machine (5432).
+  warehouse-db:
+    # timescale = postgres 16 + l'extension timescaledb (measurements est une
+    # hypertable, cf. migration initiale). Même version que l'image CNPG k8s.
+    image: timescale/timescaledb:2.17.2-pg16
+    container_name: futurekawa-warehouse-db
+    ports:
+      - "${WAREHOUSE_DB_PORT:-5434}:5432"
+    environment:
+      POSTGRES_DB: ${WAREHOUSE_DB_NAME:-futurekawa_br}
+      POSTGRES_USER: ${WAREHOUSE_DB_USER:-futurekawa}
+      POSTGRES_PASSWORD: ${WAREHOUSE_DB_PASSWORD:-futurekawa}
+    volumes:
+      - warehouse-db-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${WAREHOUSE_DB_USER:-futurekawa}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # Base applicative du backend siège. Identifiants alignés sur
   # appsettings.Development.json.
   siege-db:
@@ -119,4 +143,5 @@ services:
 volumes:
   odoo-db-data:
   odoo-data:
+  warehouse-db-data:
   siege-db-data:

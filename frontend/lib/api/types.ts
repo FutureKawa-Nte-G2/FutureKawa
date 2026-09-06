@@ -84,3 +84,25 @@ export interface BatchListResponse {
   totalCount: number;
   totalPages: number;
 }
+
+// Alert info returned by GET /api/alerts (unread only)
+// kind mirrors the two trigger conditions from the spec: out-of-range
+// measurement ("alert") or batch past its 365-day expiry ("expired")
+export type AlertType = "expired" | "alert";
+export type AlertStatus = "open" | "resolved";
+
+// Alert info returned by GET /api/alerts (open alerts only)
+export interface AlertItem {
+  id: string;
+  alertType: AlertType;
+  alertStatus: AlertStatus;
+  batchRef: string | null;
+  warehouseName: string;
+  message: string;
+  createdAt: string; // ISO 8601
+  resolvedAt: string | null;
+}
+
+export interface AlertListResponse {
+  alerts: AlertItem[];
+}

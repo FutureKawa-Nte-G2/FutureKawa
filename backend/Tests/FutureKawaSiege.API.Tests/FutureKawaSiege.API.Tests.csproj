@@ -11,6 +11,11 @@
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.9" />
+    <!-- Pinned explicitly: EntityFrameworkCore.Design carries Relational 10.0.9
+     as PrivateAssets=all, so it never flows here transitively — without this
+     line the test host falls back to 10.0.4 via Npgsql, diverging from the
+     API's EF version. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.9" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageReference Include="xunit.v3" Version="2.0.0" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />

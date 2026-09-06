@@ -1,25 +1,25 @@
 # syntax=docker/dockerfile:1
 
-# Une image, trois usages :
-#   dotnet FutureKawaSiege.API.dll             -> l'API
-#   dotnet FutureKawaSiege.API.dll --migrate   -> migrations EF, puis sortie
-#   dotnet FutureKawaSiege.API.dll --seed      -> jeu de démo, puis sortie
-# Contexte de build : ./backend
+# One image, three uses:
+#   dotnet FutureKawaSiege.API.dll             -> the API
+#   dotnet FutureKawaSiege.API.dll --migrate   -> EF migrations, then exit
+#   dotnet FutureKawaSiege.API.dll --seed      -> demo dataset, then exit
+# Build context: ./backend
 
 ARG DOTNET_VERSION=10.0
 
 FROM mcr.microsoft.com/dotnet/sdk:${DOTNET_VERSION} AS build
 WORKDIR /src
 
-# Les .csproj seuls d'abord : le restore reste en cache tant qu'aucune
-# dépendance ne change, même quand tout le code a changé.
+# .csproj files only first: the restore stays cached as long as no dependency
+# changes, even when all the code has changed.
 COPY FutureKawaSiege.Commons/FutureKawaSiege.Commons.csproj   FutureKawaSiege.Commons/
 COPY FutureKawaSiege.Data/FutureKawaSiege.Data.csproj         FutureKawaSiege.Data/
 COPY FutureKawaSiege.Business/FutureKawaSiege.Business.csproj FutureKawaSiege.Business/
 COPY FutureKawaSiege.API/FutureKawaSiege.API.csproj           FutureKawaSiege.API/
 
-# Le projet API, pas la solution : ses ProjectReference tirent Business, Data
-# et Commons, et laissent les deux projets de tests dehors.
+# The API project, not the solution: its ProjectReferences pull in Business,
+# Data and Commons, and leave the two test projects out.
 RUN dotnet restore FutureKawaSiege.API/FutureKawaSiege.API.csproj
 
 COPY . .
@@ -29,21 +29,21 @@ RUN dotnet publish FutureKawaSiege.API/FutureKawaSiege.API.csproj \
 FROM mcr.microsoft.com/dotnet/aspnet:${DOTNET_VERSION} AS runtime
 WORKDIR /app
 
-# L'image aspnet n'a pas de client HTTP, et le healthcheck compose en a besoin.
+# The aspnet image has no HTTP client, and the compose healthcheck needs one.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl \
  && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /app/publish .
 
-# Le conteneur --seed tourne en Development, dont la configuration Serilog
-# écrit dans ./logs : sans ce dossier inscriptible, le logger échoue au
-# démarrage, avant même d'atteindre le seeder.
+# The --seed container runs in Development, whose Serilog configuration
+# writes to ./logs: without this writable directory, the logger fails at
+# startup, before it even reaches the seeder.
 RUN mkdir -p /app/logs && chown -R app:app /app/logs
 
-# Ne pas définir ASPNETCORE_HTTPS_PORTS ni une ASPNETCORE_URLS en https :
-# sans endpoint HTTPS lié, UseHttpsRedirection() reste inerte. Le renseigner
-# ferait rediriger toutes les requêtes vers un port fermé.
+# Do not set ASPNETCORE_HTTPS_PORTS or an https ASPNETCORE_URLS: without a
+# bound HTTPS endpoint, UseHttpsRedirection() stays inert. Setting one would
+# redirect every request to a closed port.
 ENV ASPNETCORE_ENVIRONMENT=Production \
     ASPNETCORE_HTTP_PORTS=8080
 

@@ -1,5 +1,5 @@
-# Sans ces exclusions, COPY . . écrase les obj/ produits par le restore de
-# l'étape build avec ceux de la machine hôte, et --no-restore échoue.
+# Without these exclusions, COPY . . overwrites the obj/ produced by the
+# build stage's restore with the host machine's, and --no-restore fails.
 **/bin/
 **/obj/
 **/logs/

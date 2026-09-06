@@ -7,6 +7,9 @@ describe('Badge', () => {
     const { rerender } = render(<Badge status='compliant' />);
     expect(screen.getByText('conforme')).toBeInTheDocument();
 
+    rerender(<Badge status='alert' />);
+    expect(screen.getByText('alerte')).toBeInTheDocument();
+
     rerender(<Badge status='expired' />);
     expect(screen.getByText('périmé')).toBeInTheDocument();
   });
@@ -16,6 +19,12 @@ describe('Badge', () => {
     expect(screen.getByText('conforme')).toHaveClass(
       'text-status-compliant-text',
       'bg-status-compliant-bg'
+    );
+
+    rerender(<Badge status='alert' />);
+    expect(screen.getByText('alerte')).toHaveClass(
+      'text-status-alert-text',
+      'bg-status-alert-bg'
     );
 
     rerender(<Badge status='expired' />);

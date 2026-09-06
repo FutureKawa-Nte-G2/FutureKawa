@@ -21,6 +21,7 @@ interface GetBatchesParams {
   warehouseId?: string;
   page?: number;
   pageSize?: number;
+  accessToken?: string | null;
 }
 
 // GET /api/batches — a single page of batches still in stock, sorted oldest-first (FIFO).
@@ -57,20 +58,25 @@ export async function getBatches(params: GetBatchesParams = {}): Promise<BatchLi
   if (params.countryCode) query.set("country", params.countryCode);
   if (params.warehouseId) query.set("warehouseId", params.warehouseId);
 
-  return apiRequest<BatchListResponse>(`/api/batches?${query}`);
+  return apiRequest<BatchListResponse>(`/api/batches?${query}`, {
+    accessToken: params.accessToken,
+  });
 }
 
 // GET /api/countries — small, fixed dataset, no pagination
-export async function getCountries(): Promise<Country[]> {
+export async function getCountries(accessToken?: string | null): Promise<Country[]> {
   if (USE_MOCKS) {
     return (mockCountries as CountryListResponse).countries;
   }
-  const { countries } = await apiRequest<CountryListResponse>("/api/countries");
+  const { countries } = await apiRequest<CountryListResponse>("/api/countries", { accessToken });
   return countries;
 }
 
 // GET /api/warehouses?country=BR — small, fixed dataset, no pagination
-export async function getWarehouses(countryCode?: string): Promise<Warehouse[]> {
+export async function getWarehouses(
+  countryCode?: string,
+  accessToken?: string | null
+): Promise<Warehouse[]> {
   if (USE_MOCKS) {
     const { warehouses } = mockWarehouses as WarehouseListResponse;
     return countryCode
@@ -79,6 +85,8 @@ export async function getWarehouses(countryCode?: string): Promise<Warehouse[]> 
   }
 
   const query = countryCode ? `?country=${countryCode}` : "";
-  const { warehouses } = await apiRequest<WarehouseListResponse>(`/api/warehouses${query}`);
+  const { warehouses } = await apiRequest<WarehouseListResponse>(`/api/warehouses${query}`, {
+    accessToken,
+  });
   return warehouses;
 }

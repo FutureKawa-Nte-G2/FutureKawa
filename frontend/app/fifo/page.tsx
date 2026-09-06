@@ -7,6 +7,7 @@ import { PageSizeSelector } from "@/components/ui/PageSizeSelector";
 import { Pagination } from "@/components/ui/Pagination";
 import { getBatches } from "@/lib/api/batches";
 import { useRefresh } from "@/context/RefreshContext";
+import { useAuth } from "@/context/AuthContext";
 import type { Batch } from "@/lib/api/types";
 
 export default function FifoPage() {
@@ -19,6 +20,7 @@ export default function FifoPage() {
   const [pageSize, setPageSize] = useState(10);
   const [totalPages, setTotalPages] = useState(1);
   const { registerRefreshHandler } = useRefresh();
+  const { accessToken } = useAuth();
 
   const fetchBatches = useCallback(async () => {
     const response = await getBatches({
@@ -26,10 +28,11 @@ export default function FifoPage() {
       warehouseId: selection.warehouse?.id,
       page,
       pageSize,
+      accessToken,
     });
     setBatches(response.batches);
     setTotalPages(response.totalPages);
-  }, [selection, page, pageSize]);
+  }, [selection, page, pageSize, accessToken]);
 
   useEffect(() => {
     // fetchBatches is async; its setState calls happen after the await

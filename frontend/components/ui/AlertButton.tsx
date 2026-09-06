@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { getUnreadAlerts, resolveAlert } from "@/lib/api/alerts";
 import type { AlertItem, AlertType } from "@/lib/api/types";
+import { useAuth } from "@/context/AuthContext";
 
 const TYPE_STYLES: Record<AlertType, string> = {
   alert: "text-status-alert-text bg-status-alert-bg",
@@ -12,14 +13,15 @@ const TYPE_STYLES: Record<AlertType, string> = {
 export function AlertButton() {
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [isOpen, setIsOpen] = useState(false);
+  const { accessToken } = useAuth();
 
   useEffect(() => {
-    getUnreadAlerts().then(setAlerts);
-  }, []);
+    getUnreadAlerts(accessToken).then(setAlerts);
+  }, [accessToken]);
 
   async function handleResolve(id: string) {
     setAlerts((prev) => prev.filter((a) => a.id !== id));
-    await resolveAlert(id);
+    await resolveAlert(id, accessToken);
   }
 
   return (

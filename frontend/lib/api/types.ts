@@ -53,9 +53,9 @@ export interface WarehouseListResponse {
   warehouses: Warehouse[];
 }
 
-// Compliance status of a batch, derived from temperature/humidity thresholds
-// and the 365-day storage limit
-export type BatchStatus = "compliant" | "alert" | "expired";
+// Compliance status of a batch, based on the 365-day storage limit.
+// Temperature/humidity alerts are tracked at warehouse level (see /api/alerts).
+export type BatchStatus = 'compliant' | 'expired';
 
 // A stored batch of green coffee, as consolidated and exposed by the HQ backend
 // A stored batch of green coffee, as consolidated and exposed by the HQ backend.
@@ -88,8 +88,8 @@ export interface BatchListResponse {
 // Alert info returned by GET /api/alerts (unread only)
 // kind mirrors the two trigger conditions from the spec: out-of-range
 // measurement ("alert") or batch past its 365-day expiry ("expired")
-export type AlertType = "expired" | "alert";
-export type AlertStatus = "open" | "resolved";
+export type AlertType = 'expired' | 'alert';
+export type AlertStatus = 'open' | 'resolved';
 
 // Alert info returned by GET /api/alerts (open alerts only)
 export interface AlertItem {

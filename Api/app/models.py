@@ -130,6 +130,17 @@ class Batch(Base):
     # a secondary attribute.
     quality_grade: Mapped[str | None] = mapped_column(String(8), nullable=True)
     batch_status: Mapped[str] = mapped_column(String(16))
+    # Flipped to false by the quality consumer the first time a reading leaves
+    # the country's band, and never flipped back automatically: a batch that
+    # spent a night out of range stays suspect until someone says otherwise.
+    #
+    # A column of its own rather than a `non_compliant` value in `batch_status`:
+    # that vocabulary is head office's `BatchStatus` enum, and adding a value on
+    # one side only would deserialise as 0 — Stored — on theirs, silently. The
+    # question of whether they want the value belongs to them.
+    is_compliant: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=text("true")
+    )
 
     __table_args__ = (
         # The FIFO listing is "what is still in stock, oldest first". Without

@@ -44,13 +44,14 @@ export async function apiRequest<T>(
     body: body ? JSON.stringify(body) : undefined,
   });
 
-  const payload: ApiResponse<T> = await response.json();
+  const rawBody = await response.text();
+  const payload: ApiResponse<T> | null = rawBody ? JSON.parse(rawBody) : null;
 
-  if (!response.ok || !payload.success) {
+  if (!response.ok || !payload?.success) {
     throw new ApiError(
-      payload.message ?? "Request failed",
+      payload?.message ?? `Request failed with status ${response.status}`,
       response.status,
-      payload.errors
+      payload?.errors ?? null
     );
   }
 

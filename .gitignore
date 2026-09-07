@@ -29,3 +29,8 @@ env/
 .env
 .env.*
 !.env.example
+
+# Scripts de confort local et leurs logs. Non versionnés : chacun démarre la
+# stack comme il veut, et le contrat d'équipe reste le Makefile + le compose.
+start.sh
+.logs/

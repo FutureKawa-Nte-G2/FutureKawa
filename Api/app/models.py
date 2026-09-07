@@ -116,7 +116,12 @@ class Batch(Base):
     stored_at: Mapped[date] = mapped_column(Date)
     # NULL means still in stock: this is the column the FIFO query reads.
     shipped_at: Mapped[date | None] = mapped_column(Date, nullable=True)
-    quality_grade: Mapped[str] = mapped_column(String(8))
+    # Nullable because the ERP does not always know the grade: Odoo computes it
+    # from the product code and sends `null` for anything that is not
+    # COFFEE-A/B/C. A batch exists physically whether or not its grade is
+    # known, and refusing it would cost the traceability of the whole batch for
+    # a secondary attribute.
+    quality_grade: Mapped[str | None] = mapped_column(String(8), nullable=True)
     batch_status: Mapped[str] = mapped_column(String(16))
 
     __table_args__ = (

@@ -13,6 +13,7 @@ from fastapi.exceptions import RequestValidationError
 
 from app.db import dispose_engine
 from app.errors import validation_error_handler
+from app.routers.batches import router as batches_router
 from app.routers.measurements import router as measurements_router
 
 
@@ -44,6 +45,7 @@ def create_app() -> FastAPI:
     )
     app.add_exception_handler(RequestValidationError, validation_error_handler)
     app.include_router(measurements_router)
+    app.include_router(batches_router)
 
     @app.get("/health", tags=["ops"])
     async def health() -> dict[str, str]:

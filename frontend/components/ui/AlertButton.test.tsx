@@ -11,13 +11,17 @@ vi.mock("@/lib/api/alerts", () => ({
   resolveAlert: (id: string) => mockResolveAlert(id),
 }));
 
+vi.mock("@/context/AuthContext", () => ({
+  useAuth: () => ({ accessToken: "test-access-token" }),
+}));
+
 const alerts = [
   {
     id: "1",
     alertType: "expired" as const,
     alertStatus: "open" as const,
     batchRef: "BR-2026-0341",
-    warehouse: "Cerrado",
+    warehouseName: "Cerrado",
     message: "Le lot BR-2026-0341 a dépassé 365 jours de stockage dans l'entrepôt Cerrado (Brésil).",
     createdAt: "2026-07-27T08:15:00Z",
     resolvedAt: null,
@@ -27,7 +31,7 @@ const alerts = [
     alertType: "alert" as const,
     alertStatus: "open" as const,
     batchRef: null,
-    warehouse: "Santos",
+    warehouseName: "Santos",
     message: "Conditions hors plage détectée dans l'entrepôt de Santos (Brésil).",
     createdAt: "2026-06-01T14:15:00Z",
     resolvedAt: null,

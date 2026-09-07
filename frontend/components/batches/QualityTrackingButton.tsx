@@ -5,6 +5,7 @@ type ButtonVariant = 'primary' | 'alert' | 'expired';
 
 const STATUS_TO_VARIANT: Record<BatchStatus, ButtonVariant> = {
   compliant: 'primary',
+  alert: 'alert',
   expired: 'expired',
 };
 

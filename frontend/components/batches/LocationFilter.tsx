@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { getCountries, getWarehouses } from "@/lib/api/batches";
 import type { Country, Warehouse } from "@/lib/api/types";
 import { Select } from "@/components/ui/Select";
+import { useAuth } from "@/context/AuthContext";
 
 export interface LocationSelection {
   country: Country | null;
@@ -22,18 +23,19 @@ export function LocationFilter({ onSelectionChange }: LocationFilterProps) {
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [countryCode, setCountryCode] = useState<string | null>(null);
   const [warehouseId, setWarehouseId] = useState<string | null>(null);
+  const { accessToken } = useAuth();
 
   useEffect(() => {
-    getCountries().then(setCountries);
-  }, []);
+    getCountries(accessToken).then(setCountries);
+  }, [accessToken]);
 
   // Fetch warehouses only when a country is actually selected.
   // Clearing warehouses when no country is selected is handled directly
   // in handleCountryChange (a user event), not here.
   useEffect(() => {
     if (!countryCode) return;
-    getWarehouses(countryCode).then(setWarehouses);
-  }, [countryCode]);
+    getWarehouses(countryCode, accessToken).then(setWarehouses);
+  }, [countryCode, accessToken]);
 
   function handleCountryChange(next: string) {
     if (next === ALL_COUNTRIES) {

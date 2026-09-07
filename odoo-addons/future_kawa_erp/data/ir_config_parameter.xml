@@ -6,7 +6,7 @@
 
     <record id="webhook_url_param" model="ir.config_parameter">
         <field name="key">future_kawa.webhook_url</field>
-        <field name="value">https://host.docker.internal:55648/api/integration/odoo/orders</field>
+        <field name="value">http://siege-api:8080/api/integration/odoo/orders</field>
     </record>
 
     <record id="webhook_token_param" model="ir.config_parameter">

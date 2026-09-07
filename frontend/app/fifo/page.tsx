@@ -29,19 +29,29 @@ function FifoContent() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [totalPages, setTotalPages] = useState(1);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const { registerRefreshHandler } = useRefresh();
   const { accessToken } = useAuth();
 
   const fetchBatches = useCallback(async () => {
-    const response = await getBatches({
-      countryCode: selection.country?.code,
-      warehouseId: selection.warehouse?.id,
-      page,
-      pageSize,
-      accessToken,
-    });
-    setBatches(response.batches);
-    setTotalPages(response.totalPages);
+    setIsLoading(true);
+    setError(null);
+    try {
+      const response = await getBatches({
+        countryCode: selection.country?.code,
+        warehouseId: selection.warehouse?.id,
+        page,
+        pageSize,
+        accessToken,
+      });
+      setBatches(response.batches);
+      setTotalPages(response.totalPages);
+    } catch {
+      setError("Impossible de charger les lots. Réessayez dans un instant.");
+    } finally {
+      setIsLoading(false);
+    }
   }, [selection, page, pageSize, accessToken]);
 
   useEffect(() => {
@@ -76,7 +86,15 @@ function FifoContent() {
           Suivi des stocks et accès aux courbes de mesures qualité.
         </p>
         <div className="mt-8">
-          <BatchTable batches={batches} />
+          {error ? (
+            <p role="alert" className="py-8 text-center text-sm text-red-600">
+              {error}
+            </p>
+          ) : isLoading ? (
+            <p className="py-8 text-center text-sm text-input-text">Chargement des lots...</p>
+          ) : (
+            <BatchTable batches={batches} />
+          )}
         </div>
         <div className="mt-6 grid grid-cols-3 items-center">
           <div className="justify-self-start">

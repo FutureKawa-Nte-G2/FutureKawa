@@ -18,10 +18,8 @@ writes to country data directly, only via the head-office backend API.
 
 - Node.js 24 or later (`node -v` to check)
 - npm (bundled with Node)
-- The [FutureKawaSiege backend](../backend) running locally for any authenticated flow
-  (login, fifo data) — see that repository's own README for setup.
-  **Not required for local frontend development**: see "Developing without a backend"
-  below.
+- The [FutureKawaSiege backend](../backend) running locally — required for all flows,
+  including login — see that repository's own README for setup.
 
 > **Windows note:** if you switch between WSL and native Windows for this project, do not
 > share a single `node_modules` folder between the two — reinstall (`npm install`) after
@@ -54,30 +52,12 @@ writes to country data directly, only via the head-office backend API.
 ```
    Open [http://localhost:3000](http://localhost:3000).
 
-## Developing without a backend
-
-Several head-office API endpoints (batches, countries, warehouses) are not implemented
-yet. Set `NEXT_PUBLIC_USE_MOCKS=true` in `.env.local` to run the app entirely against
-local mock data (`lib/api/mocks/`) — no backend, database, or network access required:
-
-```bash
-NEXT_PUBLIC_API_BASE_URL=http://localhost:55648
-NEXT_PUBLIC_USE_MOCKS=true
-```
-
-In this mode, login is also bypassed: the app loads as an already-authenticated head-office
-user (see `context/AuthContext.tsx`).
-
-**Never enable this flag in a production build.** `NEXT_PUBLIC_*` variables are baked
-into the client bundle at build time, so a mock-enabled production build would ship
-fake data and a bypassed login screen to real users.
 
 ## Environment variables
 
 | Variable | Description | Required |
 |---|---|---|
 | `NEXT_PUBLIC_API_BASE_URL` | Base URL of the head-office backend API | Yes |
-| `NEXT_PUBLIC_USE_MOCKS` | When `true`, bypasses the backend and login entirely, using local mock data instead. See "Developing without a backend". | No (default: `false`) |
 
 ## API endpoints consumed
 
@@ -108,8 +88,9 @@ a copy of the shapes here.
 
 ## Running tests
 
-Unit tests use Vitest and React Testing Library, and run entirely against mocked API
-calls — no backend or database connection is required.
+Unit tests use Vitest and React Testing Library. API-layer tests (`batches.ts`,
+`alerts.ts`, `client.ts`) mock the global `fetch`; component tests mock the API
+modules directly — no backend or database connection is required either way.
 
 ```bash
 npm run test
@@ -123,8 +104,9 @@ npm run test
 | `context/RefreshContext.test.tsx` | Handler registration, triggering, and unregistration on unmount (backs the navbar refresh button) |
 | `components/auth/LoginForm.test.tsx` | Field validation, generic error messages on failure, password visibility toggle |
 | `components/layout/Navbar.test.tsx` | TODO — describe what this file covers |
-| `lib/api/batches.test.ts` | Sorting, country/warehouse filtering, server-side pagination (page/pageSize defaults, partial last page, empty result set) |
-| `lib/api/alerts.test.ts` | TODO — describe what this file covers |
+| `lib/api/batches.test.ts` | Query params sent to the backend (page/pageSize defaults, country/warehouse filters), response unwrapping, error propagation |
+| `lib/api/alerts.test.ts` | GET /api/alerts and PUT /api/alerts/:id/resolve request shape, response unwrapping |
+| `lib/api/client.test.ts` | 401 handling: refresh-and-retry on expired token, `skipAuthRetry` guard, `ApiError` on failure |
 | `components/batches/LocationFilter.test.tsx` | Country → warehouse cascading selection, reset behavior, "all countries/warehouses" options |
 | `components/batches/BatchTable.test.tsx` | Empty state, row rendering, column headers |
 | `components/batches/BatchRow.test.tsx` | Displayed fields (ERP reference, not internal id), status badge, navigation to batch detail |
@@ -203,16 +185,10 @@ frontend/
 │
 ├── lib/
 │   └── api/
-│       ├── mocks/                     # Local fixture data used when NEXT_PUBLIC_USE_MOCKS=true
-│       │   ├── alerts.json
-│       │   ├── batches.json
-│       │   ├── countries.json
-│       │   ├── user.json
-│       │   └── warehouses.json
 │       ├── alerts.ts                  # getUnreadAlerts / resolveAlert
 │       ├── auth.ts                    # login / refresh / logout / me functions
 │       ├── batches.ts                 # getBatches / getCountries / getWarehouses, getBatches is server-side paginated
-│       ├── client.ts                  # Low-level fetch wrapper (ApiResponse unwrapping)
+│       ├── client.ts                  # Low-level fetch wrapper (ApiResponse unwrapping, 401 refresh-and-retry)
 │       ├── constants.ts               # API base URL
 │       └── types.ts                   # Shared API request/response types
 │

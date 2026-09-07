@@ -17,7 +17,6 @@ export interface UserResponse {
   id: string;
   email: string;
   role: string;
-  country: string;
   warehouseId: string | null;
 }
 
@@ -86,8 +85,6 @@ export interface BatchListResponse {
 }
 
 // Alert info returned by GET /api/alerts (unread only)
-// kind mirrors the two trigger conditions from the spec: out-of-range
-// measurement ("alert") or batch past its 365-day expiry ("expired")
 export type AlertType = 'expired' | 'alert';
 export type AlertStatus = 'open' | 'resolved';
 

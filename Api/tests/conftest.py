@@ -29,6 +29,7 @@ from sqlalchemy.pool import StaticPool
 from app.db import get_session
 from app.main import create_app
 from app.models import Base, Batch, Country, Farm, Sensor, Warehouse
+from app.security import API_KEY_ENV_VAR
 
 # --- a country to test against ---------------------------------------------
 
@@ -53,6 +54,15 @@ BATCH_REF = "BR-2026-00042"
 STORED_AT = date(2026, 7, 30)
 QUALITY_GRADE = "A"
 BATCH_STATUS = "stored"
+
+# --- a batch that does not exist yet, for the creation route ---------------
+
+NEW_BATCH_REF = "BR-2026-00043"
+NEW_STORED_AT = date(2026, 8, 12)
+
+# The secret the routes that write compare against. A literal rather than a
+# random value: a failing assertion then shows the key it received.
+API_KEY = "test-local-api-key"
 
 
 def reference_country() -> list[Base]:
@@ -139,3 +149,42 @@ async def client(app: FastAPI) -> AsyncGenerator[AsyncClient, None]:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as http_client:
         yield http_client
+
+
+# --- authentication of the routes that write -------------------------------
+
+
+@pytest.fixture(autouse=True)
+def local_api_key(monkeypatch: pytest.MonkeyPatch) -> str:
+    """Configure the shared secret for every test.
+
+    Autouse because `require_api_key` refuses to serve when the variable is
+    unset: without this, every write test would fail on a deployment error
+    instead of on what it means to assert. The one test that checks that refusal
+    removes the variable itself.
+    """
+    monkeypatch.setenv(API_KEY_ENV_VAR, API_KEY)
+    return API_KEY
+
+
+@pytest.fixture
+def auth_headers() -> dict[str, str]:
+    """The header a legitimate caller sends."""
+    return {"X-API-Key": API_KEY}
+
+
+@pytest.fixture
+def valid_payload() -> dict[str, object]:
+    """A reception file for a batch that is not in the database yet.
+
+    camelCase, as the contract documents it, and pointing at the farm and the
+    warehouse of `reference_country()` so both references resolve.
+    """
+    return {
+        "batchRef": NEW_BATCH_REF,
+        "farmRef": FARM_REF,
+        "warehouseRef": WAREHOUSE_REF,
+        "storedAt": NEW_STORED_AT.isoformat(),
+        # Lowercase on purpose: it is what Odoo's Selection field exports.
+        "qualityGrade": "a",
+    }

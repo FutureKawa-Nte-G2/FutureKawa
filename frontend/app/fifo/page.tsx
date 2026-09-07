@@ -8,9 +8,19 @@ import { Pagination } from "@/components/ui/Pagination";
 import { getBatches } from "@/lib/api/batches";
 import { useRefresh } from "@/context/RefreshContext";
 import { useAuth } from "@/context/AuthContext";
+import { AuthGate } from "@/components/auth/AuthGate";
 import type { Batch } from "@/lib/api/types";
 
+// AuthGate only mounts FifoContent once a valid session is confirmed
 export default function FifoPage() {
+  return (
+    <AuthGate>
+      <FifoContent />
+    </AuthGate>
+  );
+}
+
+function FifoContent() {
   const [selection, setSelection] = useState<LocationSelection>({
     country: null,
     warehouse: null,
@@ -35,17 +45,9 @@ export default function FifoPage() {
   }, [selection, page, pageSize, accessToken]);
 
   useEffect(() => {
-    // fetchBatches is async; its setState calls happen after the await
-    // inside getBatches(), never synchronously in this effect body. This is
-    // the standard data-fetching-on-mount pattern documented by React itself.
-    // react-hooks/set-state-in-effect flags it anyway because it can't trace
-    // setState timing through an awaited call — known false positive here.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchBatches();
   }, [fetchBatches]);
 
-  // Declare this page as the current handler for the navbar's refresh button.
-  // Cleared on unmount so a stale page doesn't respond after navigating away.
   useEffect(() => {
     registerRefreshHandler(fetchBatches);
     return () => registerRefreshHandler(null);

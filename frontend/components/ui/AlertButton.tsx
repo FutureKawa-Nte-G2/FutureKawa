@@ -16,12 +16,36 @@ export function AlertButton() {
   const { accessToken } = useAuth();
 
   useEffect(() => {
-    getUnreadAlerts(accessToken).then(setAlerts);
+    let cancelled = false;
+
+    // GET /api/alerts isn't implemented on the backend yet
+    getUnreadAlerts(accessToken)
+      .then((result) => {
+        if (!cancelled) setAlerts(result);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          console.error("Impossible de récupérer les alertes non lues :", error);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [accessToken]);
 
   async function handleResolve(id: string) {
+    const previous = alerts;
     setAlerts((prev) => prev.filter((a) => a.id !== id));
-    await resolveAlert(id, accessToken);
+    try {
+      await resolveAlert(id, accessToken);
+    } catch (error) {
+      // PUT /api/alerts/:id/resolve is also not implemented server-side yet
+      // (deferred to a separate issue per the alerts controller backlog).
+      // Put the alert back rather than silently losing it from the list.
+      console.error("Impossible de résoudre l'alerte :", error);
+      setAlerts(previous);
+    }
   }
 
   return (

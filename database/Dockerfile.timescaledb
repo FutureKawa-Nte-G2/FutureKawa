@@ -1,0 +1,28 @@
+# Image CNPG + TimescaleDB pour le cluster Postgres HA en k8s.
+# (l'image CNPG standard n'embarque pas timescaledb)
+# build : docker build -f Dockerfile.timescaledb -t ghcr.io/futurekawa-nte-g2/cnpg-timescaledb:16-ts .
+# Tag -bookworm explicite : le tag `16` nu pointait sur une base Debian bullseye,
+# dont le dépôt de sécurité est expiré — apt-get update y échoue en dur et
+# l'image n'était plus constructible.
+FROM ghcr.io/cloudnative-pg/postgresql:16-bookworm
+# ARG APRÈS le FROM : un ARG pré-FROM n'est pas visible dans les RUN de l'étape.
+ARG PG_MAJOR=16
+# Épinglé pour matcher l'image locale timescale/timescaledb:2.17.2-pg16 (pas de dérive de version).
+ARG TS_VERSION=2.17.2
+USER root
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends gnupg curl ca-certificates lsb-release; \
+    echo "deb https://packagecloud.io/timescale/timescaledb/debian/ $(lsb_release -cs) main" > /etc/apt/sources.list.d/timescaledb.list; \
+    curl -fsSL https://packagecloud.io/timescale/timescaledb/gpgkey | gpg --dearmor -o /etc/apt/trusted.gpg.d/timescaledb.gpg; \
+    apt-get update; \
+    # Épingler AUSSI le loader : c'est lui qui fournit timescaledb.control, donc
+    # le default_version de l'extension. Sans cette contrainte apt prend le
+    # dernier loader publié, le control annonce une version dont aucun script
+    # d'installation n'est présent, et CREATE EXTENSION échoue à l'initdb.
+    apt-get install -y --no-install-recommends \
+      "timescaledb-2-postgresql-${PG_MAJOR}=${TS_VERSION}*" \
+      "timescaledb-2-loader-postgresql-${PG_MAJOR}=${TS_VERSION}*"; \
+    apt-get purge -y --auto-remove gnupg curl lsb-release; \
+    rm -rf /var/lib/apt/lists/*
+USER 26

@@ -1,0 +1,20 @@
+# Copier en terraform.tfvars et adapter. NE PAS committer terraform.tfvars.
+proxmox_endpoint  = "https://192.168.1.10:8006/"
+proxmox_api_token = "root@pam!terraform=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+proxmox_insecure  = true
+proxmox_node      = "pve"
+
+# Cluster k3s HA : 3 VMs sur le même hôte physique.
+node_count = 3
+vm_ipv4_addresses = [
+  "192.168.1.50/24", # nœud 0 (cluster-init)
+  "192.168.1.51/24", # nœud 1
+  "192.168.1.52/24", # nœud 2
+]
+vm_gateway = "192.168.1.1"
+
+# openssl rand -hex 32
+k3s_token = "REMPLACER_PAR_UN_SECRET_ALEATOIRE"
+
+ssh_public_keys = ["ssh-ed25519 AAAA... toi@poste"]
+namespaces      = ["futurekawa"]

@@ -1,5 +1,17 @@
 # FutureKawa — Diagrammes d'architecture
 
+> [!IMPORTANT]
+> **Document partiellement obsolète.** L'ingestion décrite ici (pont **Telegraf** vers une
+> hypertable `conditions`, migrations **Flyway**) a été remplacée par les **consumers Python**
+> (`Api/app/consumers/`) écrivant dans `measurements`, et par les migrations **Alembic**.
+> Le contrat de topic a changé lui aussi : `futurekawa/<code capteur>` avec les champs
+> `temp`/`humidity`, et non `futurekawa/{pays}/{code_mqtt}/conditions` avec
+> `temperature`/`humidite`.
+>
+> Source de vérité du schéma : `Api/app/models.py` + `Api/alembic/` (ADR-001).
+> Déploiement à jour : [`database/README.md`](../README.md).
+> Réécriture de ce document à planifier.
+
 Diagrammes Mermaid documentant les choix de conception de la solution de suivi
 des stocks et conditions de stockage (MSPR Bloc 4).
 

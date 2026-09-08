@@ -151,7 +151,94 @@ services:
       retries: 5
     restart: unless-stopped
 
+  # Schéma de la base pays. Alembic plutôt qu'EF ici : l'API pays est en
+  # Python, et sa migration initiale crée l'hypertable TimescaleDB.
+  country-migrate:
+    build:
+      context: ./Api
+    image: futurekawa/country-api:dev
+    container_name: futurekawa-country-migrate
+    command: ["alembic", "upgrade", "head"]
+    environment: &country-env
+      DATABASE_URL: postgresql+asyncpg://${WAREHOUSE_DB_USER:-futurekawa}:${WAREHOUSE_DB_PASSWORD:-futurekawa}@warehouse-db:5432/${WAREHOUSE_DB_NAME:-futurekawa_br}
+      LOCAL_API_KEY: ${LOCAL_API_KEY:-change-me}
+    depends_on:
+      warehouse-db:
+        condition: service_healthy
+    restart: "no"
+
+  country-api:
+    image: futurekawa/country-api:dev
+    container_name: futurekawa-country-api
+    environment: *country-env
+    ports:
+      - "127.0.0.1:${COUNTRY_API_PORT:-8000}:8000"
+    depends_on:
+      country-migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 3s
+      start_period: 10s
+      retries: 5
+    restart: unless-stopped
+
+  # Broker MQTT. Les capteurs publient dessus, les consumers y sont abonnés ;
+  # il ne porte aucune logique.
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: futurekawa-mosquitto
+    ports:
+      - "127.0.0.1:${MQTT_PORT:-1883}:1883"
+    volumes:
+      - ./infra/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto-data:/mosquitto/data
+    restart: unless-stopped
+    healthcheck:
+      # Un abonnement réel plutôt qu'un ping TCP : le port peut accepter la
+      # connexion avant que le broker ne serve les souscriptions.
+      test: ["CMD-SHELL", "mosquitto_sub -h localhost -t '$$SYS/#' -C 1 -W 2 >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Les deux consumers de l'US #32, dans le processus dédié prévu par
+  # app/consumers/runner.py. Même image que l'API : seule la commande change.
+  country-consumers:
+    image: futurekawa/country-api:dev
+    container_name: futurekawa-country-consumers
+    command: ["python", "-m", "app.consumers.runner"]
+    environment:
+      <<: *country-env
+      MQTT_BROKER_HOST: mosquitto
+      MQTT_BROKER_PORT: "1883"
+    depends_on:
+      country-migrate:
+        condition: service_completed_successfully
+      mosquitto:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # L'URL que le NAVIGATEUR appelle, pas celle du réseau Docker :
+        # http://siege-api:8080 ne résout que depuis un conteneur.
+        NEXT_PUBLIC_API_BASE_URL: http://localhost:${SIEGE_API_PORT:-55648}
+        NEXT_PUBLIC_USE_MOCKS: "false"
+    image: futurekawa/frontend:dev
+    container_name: futurekawa-frontend
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    depends_on:
+      siege-api:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
+  mosquitto-data:
   odoo-db-data:
   odoo-data:
   warehouse-db-data:

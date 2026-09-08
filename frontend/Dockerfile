@@ -18,8 +18,12 @@ COPY . .
 # Les NEXT_PUBLIC_* sont inlinées dans le bundle au moment du build, pas lues au
 # démarrage : les passer en ARG est la seule façon de les faire arriver jusqu'au
 # navigateur. Conséquence : changer l'URL de l'API impose de rebuilder l'image.
-ARG NEXT_PUBLIC_API_BASE_URL
-ARG NEXT_PUBLIC_USE_MOCKS
+# Valeurs par défaut et non des ARG nus : un ARG non fourni vaut la chaîne
+# vide, pas undefined, et le `??` de lib/api/constants.ts ne retombe alors pas
+# sur son défaut. Un build sans --build-arg produirait un bundle tapant des URL
+# relatives sur sa propre origine. On reprend ici les mêmes défauts que le code.
+ARG NEXT_PUBLIC_API_BASE_URL=http://localhost:55648
+ARG NEXT_PUBLIC_USE_MOCKS=false
 ENV NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL} \
     NEXT_PUBLIC_USE_MOCKS=${NEXT_PUBLIC_USE_MOCKS} \
     NEXT_TELEMETRY_DISABLED=1

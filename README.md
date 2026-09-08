@@ -56,10 +56,10 @@ make db     # démarre odoo-db et siege-db
 Les bases sont exposées sur la machine hôte, pour que chacun continue à
 développer nativement :
 
-| Base | Rôle | Port hôte |
-| ---- | ---- | --------- |
-| `odoo-db` | base d'Odoo | 5433 |
-| `siege-db` | base applicative du backend siège | 5435 |
+| Base       | Rôle                              | Port hôte |
+| ---------- | --------------------------------- | --------- |
+| `odoo-db`  | base d'Odoo                       | 5433      |
+| `siege-db` | base applicative du backend siège | 5435      |
 
 > **Si tu n'as pas de PostgreSQL installé sur ta machine**, mets
 > `SIEGE_DB_PORT=5432` dans ton `.env` : `appsettings.Development.json`
@@ -81,6 +81,8 @@ dotnet ef database update --project FutureKawaSiege.Data --startup-project Futur
 # Pour peupler la base de données locale à la 1ère execution
 dotnet run --project FutureKawaSiege.API
 ```
+
+En développement, la documentation interactive **Scalar** est disponible sur `https://localhost:55648/scalar/v1` (token JWT pré-rempli pour `test@futurekawa.com`). Voir [backend/FutureKawaSiege.API/README.md](backend/FutureKawaSiege.API/README.md).
 
 ### 3. ERP Odoo (Docker)
 

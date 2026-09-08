@@ -100,7 +100,7 @@ public class OrderService : IOrderService
 
         await _shipmentScheduler.ScheduleShipmentAsync(
             order.Id,
-            TimeSpan.FromSeconds(5),
+            TimeSpan.FromSeconds(60),
             cancellationToken);
 
         _logger.LogInformation(

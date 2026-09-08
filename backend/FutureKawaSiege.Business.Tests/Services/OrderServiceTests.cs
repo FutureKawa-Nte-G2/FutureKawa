@@ -113,7 +113,7 @@ public class OrderServiceTests : IDisposable
 
         await _shipmentScheduler.Received(1).ScheduleShipmentAsync(
             Arg.Any<Guid>(),
-            TimeSpan.FromSeconds(5),
+            TimeSpan.FromSeconds(60),
             Arg.Any<CancellationToken>());
     }
 

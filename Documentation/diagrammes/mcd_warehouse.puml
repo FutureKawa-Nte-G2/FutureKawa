@@ -100,6 +100,17 @@ entity "Mesure" as Measurement {
   * temperature : decimal
 }
 
+entity "Notification" as Notification {
+  * id : UUID <<PK>>
+  --
+  * warehouse_id : UUID <<FK>>
+  * type : string
+  batch_id : UUID <<FK>>
+  order_id : UUID <<FK>>
+  * created_at : datetime
+  read_at : datetime
+}
+
 entity "Alerte" as Alert {
   * id : UUID <<PK>>
   --
@@ -122,6 +133,9 @@ Sensor ||--|{ Measurement : "prend"
 Sensor ||--o{ SensorAssignment : "est assigné"
 Batch ||--o{ SensorAssignment : "est suivi par"
 Warehouse ||--o{ Alert : "lève alerte condition"
+Warehouse ||--o{ Notification : "reçoit"
+Batch ||--o{ Notification : "motive"
+Order ||--o{ Notification : "motive"
 Batch ||--o{ Alert : "lève alerte expiration"
 Order ||--|{ OrderLine : "contient"
 Order }o--o{ Batch : "associe"

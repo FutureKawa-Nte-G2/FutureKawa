@@ -17,6 +17,7 @@ from decimal import Decimal
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Date,
     DateTime,
     ForeignKey,
@@ -45,6 +46,12 @@ BATCH_STATUSES = ("stored", "shipped", "delivered", "expired")
 
 ALERT_TYPES = ("condition", "expiration")
 ALERT_STATUSES = ("active", "resolved")
+
+# What a notification tells the warehouse about. `batch_non_compliant` is
+# written by the quality service alongside a `condition` alert (US #30);
+# `order_received` by the order service. Same table, same read API, two
+# producers — hence a type rather than two tables.
+NOTIFICATION_TYPES = ("batch_non_compliant", "order_received")
 
 
 # --- reference data --------------------------------------------------------
@@ -224,6 +231,63 @@ class SensorAssignment(Base):
         ),
         # The history query reads "the windows of this batch, oldest first".
         Index("ix_sensor_assignments_batch", "batch_id", "assigned_at"),
+    )
+
+
+class Notification(Base):
+    """What a warehouse is told, as the bell reads it.
+
+    Distinct from `Alert`, which is the technical record of a breach. An alert
+    says a threshold was crossed; a notification says someone has to look at
+    something. US #30 has the quality service write both in one operation, and
+    the order service write notifications of its own — two producers, one table,
+    one read API.
+
+    The subject is carried by a foreign key rather than a rendered sentence:
+    the wording belongs to the API, and a stored message would go stale the day
+    a batch reference changes. `notification_type` says which key is filled.
+    """
+
+    __tablename__ = "notifications"
+
+    notification_id: Mapped[uuid.UUID] = mapped_column(
+        primary_key=True, default=uuid.uuid4
+    )
+    warehouse_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("warehouses.warehouse_id")
+    )
+    notification_type: Mapped[str] = mapped_column(String(32))
+    # Exactly one of the two is filled, enforced below. Nullable because a
+    # notification concerns either a batch or an order, never both.
+    batch_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("batches.batch_id"), nullable=True
+    )
+    order_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("orders.id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("CURRENT_TIMESTAMP")
+    )
+    # NULL while unread. A timestamp rather than a boolean: "when did someone
+    # see this" is the question a quality review asks afterwards.
+    read_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    __table_args__ = (
+        # A data rule, not a code rule: a `batch_non_compliant` with no batch is
+        # a notification the frontend cannot route anywhere, and no amount of
+        # care in one service stops another from writing one.
+        CheckConstraint(
+            "(notification_type = 'batch_non_compliant' AND batch_id IS NOT NULL "
+            "AND order_id IS NULL) OR "
+            "(notification_type = 'order_received' AND order_id IS NOT NULL "
+            "AND batch_id IS NULL)",
+            name="ck_notification_subject_matches_type",
+        ),
+        # Every read of this table is "this warehouse's notifications, newest
+        # first", with the unread ones asked for far more often than the rest.
+        Index("ix_notifications_warehouse_created", "warehouse_id", "created_at"),
     )
 
 

@@ -39,7 +39,7 @@ pytestmark = pytest.mark.asyncio
 
 
 async def test_should_create_every_table_of_the_mld(empty_session):
-    """The 12 tables of mld_warehouse.puml, no more and no less."""
+    """The 13 tables of mld_warehouse.puml, no more and no less."""
     assert set(Base.metadata.tables) == {
         "countries",
         "farms",
@@ -49,6 +49,7 @@ async def test_should_create_every_table_of_the_mld(empty_session):
         "sensors",
         "sensor_assignments",
         "measurements",
+        "notifications",
         "alerts",
         "orders",
         "order_lines",

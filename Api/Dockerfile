@@ -5,7 +5,9 @@
 #   alembic upgrade head          -> migrations, puis sortie
 # Contexte de build : ./Api
 
-ARG PYTHON_VERSION=3.12
+# Même version que le job CI de l'API Python : une image plus ancienne ferait
+# diverger l'exécution locale de ce que la CI valide.
+ARG PYTHON_VERSION=3.13
 
 FROM python:${PYTHON_VERSION}-slim AS runtime
 WORKDIR /app

@@ -1,288 +1,358 @@
 # FutureKawa — Diagrammes d'architecture
 
-> [!IMPORTANT]
-> **Document partiellement obsolète.** L'ingestion décrite ici (pont **Telegraf** vers une
-> hypertable `conditions`, migrations **Flyway**) a été remplacée par les **consumers Python**
-> (`Api/app/consumers/`) écrivant dans `measurements`, et par les migrations **Alembic**.
-> Le contrat de topic a changé lui aussi : `futurekawa/<code capteur>` avec les champs
-> `temp`/`humidity`, et non `futurekawa/{pays}/{code_mqtt}/conditions` avec
-> `temperature`/`humidite`.
+Diagrammes Mermaid documentant les choix de conception de la solution de suivi des
+stocks et des conditions de stockage (MSPR Bloc 4).
+
+> **Moteur de données unique : PostgreSQL 16 + TimescaleDB** — métier relationnel et
+> relevés IoT dans la même base, `measurements` en hypertable. Le projet répond donc à
+> l'exigence SQL du cahier sans déviation : la corrélation lot↔mesures est une jointure
+> native, pas une orchestration entre deux moteurs.
 >
-> Source de vérité du schéma : `Api/app/models.py` + `Api/alembic/` (ADR-001).
-> Déploiement à jour : [`database/README.md`](../README.md).
-> Réécriture de ce document à planifier.
-
-Diagrammes Mermaid documentant les choix de conception de la solution de suivi
-des stocks et conditions de stockage (MSPR Bloc 4).
-
-> **Moteur de données unique : PostgreSQL 16 + TimescaleDB** (métier relationnel +
-> relevés IoT en hypertable). Le projet est **conforme à l'exigence SQL** du cahier.
-> Rendu : GitHub/GitLab affichent ces blocs nativement, ou https://mermaid.live.
+> Source de vérité du schéma : `Api/app/models.py` + `Api/alembic/`
+> ([ADR-001](../../Documentation/adr/001-gouvernance-schema-donnees.md)). Ces diagrammes
+> sont des **vues dérivées** : en cas de divergence, le code fait foi.
 
 ---
 
 ## 1. Architecture distribuée (pays ↔ siège)
 
-Topologie répartie : un backend autonome par pays (PostgreSQL/TimescaleDB + broker
-MQTT + API REST), un siège agrégateur. Le siège **pull** le relationnel léger et
-**proxy** les courbes à la demande — communication **uniquement via l'API**, jamais
-en base. Démo mono-backend, mais architecture conçue pour N pays.
+Un backend autonome par pays — base, broker MQTT, API REST — et un siège agrégateur.
+Le siège **tire** les données par HTTP ; il n'ouvre jamais de connexion à la base d'un
+pays. La démo tourne avec un seul pays, mais rien dans la topologie n'en suppose un seul.
 
 ```mermaid
 flowchart LR
-    subgraph PAYS["Backend Pays — ex. Bresil (conteneurise)"]
-        IOT["Capteur IoT<br/>ESP32 + DHT22"]
-        MQTT["Broker MQTT<br/>Mosquitto (pont, pub/sub)"]
-        BRIDGE["Telegraf<br/>mqtt_consumer -> postgresql"]
-        ALERTER["Consumer d'alerte<br/>(code, abonne MQTT)"]
-        DB[("PostgreSQL + TimescaleDB<br/>metier + hypertable conditions")]
-        API_P["API REST Pays<br/>lecture (service)"]
-        CRON["Job quotidien<br/>peremption lots"]
-        IOT -->|"publish"| MQTT
-        MQTT -->|"subscribe (persistance)"| BRIDGE
-        MQTT -->|"subscribe (alerte)"| ALERTER
-        BRIDGE -->|"INSERT conditions (role telegraf)"| DB
-        ALERTER -->|"seuils + dedup + alerte"| DB
-        CRON -->|"lit date_stockage"| DB
-        API_P -->|"lit vues (role apiread)"| DB
+    subgraph PAYS["Backend pays — ex. Bresil"]
+        IOT["Capteur ESP32 + DHT22"]
+        MQTT["Mosquitto<br/>(pont pub/sub, aucune logique)"]
+        ING["Consumer persistance<br/>app/services/ingestion.py"]
+        QUA["Consumer qualite<br/>app/services/quality.py"]
+        DB[("PostgreSQL 16 + TimescaleDB<br/>metier + hypertable measurements")]
+        API_P["API pays (FastAPI)"]
+        IOT -->|"publish futurekawa/&lt;capteur&gt;"| MQTT
+        MQTT -->|"subscribe"| ING
+        MQTT -->|"subscribe"| QUA
+        ING -->|"INSERT measurements"| DB
+        QUA -->|"is_compliant + alerte + notification"| DB
+        API_P -->|"lit"| DB
     end
 
-    subgraph SIEGE["Siege (conteneurise)"]
-        AGG["Backend central<br/>agregateur"]
-        CACHE[("Cache relationnel<br/>read-model C-lite")]
-        FRONT["Frontend Web"]
-        AGG --> CACHE
-        FRONT -->|"HTTP + refresh periodique"| AGG
+    subgraph SIEGE["Siege"]
+        AGG["Backend .NET"]
+        SDB[("PostgreSQL<br/>agregat journalier + metier siege")]
+        FRONT["Frontend Next.js"]
+        ODOO["Odoo 18"]
+        AGG --> SDB
+        FRONT -->|"HTTP (meme origine via l'Ingress)"| AGG
+        ODOO -->|"webhook commandes"| AGG
     end
 
-    R["Responsable<br/>d'exploitation"]
+    AGG -->|"PULL periodique<br/>GET /api/measurements (agregat de la veille)"| API_P
 
-    AGG -->|"PULL periodique<br/>stocks - alertes"| API_P
-    AGG -.->|"PROXY a la demande<br/>courbes d'un lot"| API_P
-    ALERTER -->|"email sur alerte"| R
+    R["Responsable d'exploitation"] --> FRONT
 ```
 
-**Décisions illustrées :** **fan-out MQTT** — deux abonnés indépendants (Telegraf → DB
-pour la persistance, consumer d'alerte → DB + email en temps-réel) · le broker reste
-un pont pub/sub · **un seul moteur de données par pays** · API en lecture seule via un
-rôle dédié · siège agrégateur cache C-lite · pull relationnel + proxy time-series · API-only.
+**Décisions illustrées :** fan-out MQTT — les deux consumers sont **indépendants**, un
+échec de l'évaluation qualité n'empêche pas la persistance et réciproquement · le broker
+reste un pont sans logique · un seul moteur de données par pays · communication
+pays↔siège uniquement par HTTP.
+
+> **Limite connue.** Le seul flux effectivement branché entre pays et siège est
+> l'agrégat journalier des mesures. Les lots et les alertes ne traversent pas encore :
+> voir §5.
 
 ---
 
-## 2. Modèle de données (PostgreSQL/TimescaleDB)
+## 2. Modèle de données
 
-Identité **hybride** : `id` (UUID technique, anti-collision en contexte réparti) +
-code lisible (`code_metier`, `code_mqtt`). Les relevés vivent dans la **hypertable
-`conditions`** (même moteur). Le **statut de lot n'est pas une colonne** : dérivé au read (diagramme 6).
+Identité hybride : UUID technique (anti-collision en contexte réparti) doublé d'une
+référence lisible (`batch_ref`, `warehouse_ref`, `sensor.code`) que l'ERP et le firmware
+manipulent.
 
 ```mermaid
 erDiagram
-    EXPLOITATION ||--o{ ENTREPOT : possede
-    ENTREPOT    ||--o{ LOT : stocke
-    ENTREPOT    ||--o{ ALERTE : "condition"
-    LOT         ||--o{ ALERTE : "peremption"
-    ENTREPOT    ||--o{ CONDITIONS : "code_mqtt (jointure logique)"
+    COUNTRIES  ||--o{ WAREHOUSES : "possede"
+    COUNTRIES  ||--o{ FARMS : "possede"
+    WAREHOUSES ||--o{ BATCHES : "stocke"
+    FARMS      ||--o{ BATCHES : "produit"
+    WAREHOUSES ||--o{ SENSORS : "equipe"
+    SENSORS    ||--o{ SENSOR_ASSIGNMENTS : "suit"
+    BATCHES    ||--o{ SENSOR_ASSIGNMENTS : "surveille par"
+    SENSORS    ||--o{ MEASUREMENTS : "releve"
+    WAREHOUSES ||--o{ ALERTS : "condition"
+    BATCHES    ||--o{ ALERTS : "peremption"
+    WAREHOUSES ||--o{ NOTIFICATIONS : "destinataire"
 
-    EXPLOITATION {
-        uuid id PK
-        string pays
-        string nom
-        numeric temp_ideale
-        numeric hum_ideale
-        numeric tol_temp
-        numeric tol_hum
+    COUNTRIES {
+        uuid country_id PK
+        string country_code "UNIQUE"
+        numeric nominal_temp
+        numeric tolerance_temp
+        numeric nominal_humidity
+        numeric tolerance_humidity
     }
-    ENTREPOT {
-        uuid id PK
-        uuid exploitation_id FK
-        string nom
-        string code_mqtt "UNIQUE, ex BR-ENT-01"
+    WAREHOUSES {
+        uuid warehouse_id PK
+        uuid country_id FK
+        string warehouse_ref "UNIQUE, reference ERP"
     }
-    LOT {
-        uuid id PK
-        string code_metier "BR-2026-00042"
-        uuid entrepot_id FK
-        timestamptz date_stockage
-        timestamptz date_sortie "nullable = en stock"
+    BATCHES {
+        uuid batch_id PK
+        uuid warehouse_id FK
+        uuid farm_id FK
+        string batch_ref "UNIQUE"
+        date stored_at
+        date shipped_at "NULL = en stock (colonne lue par le FIFO)"
+        string quality_grade "nullable, l'ERP ne la connait pas toujours"
+        string batch_status
+        boolean is_compliant
     }
-    ALERTE {
-        uuid id PK
-        uuid entrepot_id FK
-        uuid lot_id FK "nullable (peremption)"
-        enum type "condition | peremption"
-        enum etat "active | resolue"
-        timestamptz created_at
-        timestamptz resolved_at "nullable"
+    SENSORS {
+        uuid sensor_id PK
+        uuid warehouse_id FK
+        string code "UNIQUE, dernier segment du topic MQTT"
+        boolean is_active
     }
-    CONDITIONS {
-        timestamptz time "hypertable Timescale"
-        string pays
-        string entrepot_id "= code_mqtt"
-        float temperature
-        float humidite
+    SENSOR_ASSIGNMENTS {
+        uuid sensor_assignment_id PK
+        uuid sensor_id FK
+        uuid batch_id FK
+        timestamptz assigned_at
+        timestamptz released_at "NULL = assignation ouverte"
+    }
+    MEASUREMENTS {
+        uuid measurement_id PK
+        timestamptz meas_date PK "colonne de partitionnement"
+        uuid sensor_id FK
+        numeric meas_temp
+        numeric meas_humidity
+    }
+    ALERTS {
+        uuid alert_id PK
+        uuid warehouse_id FK
+        uuid batch_id FK "NULL pour une alerte de condition"
+        string alert_type "condition | expiration"
+        string alert_status
+        timestamptz resolved_at
+    }
+    NOTIFICATIONS {
+        uuid notification_id PK
+        uuid warehouse_id FK
+        string notification_type
+        uuid batch_id FK "nullable"
+        uuid order_id FK "nullable"
+        timestamptz read_at
     }
 ```
 
-**Décisions illustrées :** seuils/tolérances au niveau pays · UUID + code métier ·
-`entrepot.code_mqtt` (clé de rattachement des relevés) · `lot.date_sortie` (fenêtre) ·
-relevés en hypertable jointe par `code_mqtt` · alertes append-only · pas de colonne `statut`.
+**Décisions illustrées :**
+
+- **Seuils portés par le pays**, sous forme de bande `nominal ± tolerance` : un relevé
+  sort de la plage aussi bien par le bas que par le haut.
+- **`SENSOR_ASSIGNMENTS` est la pièce qui rend le reste possible.** Un capteur appartient
+  à une salle, pas à un lot, et publie en continu — y compris quand la salle est vide.
+  Sans cette table, « les relevés de ce lot » ne s'exprime pas : on servirait tout
+  l'historique de la salle pour chaque lot qu'elle a hébergé.
+- **Clé primaire composite sur `MEASUREMENTS`.** TimescaleDB exige la colonne de
+  partitionnement dans toute contrainte d'unicité, clé primaire comprise. Le couple
+  `(sensor_id, meas_date)` porte en plus l'idempotence : un broker en QoS 1 redélivre, et
+  rejouer un message ne doit pas dupliquer une ligne.
+- **`ALERTS` et `NOTIFICATIONS` sont distinctes.** Une alerte est le constat technique
+  d'un franchissement de seuil ; une notification dit que quelqu'un doit regarder quelque
+  chose. La notification porte une clé étrangère et non une phrase rendue : le libellé
+  appartient à l'API, et un message stocké vieillirait mal.
+
+> **Point ouvert signalé par l'ADR-001** : `batch_status` est une colonne stockée, et
+> trois vocabulaires coexistent encore (documentation, tuples Python, enum C# du siège).
+> À unifier avant de s'appuyer dessus pour de l'affichage.
 
 ---
 
-## 3. Flux IoT et levée d'alerte (fan-out événementiel)
+## 3. Flux IoT et détection de non-conformité
 
-Le même message MQTT est consommé par **deux abonnés indépendants** : Telegraf le
-persiste dans la hypertable `conditions` ; un **consumer d'alerte** (en code) évalue les
-seuils en temps-réel, gère la déduplication et envoie l'email. Le chemin de persistance
-reste intact, l'alerting n'en dépend pas.
+Le même message est consommé par **deux abonnés indépendants**, chacun avec sa connexion
+MQTT et sa session de base. Le broker délivre aux deux ; aucun ne dépend du travail de
+l'autre.
 
 ```mermaid
 sequenceDiagram
-    participant C as Capteur IoT
-    participant M as Broker MQTT
-    participant T as Telegraf
+    participant C as Capteur
+    participant M as Mosquitto
+    participant I as Consumer persistance
+    participant Q as Consumer qualite
     participant P as PostgreSQL/TimescaleDB
-    participant A as Consumer d'alerte
-    participant R as Responsable expl.
 
-    C->>M: publish {temp, hum}
+    C->>M: publish futurekawa/CODE-CAPTEUR<br/>{measuredAt, temp, humidity}
     par Persistance
-        M->>T: subscribe
-        T->>P: INSERT conditions (role telegraf)
-    and Alerte (temps-reel)
-        M->>A: subscribe
-        A->>P: lit seuils pays + alertes actives
-        A->>A: evalue seuils +/- tolerance
-        alt hors plage ET aucune alerte active
-            A->>P: cree alerte (active) - dedup garantie par index
-            A->>R: email
-        else alerte active deja existante
-            A->>A: ignore (anti-spam)
-        else retour dans la plage
-            A->>P: passe alerte a resolue
+        M->>I: subscribe
+        I->>P: capteur actif ? assignation ouverte a la date du releve ?
+        alt les deux conditions tenues
+            I->>P: INSERT measurements (idempotent)
+        else capteur inconnu, inactif, ou au repos
+            I->>I: releve ignore — fonctionnement normal, pas une erreur
+        end
+    and Evaluation qualite
+        M->>Q: subscribe
+        Q->>P: lit les seuils du pays
+        Q->>Q: hors de nominal +/- tolerance ?
+        alt hors plage et lot encore conforme
+            Q->>P: batch.is_compliant = false<br/>+ alerte + notification
+        else deja signale
+            Q->>Q: ignore (pas de notification par releve)
         end
     end
 ```
 
-**Décisions illustrées :** fan-out pub/sub · alerting en code (testable), indépendant
-de la persistance · déduplication par épisode garantie par la base · email local au pays.
-(L'alerte « lot > 365 j » n'a pas d'événement MQTT → **job quotidien** lisant PostgreSQL.)
+**Décisions illustrées :** l'écriture est **filtrée par l'assignation** — écrire tout ce
+qui arrive remplirait `measurements` de bruit qu'aucune requête ne saurait rattacher à un
+lot · toute exception sur un message est journalisée puis avalée : un relevé malformé est
+l'incident d'un message, pas du consumer, et le laisser remonter arrêterait la
+surveillance de toute la salle pour une ligne fautive · déduplication vérifiée : 24
+relevés hors seuil consécutifs produisent **une** notification.
 
 ---
 
-## 4. Consultation des courbes d'un lot (smart endpoint 100 % SQL)
+## 4. Consultation des courbes d'un lot
 
-La corrélation lot↔mesures est une **jointure SQL native** (même moteur) : un seul
-endpoint, une seule requête. Le siège ne fait que **proxy**, le frontend affiche.
+La corrélation lot↔mesures est une jointure SQL native, dans le même moteur : un seul
+endpoint, une seule requête.
 
 ```mermaid
 sequenceDiagram
-    participant F as Frontend (siege)
-    participant S as Backend Siege (proxy)
-    participant B as Backend Pays (API)
-    participant P as PostgreSQL/TimescaleDB (pays)
+    participant F as Frontend
+    participant B as API pays
+    participant P as PostgreSQL/TimescaleDB
 
-    F->>S: GET /lots/{id}/mesures
-    S->>B: proxy GET /lots/{id}/mesures
-    B->>P: SELECT * FROM v_lot_mesures WHERE lot_id=?
-    Note over P: jointure lot->entrepot->conditions<br/>sur code_mqtt + fenetre [date_stockage, date_sortie|now)
-    P-->>B: serie temp/hum bornee
-    B-->>S: serie JSON
-    S-->>F: serie JSON
-    F->>F: affiche les courbes
+    F->>B: GET /api/batches/{batch_id}/measurements
+    B->>P: jointure batches -> sensor_assignments -> measurements
+    Note over P: fenetre bornee par assigned_at / released_at,<br/>agregats journaliers calcules en SQL
+    P-->>B: points journaliers + seuils + alertes
+    B-->>F: JSON
+    F->>F: trace les courbes
 ```
 
-**Décisions illustrées :** corrélation = **une requête SQL** (plus d'orchestration
-bi-moteur) · jointure sur `code_mqtt` + fenêtre temporelle · le time-series ne transite
-jamais en masse vers le siège (proxy à la demande).
+**Décisions illustrées :** la fenêtre temporelle vient de l'assignation, pas de la date de
+stockage du lot · les agrégats sont calculés en base et non côté API · les seuils du pays
+sont renvoyés avec la série, pour que le client trace les bandes sans second appel.
 
 ---
 
-## 5. Cycle de vie d'une alerte
+## 5. Ce qui traverse — et ce qui ne traverse pas encore
 
-Append-only : une ligne par occurrence. La résolution pose `resolved_at` sans
-réécrire l'historique. C'est la sémantique des systèmes de supervision.
+```mermaid
+flowchart LR
+    subgraph P["Pays"]
+        PM[("measurements")]
+        PB[("batches")]
+        PN[("alerts / notifications")]
+    end
+    subgraph S["Siege"]
+        SM[("Measurements")]
+        SB[("Batches — vide")]
+        SA["GET /api/alerts — absent"]
+    end
+    FRONT["Frontend"]
+
+    PM -->|"MeasurementSync : agregat de la veille — OK"| SM
+    PB -.->|"aucun flux"| SB
+    PN -.->|"aucun emetteur cote pays"| SA
+    FRONT -->|"appelle GET /api/alerts"| SA
+```
+
+**État vérifié sur la stack complète :**
+
+| Flux | État |
+|---|---|
+| Agrégat journalier des mesures, pays → siège | **fonctionne** (3 entrepôts, 3 persistés, 0 erreur) |
+| Lots, pays → siège | **aucun flux** — la table du siège reste vide |
+| Alertes, pays → siège | **aucun émetteur** : `quality.py` n'émet aucun appel HTTP |
+| `GET /api/alerts` côté siège | **n'existe pas** (405) — seul un `POST` de réception est implémenté |
+
+Le `AlertsController` du siège annonce dans sa documentation qu'il reçoit les alertes de
+l'API pays, avec authentification par `X-Api-Key`. Le récepteur existe donc, mais
+**personne ne l'appelle**, et **rien ne relit** ce qu'il enregistrerait. La cloche
+d'alertes du frontend ne peut par conséquent jamais s'allumer. Voir les issues #33 et #39.
+
+---
+
+## 6. Cycle de vie d'une alerte
+
+Append-only : une ligne par épisode. La résolution pose `resolved_at` sans réécrire
+l'historique — c'est la sémantique des systèmes de supervision.
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Active : 1re violation detectee (cree ligne + email)
-    Active --> Active : violation persistante (anti-spam)
+    [*] --> Active : 1re violation detectee
+    Active --> Active : violation persistante (aucune nouvelle ligne)
     Active --> Resolue : retour dans la plage (resolved_at)
     Resolue --> [*]
-    note right of Active : une seule alerte active par episode (index partiel unique)
+    note right of Active : une seule alerte active par episode<br/>(contrainte en base, pas en code)
     note right of Resolue : nouvel episode = nouvelle ligne
 ```
 
-**Décisions illustrées :** alertes append-only · état `active`/`résolue` (CHECK sur
-`resolved_at`) · traçabilité par `created_at`/`resolved_at`.
-
----
-
-## 6. Statut de lot — dérivé au read
-
-Le statut n'est jamais stocké : il se calcule à l'affichage. Zéro incohérence.
-
-```mermaid
-flowchart TD
-    START["Affichage d'un lot"] --> Q0{"date_sortie<br/>renseignee ?"}
-    Q0 -->|oui| SORTI["statut = sorti"]
-    Q0 -->|non| Q1{"now - date_stockage<br/>> 365 jours ?"}
-    Q1 -->|oui| PERIME["statut = perime"]
-    Q1 -->|non| Q2{"alerte ACTIVE<br/>sur l'entrepot ?"}
-    Q2 -->|oui| EN_ALERTE["statut = en alerte"]
-    Q2 -->|non| CONFORME["statut = conforme"]
-```
-
-**Décisions illustrées :** une seule source de vérité par fait · statut = projection ·
-branche `sorti` (via `date_sortie`) · péremption calendaire (café vert, seuil unique 365 j).
+**Décisions illustrées :** l'unicité de l'alerte active est garantie **par la base** et
+non par une vérification applicative, qui laisserait passer deux consumers concurrents ·
+l'alerte « lot au-delà de 365 jours » n'a pas d'événement MQTT déclencheur : elle relève
+d'un balayage périodique, pas de ce flux.
 
 ---
 
 ## 7. Cible de déploiement — k3s multi-VM sur un hôte Proxmox
 
-Déploiement réel sur **3 VMs d'un même hôte Proxmox** → cluster k3s multi-nœuds
-(quorum etcd). **HA au niveau nœud/VM** (crash VM, panne de nœud, upgrade roulant,
-failover CNPG). Le **serveur physique reste un SPOF assumé** ; la perte de **données**
-est couverte par des **sauvegardes hors-VM**. Livrable de démo : `docker compose up`.
+Trois VMs d'un même hôte Proxmox forment un cluster k3s multi-nœuds. La haute
+disponibilité est atteinte **au niveau nœud/VM** : crash de VM, panne de nœud, upgrade
+roulant, failover CloudNativePG. Le **serveur physique reste un SPOF assumé** ; la perte
+de données est couverte par des sauvegardes hors VM.
 
 ```mermaid
 flowchart TB
     subgraph HOST["Hote Proxmox unique — SPOF assume"]
-        subgraph K3S["k3s HA (3 VMs = 3 noeuds serveurs, quorum etcd)"]
-            subgraph SL["Stateless : self-healing"]
-                DEP["Deployments : Mosquitto, Telegraf<br/>(+ API, siege, frontend hors scope)"]
+        subgraph K3S["k3s (3 VMs = 3 noeuds)"]
+            subgraph CH1["Chart futurekawa-data — un release par pays"]
+                D1["Mosquitto, API pays, consumers MQTT"]
+                PG1["CNPG + TimescaleDB, instances:2<br/>anti-affinite par noeud"]
             end
-            subgraph ST["Stateful"]
-                PG["Cluster CloudNativePG + TimescaleDB<br/>instances:2 (primary + hot standby)<br/>anti-affinite par noeud, streaming"]
-                MOS[("Mosquitto PVC<br/>StorageClass Longhorn (reattachable)")]
+            subgraph CH2["Chart futurekawa-siege — un seul release"]
+                D2["Backend .NET, frontend, Odoo"]
+                PG2["CNPG, instances:2"]
+                ING["Ingress : / -> frontend, /api -> backend"]
             end
         end
     end
-    PBS[("Sauvegardes hors-VM<br/>CNPG barman -> object store")]
-    PG -.->|"backup planifie"| PBS
-
-    R["Responsable"] -->|"kubectl / helm"| K3S
+    PBS[("Sauvegardes hors VM<br/>CNPG barman -> object store")]
+    PG1 -.->|"backup planifie"| PBS
+    PG2 -.->|"backup planifie"| PBS
 ```
 
-**Décisions illustrées :** stateless = `Deployment` (self-healing) · Postgres = **cluster
-CNPG `instances:2`** (failover opérateur, pas de quorum Postgres) · réplication par
-streaming (pas de stockage répliqué requis pour PG) · Mosquitto/Longhorn réattachable ·
-**durabilité = backups CNPG hors-VM** · SPOF hôte assumé (HA multi-hôte → diagramme 8).
+**Décisions illustrées :**
+
+- **Deux charts et non un seul** : la stack pays se déploie une fois par pays, le siège
+  est unique. Les fondre obligerait à redéployer le siège à chaque pays ajouté.
+- **Postgres = cluster CNPG `instances:2`** : le failover est piloté par l'opérateur et
+  non par un quorum entre instances, deux suffisent donc. Réplication par streaming :
+  aucun stockage répliqué n'est requis pour la base.
+- **Frontend et API sur la même origine** derrière l'Ingress. Ce n'est pas cosmétique :
+  le cookie de refresh est `SameSite=Strict`, et deux origines distinctes l'empêcheraient
+  d'être transmis — la reconnexion silencieuse au chargement échouerait.
+- **Mosquitto sur un StorageClass réattachable** (Longhorn) en multi-nœuds : `local-path`
+  épinglerait le pod à son nœud et l'ingestion ne survivrait pas à la perte de la VM.
+- **Durabilité = sauvegardes CNPG hors VM.** La réplication protège de la panne d'un
+  nœud, pas d'une suppression accidentelle.
 
 ---
 
 ## 8. Évolution vers une HA multi-hôte réelle
 
-La HA **nœud/VM** est atteinte (diagramme 7). Pour survivre à la **perte de l'hôte
-physique** (le SPOF assumé), l'évolution est un **cluster Proxmox multi-hôtes** :
+La HA nœud/VM est atteinte (§7). Pour survivre à la perte de l'hôte physique — le SPOF
+assumé — l'évolution est un cluster Proxmox multi-hôtes :
 
 ```mermaid
 flowchart TB
-    subgraph EVO["Evolution : cluster Proxmox 3 hotes"]
-        H1["Hote 1<br/>VM(s) k3s"]
-        H2["Hote 2<br/>VM(s) k3s"]
-        H3["Hote 3<br/>VM(s) k3s"]
-        CEPH[("Ceph<br/>stockage repliss inter-hotes")]
+    subgraph EVO["Cluster Proxmox 3 hotes"]
+        H1["Hote 1 — VM(s) k3s"]
+        H2["Hote 2 — VM(s) k3s"]
+        H3["Hote 3 — VM(s) k3s"]
+        CEPH[("Ceph — stockage replique inter-hotes")]
         H1 --- H2
         H2 --- H3
         H3 --- H1
@@ -292,14 +362,8 @@ flowchart TB
     end
 ```
 
-**Chemin d'évolution :** k3s réparti sur **3 hôtes Proxmox** (HA manager pour le
-failover de VM) + **Ceph** (PVC répliqués inter-hôtes) → CloudNativePG place alors ses
-instances sur des hôtes distincts (vraie tolérance à la perte d'un hôte). Aucun de ces
-éléments n'est requis par le cahier (qui demande une architecture *tolérante aux pannes*
-et une *résilience justifiée*) — ce que la solution livre déjà au niveau nœud/VM.
-
----
-
-Le cahier des charges impose une persistance **SQL** : le choix **PostgreSQL + TimescaleDB**
-(hypertable pour les relevés IoT) y répond **sans déviation** — un seul moteur, jointures
-natives, une seule stratégie de HA (CloudNativePG) et de sauvegarde (barman hors-VM).
+**Chemin d'évolution :** k3s réparti sur trois hôtes (HA manager pour le failover de VM)
+et **Ceph** pour des PVC répliqués inter-hôtes. CloudNativePG place alors ses instances
+sur des hôtes distincts, ce qui donne une vraie tolérance à la perte d'un hôte. Aucun de
+ces éléments n'est exigé par le cahier, qui demande une architecture tolérante aux pannes
+et une résilience justifiée — ce que la solution livre déjà au niveau nœud/VM.

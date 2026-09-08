@@ -55,15 +55,32 @@ dotnet run --project FutureKawaSiege.API
 
 # Tests
 dotnet test
+```
+
+## Documenter et tester l'API avec Scalar
+
+En environnement de **développement**, l'API expose une documentation interactive **Scalar** qui liste tous les endpoints et permet de les tester directement depuis le navigateur, sans copier/coller de token :
+
+| Élément          | Valeur                                             |
+| ---------------- | -------------------------------------------------- |
+| URL              | `https://localhost:55648/scalar/v1`                |
+| Authentification | JWT `Bearer` pré-rempli automatiquement (dev only) |
+| Utilisateur      | `test@futurekawa.com` (rôle `Admin`)               |
+| Validité du JWT  | 30 jours, régénéré à chaque démarrage de l'API     |
+
+- Les endpoints protégés affichent un cadenas ; clique sur un endpoint puis **Test Request** pour l'exécuter.
+- Aucun `login` manuel ni copier/coller de token n'est nécessaire : le header `Authorization: Bearer …` est déjà appliqué à toutes les requêtes.
+
+> **Note** : ce pré-remplissage est actif uniquement en `Development` (Scalar n'est pas mappé en `Production`). Le token pré-rempli correspond au user seedé via `--seed`.
 
 ## Tester les endpoints avec les fichiers `.http`
 
-En l'absence de Swagger, deux fichiers `.http` sont fournis dans `FutureKawaSiege.API/` pour tester manuellement l'API sans outil externe (Postman, curl, etc.) :
+En complément de Scalar, deux fichiers `.http` sont fournis dans `FutureKawaSiege.API/` pour tester manuellement l'API sans outil externe (Postman, curl, etc.) :
 
-| Fichier                          | Contenu                                                          |
-| --------------------------------- | ----------------------------------------------------------------- |
-| `FutureKawaSiegeBackend.http`     | Authentification (login/me/logout) et synchronisation des mesures |
-| `FutureKawaSiegeOdoo.http`        | Webhook de réception des commandes Odoo et consultation des orders |
+| Fichier                       | Contenu                                                            |
+| ----------------------------- | ------------------------------------------------------------------ |
+| `FutureKawaSiegeBackend.http` | Authentification (login/me/logout) et synchronisation des mesures  |
+| `FutureKawaSiegeOdoo.http`    | Webhook de réception des commandes Odoo et consultation des orders |
 
 ### Prérequis
 
@@ -89,6 +106,8 @@ Les fichiers `.http` supposent que la base contient déjà un utilisateur de tes
 
 ```bash
 dotnet run --project FutureKawaSiege.API -- --seed
+```
+
 ```
 
 ```

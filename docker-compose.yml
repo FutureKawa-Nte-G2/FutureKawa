@@ -127,6 +127,13 @@ services:
       Odoo__Username: ${ODOO_ADMIN_LOGIN:-admin@admin.com}
       Odoo__Password: ${ODOO_ADMIN_PASSWORD:-Not24get}
       Odoo__WebhookToken: ${ODOO_WEBHOOK_TOKEN:-futurekawa-webhook-shared-token}
+      # Sans ces deux lignes le siège n'appelle jamais l'API pays. En Production
+      # il lit appsettings.json, qui porte UseMockData=true et une LocalApiUrl
+      # pointant sur son propre /api/mock/measurements : il s'interroge lui-même
+      # et invente des relevés, sans rien logger d'anormal. Passer UseMockData à
+      # false seul ne suffit donc pas, il faut aussi dire où joindre l'API pays.
+      MeasurementSync__UseMockData: "false"
+      MeasurementSync__LocalApiUrl: ${WAREHOUSE_API_URL:-http://country-api:8000/api/measurements}
     ports:
       - "127.0.0.1:${SIEGE_API_PORT:-55648}:8080"
     depends_on:
@@ -138,6 +145,56 @@ services:
       timeout: 3s
       start_period: 20s
       retries: 5
+    restart: unless-stopped
+
+  # Schéma de la base pays. Alembic plutôt qu'EF ici : l'API pays est en
+  # Python, et sa migration initiale crée l'hypertable TimescaleDB.
+  country-migrate:
+    build:
+      context: ./Api
+    image: futurekawa/country-api:dev
+    container_name: futurekawa-country-migrate
+    command: ["alembic", "upgrade", "head"]
+    environment: &country-env
+      DATABASE_URL: postgresql+asyncpg://${WAREHOUSE_DB_USER:-futurekawa}:${WAREHOUSE_DB_PASSWORD:-futurekawa}@warehouse-db:5432/${WAREHOUSE_DB_NAME:-futurekawa_br}
+      LOCAL_API_KEY: ${LOCAL_API_KEY:-change-me}
+    depends_on:
+      warehouse-db:
+        condition: service_healthy
+    restart: "no"
+
+  country-api:
+    image: futurekawa/country-api:dev
+    container_name: futurekawa-country-api
+    environment: *country-env
+    ports:
+      - "127.0.0.1:${COUNTRY_API_PORT:-8000}:8000"
+    depends_on:
+      country-migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 3s
+      start_period: 10s
+      retries: 5
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # L'URL que le NAVIGATEUR appelle, pas celle du réseau Docker :
+        # http://siege-api:8080 ne résout que depuis un conteneur.
+        NEXT_PUBLIC_API_BASE_URL: http://localhost:${SIEGE_API_PORT:-55648}
+        NEXT_PUBLIC_USE_MOCKS: "false"
+    image: futurekawa/frontend:dev
+    container_name: futurekawa-frontend
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    depends_on:
+      siege-api:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:

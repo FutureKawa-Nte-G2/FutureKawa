@@ -1,0 +1,70 @@
+# Migrations EF puis, si activé, seed de démonstration.
+# Hooks post-install : le cluster CNPG n'existe pas encore en pre-install, un Job
+# lancé à ce moment n'aurait aucune base où se connecter. Les poids ordonnent
+# migrate (0) avant seed (1).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "futurekawa-siege.fullname" . }}-migrate
+  labels:
+    {{- include "futurekawa-siege.labels" . | nindent 4 }}
+    app.kubernetes.io/component: migrate
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: 5
+  template:
+    metadata:
+      labels:
+        {{- include "futurekawa-siege.labels" . | nindent 8 }}
+        app.kubernetes.io/component: migrate
+    spec:
+      restartPolicy: Never
+      initContainers:
+        {{- include "futurekawa-siege.waitForDb" . | nindent 8 }}
+      containers:
+        - name: migrate
+          image: {{ .Values.siegeApi.image | quote }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          args: ["--migrate"]
+          env:
+            {{- include "futurekawa-siege.apiEnv" . | nindent 12 }}
+            - name: ASPNETCORE_ENVIRONMENT
+              value: Production
+{{- if .Values.siegeApi.seed.enabled }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "futurekawa-siege.fullname" . }}-seed
+  labels:
+    {{- include "futurekawa-siege.labels" . | nindent 4 }}
+    app.kubernetes.io/component: seed
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        {{- include "futurekawa-siege.labels" . | nindent 8 }}
+        app.kubernetes.io/component: seed
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: seed
+          image: {{ .Values.siegeApi.image | quote }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          args: ["--seed"]
+          env:
+            {{- include "futurekawa-siege.apiEnv" . | nindent 12 }}
+            # DevelopmentSeeder refuse de tourner hors Development, et Testing
+            # basculerait le DbContext en mémoire : le seed partirait dans une
+            # base fantôme.
+            - name: ASPNETCORE_ENVIRONMENT
+              value: Development
+{{- end }}

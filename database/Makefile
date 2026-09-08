@@ -4,8 +4,9 @@
 # (`make up` à la racine) qui monte la stack complète, siège et frontend compris.
 # Ce Makefile ne couvre que le déploiement Kubernetes.
 SHELL := /bin/bash
-CHART := deploy/helm/futurekawa-data
-TF    := deploy/terraform
+CHART       := deploy/helm/futurekawa-data
+SIEGE_CHART := deploy/helm/futurekawa-siege
+TF          := deploy/terraform
 
 REGISTRY  ?= ghcr.io/futurekawa-nte-g2
 TS_IMAGE  ?= $(REGISTRY)/cnpg-timescaledb:16-ts
@@ -13,6 +14,13 @@ TS_IMAGE  ?= $(REGISTRY)/cnpg-timescaledb:16-ts
 # commande change — et le Job de migration l'utilise aussi, ce qui garantit que
 # le schéma ne diverge jamais du code qui le lit (ADR-001).
 API_IMAGE ?= futurekawa/country-api:dev
+SIEGE_IMAGE    ?= futurekawa/siege-api:dev
+FRONTEND_IMAGE ?= futurekawa/frontend:dev
+
+# Hôte servant frontend et API sur la même origine. Le frontend inline cette
+# valeur dans son bundle au build : la changer impose de reconstruire l'image,
+# ce que fait la cible `images`.
+INGRESS_HOST ?= futurekawa.localhost
 
 PAYS ?= BR
 NS   ?= futurekawa
@@ -28,14 +36,19 @@ help: ## Affiche cette aide
 	  | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-14s\033[0m %s\n",$$1,$$2}'
 
 # ---- Validation ----
-validate: ## Valide le chart Helm et le Terraform
-	@helm lint $(CHART) >/dev/null && helm template t $(CHART) >/dev/null && echo "helm OK"
+validate: ## Valide les charts Helm et le Terraform
+	@helm lint $(CHART) >/dev/null && helm template t $(CHART) >/dev/null && echo "helm pays OK"
+	@helm lint $(SIEGE_CHART) >/dev/null && helm template t $(SIEGE_CHART) >/dev/null && echo "helm siège OK"
 	@cd $(TF) && terraform fmt -check >/dev/null && terraform validate >/dev/null && echo "terraform OK"
 
 # ---- Images ----
-images: ## Build l'image CNPG+TimescaleDB et celle de l'API pays
+images: ## Build les 4 images (TimescaleDB, API pays, siège, frontend)
 	docker build -f Dockerfile.timescaledb -t $(TS_IMAGE) .
 	docker build -t $(API_IMAGE) ../Api
+	docker build -t $(SIEGE_IMAGE) ../backend
+	docker build -t $(FRONTEND_IMAGE) \
+	  --build-arg NEXT_PUBLIC_API_BASE_URL=http://$(INGRESS_HOST) \
+	  --build-arg NEXT_PUBLIC_USE_MOCKS=false ../frontend
 
 # ---- k8s ----
 operators: ## Installe CNPG (+ Longhorn si INSTALL_LONGHORN=true) ; KUBECONFIG requis
@@ -56,22 +69,32 @@ deploy: ## Déploie la stack d'un pays (make deploy PAYS=BR)
 	  --set consumers.image=$(API_IMAGE) \
 	  --set mosquitto.storageClass=$(MOSQUITTO_SC)
 
+deploy-siege: ## Déploie la stack siège (un seul release, central)
+	helm upgrade --install siege $(SIEGE_CHART) \
+	  -n $(NS) --create-namespace --wait --timeout 10m \
+	  --set siegeApi.image=$(SIEGE_IMAGE) \
+	  --set frontend.image=$(FRONTEND_IMAGE) \
+	  --set ingress.host=$(INGRESS_HOST)
+
 infra: ## Terraform : provisionne les VMs + k3s (nécessite terraform.tfvars)
 	cd $(TF) && terraform init && terraform apply
 
-k8s: operators deploy ## Opérateurs + déploiement (cluster prêt, images disponibles)
+k8s: operators deploy deploy-siege ## Opérateurs + stack pays + stack siège
 
 # ---- Chemin complet en local (k3d) ----
-k3d-up: ## Crée un cluster k3d local (MQTT publié sur localhost:1883)
-	k3d cluster create $(K3D_CLUSTER) --servers 1 --agents 2 -p '1883:1883@loadbalancer' --wait
+k3d-up: ## Crée un cluster k3d local (HTTP sur :80, MQTT sur :1883)
+	k3d cluster create $(K3D_CLUSTER) --servers 1 --agents 2 \
+	  -p '80:80@loadbalancer' -p '1883:1883@loadbalancer' --wait
 
 k3d-load: images ## Importe les images dans le cluster k3d
-	k3d image import $(TS_IMAGE) $(API_IMAGE) -c $(K3D_CLUSTER)
+	k3d image import $(TS_IMAGE) $(API_IMAGE) $(SIEGE_IMAGE) $(FRONTEND_IMAGE) -c $(K3D_CLUSTER)
 
 k3d: k3d-up k3d-load ## Cluster + images + opérateurs + déploiement, en local
 	$(MAKE) operators INSTALL_LONGHORN=false
 	$(MAKE) deploy MOSQUITTO_SC=
-	@echo ">>> 'make k3d-smoke' pour tester, 'make k3d-down' pour supprimer."
+	$(MAKE) deploy-siege
+	@echo ">>> Frontend : curl -H 'Host: $(INGRESS_HOST)' http://localhost/"
+	@echo ">>> 'make k3d-smoke' pour tester la chaîne IoT, 'make k3d-down' pour supprimer."
 
 k3d-smoke: ## Publie un relevé hors tolérance et vérifie toute la chaîne
 	@PGPOD=$$(kubectl -n $(NS) get pod -l cnpg.io/instanceRole=primary -o jsonpath='{.items[0].metadata.name}'); \
@@ -90,4 +113,5 @@ k3d-smoke: ## Publie un relevé hors tolérance et vérifie toute la chaîne
 k3d-down: ## Supprime le cluster k3d local
 	k3d cluster delete $(K3D_CLUSTER)
 
-.PHONY: help validate images operators deploy infra k8s k3d-up k3d-load k3d k3d-smoke k3d-down
+.PHONY: help validate images operators deploy deploy-siege infra k8s \
+        k3d-up k3d-load k3d k3d-smoke k3d-down

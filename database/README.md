@@ -8,7 +8,8 @@
 
 | | |
 |---|---|
-| `deploy/helm/futurekawa-data/` | Chart déployant la stack d'un pays (un release par pays) |
+| `deploy/helm/futurekawa-data/` | Chart de la stack **pays** — un release par pays |
+| `deploy/helm/futurekawa-siege/` | Chart de la stack **siège** — un seul release, central |
 | `deploy/terraform/` | Provisionnement des VMs Proxmox + k3s |
 | `Dockerfile.timescaledb` | Image CNPG **+ TimescaleDB** — l'image CNPG standard ne l'embarque pas |
 | `infra/mosquitto/` | Configuration du broker |
@@ -24,13 +25,26 @@ stack complète (siège, frontend, Odoo compris). Ce dossier ne couvre que Kuber
 migrations SQL dans ce dossier : le chart applique Alembic via un Job qui utilise
 l'image de l'API. Le schéma ne peut donc pas diverger du code qui le lit.
 
-## Ce que le chart déploie
+## Ce que les charts déploient
 
+Deux charts et non un seul : la stack pays se déploie **une fois par pays**, le siège
+est **unique**. Les fondre ensemble obligerait à redéployer le siège à chaque pays ajouté.
+
+**`futurekawa-data`** (par pays) :
 - **PostgreSQL + TimescaleDB** via CloudNativePG (HA, réplication par streaming)
 - **Mosquitto** — broker MQTT
 - **API pays** (FastAPI) — 2 réplicas derrière un Service
 - **Consumers MQTT** — persistance des relevés et évaluation des seuils (US #32)
 - **Job Alembic** — migrations, en hook `post-install`/`post-upgrade`
+
+**`futurekawa-siege`** (central) :
+- **PostgreSQL** via CloudNativePG (sans TimescaleDB : le siège ne stocke que l'agrégat journalier)
+- **Backend .NET** — 2 réplicas, plus les Jobs `--migrate` et `--seed`
+- **Frontend Next.js** — 2 réplicas
+- **Odoo** + sa base
+- **Ingress** servant le frontend sur `/` et l'API sur `/api`, **sur la même origine** :
+  le navigateur n'émet alors aucune requête cross-origin, et le cookie de refresh
+  `SameSite=Strict` est bien transmis
 
 ## Prérequis cluster
 
@@ -43,17 +57,23 @@ l'image de l'API. Le schéma ne peut donc pas diverger du code qui le lit.
 ## Déployer
 
 ```bash
-make images                 # images TimescaleDB + API pays
+make images                 # les 4 images
 make operators              # CNPG (+ Longhorn)
-make deploy PAYS=BR         # un release par pays
+make deploy PAYS=BR         # stack pays — répéter par pays
+make deploy-siege           # stack siège — une seule fois
 ```
 
 En local, de bout en bout sur un cluster k3d jetable :
 
 ```bash
-make k3d                    # cluster + images + opérateurs + déploiement
+make k3d                    # cluster + images + opérateurs + les deux stacks
+curl -H 'Host: futurekawa.localhost' http://localhost/
 make k3d-down               # supprime tout
 ```
+
+> **Le frontend fige l'URL de l'API au build.** `NEXT_PUBLIC_API_BASE_URL` est inlinée
+> dans le bundle, pas lue au démarrage : changer `INGRESS_HOST` impose de reconstruire
+> l'image (`make images` s'en charge).
 
 ## Vérifier
 

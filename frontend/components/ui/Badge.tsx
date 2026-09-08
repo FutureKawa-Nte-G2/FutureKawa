@@ -11,6 +11,10 @@ const STATUS_STYLES: Record<BatchStatus, { label: string; className: string }> =
       label: 'conforme',
       className: 'text-status-compliant-text bg-status-compliant-bg',
     },
+    alert: {
+      label: 'alerte',
+      className: 'text-status-alert-text bg-status-alert-bg',
+    },
     expired: {
       label: 'périmé',
       className: 'text-status-expired-text bg-status-expired-bg',

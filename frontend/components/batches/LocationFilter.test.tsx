@@ -11,6 +11,10 @@ vi.mock("@/lib/api/batches", () => ({
   getWarehouses: (countryCode?: string) => mockGetWarehouses(countryCode),
 }));
 
+vi.mock("@/context/AuthContext", () => ({
+  useAuth: () => ({ accessToken: "test-access-token" }),
+}));
+
 const countries = [
   { code: "BR", name: "Brazil" },
   { code: "EC", name: "Ecuador" },

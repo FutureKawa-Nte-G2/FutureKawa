@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { getUnreadAlerts, resolveAlert } from "@/lib/api/alerts";
 import type { AlertItem, AlertType } from "@/lib/api/types";
+import { useAuth } from "@/context/AuthContext";
 
 const TYPE_STYLES: Record<AlertType, string> = {
   alert: "text-status-alert-text bg-status-alert-bg",
@@ -12,14 +13,39 @@ const TYPE_STYLES: Record<AlertType, string> = {
 export function AlertButton() {
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [isOpen, setIsOpen] = useState(false);
+  const { accessToken } = useAuth();
 
   useEffect(() => {
-    getUnreadAlerts().then(setAlerts);
-  }, []);
+    let cancelled = false;
+
+    // GET /api/alerts isn't implemented on the backend yet
+    getUnreadAlerts(accessToken)
+      .then((result) => {
+        if (!cancelled) setAlerts(result);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          console.error("Impossible de récupérer les alertes non lues :", error);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken]);
 
   async function handleResolve(id: string) {
+    const previous = alerts;
     setAlerts((prev) => prev.filter((a) => a.id !== id));
-    await resolveAlert(id);
+    try {
+      await resolveAlert(id, accessToken);
+    } catch (error) {
+      // PUT /api/alerts/:id/resolve is also not implemented server-side yet
+      // (deferred to a separate issue per the alerts controller backlog).
+      // Put the alert back rather than silently losing it from the list.
+      console.error("Impossible de résoudre l'alerte :", error);
+      setAlerts(previous);
+    }
   }
 
   return (

@@ -1,104 +1,118 @@
-import { describe, it, expect, beforeAll } from "vitest";
-import type { BatchListResponse, Country, Warehouse } from "./types";
+import { describe, it, expect, vi, afterEach } from "vitest";
+import { getBatches, getCountries, getWarehouses } from "./batches";
+import type { Batch, Country, Warehouse } from "./types";
 
-let getBatches: (params?: {
-  countryCode?: string;
-  warehouseId?: string;
-  page?: number;
-  pageSize?: number;
-}) => Promise<BatchListResponse>;
-let getCountries: () => Promise<Country[]>;
-let getWarehouses: (countryCode?: string) => Promise<Warehouse[]>;
+function jsonResponse(status: number, data: unknown) {
+  return new Response(
+    JSON.stringify({ success: status < 400, data, message: null, errors: null }),
+    { status }
+  );
+}
 
-beforeAll(async () => {
-  process.env.NEXT_PUBLIC_USE_MOCKS = "true";
-  ({ getBatches, getCountries, getWarehouses } = await import("./batches"));
-});
-
-const ALL_IDS = Array.from({ length: 20 }, (_, i) => String(i + 1));
-const BR_W1_IDS = ALL_IDS.filter((id) => Number(id) % 2 === 1); // odd ids
-const BR_W2_IDS = ALL_IDS.filter((id) => Number(id) % 2 === 0); // even ids
+function lastUrl(fetchMock: ReturnType<typeof vi.spyOn>) {
+  return new URL(fetchMock.mock.calls.at(-1)![0] as string);
+}
 
 describe("getBatches", () => {
-  it("returns batches sorted oldest-first", async () => {
-    // pageSize covers all 20 mock batches so the full sorted set is visible in one page
-    const response = await getBatches({ pageSize: 20 });
-    expect(response.batches.map((b) => b.id)).toEqual(ALL_IDS);
+  afterEach(() => vi.restoreAllMocks());
+
+  it("requests page 1 / pageSize 10 by default, with no country/warehouse filters", async () => {
+    const fetchMock = vi
+      .spyOn(global, "fetch")
+      .mockResolvedValueOnce(
+        jsonResponse(200, { batches: [], page: 1, pageSize: 10, totalCount: 0, totalPages: 1 })
+      );
+
+    await getBatches();
+
+    const url = lastUrl(fetchMock);
+    expect(url.pathname).toBe("/api/batches");
+    expect(url.searchParams.get("page")).toBe("1");
+    expect(url.searchParams.get("pageSize")).toBe("10");
+    expect(url.searchParams.has("country")).toBe(false);
+    expect(url.searchParams.has("warehouseId")).toBe(false);
   });
 
-  it("filters by countryCode", async () => {
-    const brazil = await getBatches({ countryCode: "BR" });
-    const ecuador = await getBatches({ countryCode: "EC" });
+  it("forwards country and warehouseId filters, and custom page/pageSize", async () => {
+    const fetchMock = vi
+      .spyOn(global, "fetch")
+      .mockResolvedValueOnce(
+        jsonResponse(200, { batches: [], page: 2, pageSize: 5, totalCount: 0, totalPages: 1 })
+      );
 
-    expect(brazil.totalCount).toBe(20);
-    expect(ecuador.totalCount).toBe(0);
+    await getBatches({ countryCode: "BR", warehouseId: "BR-W1", page: 2, pageSize: 5 });
+
+    const url = lastUrl(fetchMock);
+    expect(url.searchParams.get("country")).toBe("BR");
+    expect(url.searchParams.get("warehouseId")).toBe("BR-W1");
+    expect(url.searchParams.get("page")).toBe("2");
+    expect(url.searchParams.get("pageSize")).toBe("5");
   });
 
-  it("filters by warehouseId", async () => {
-    const santos = await getBatches({ warehouseId: "BR-W1", pageSize: 20 });
-    const cerrado = await getBatches({ warehouseId: "BR-W2", pageSize: 20 });
+  it("returns the unwrapped batch list data", async () => {
+    const batch: Batch = {
+      id: "1",
+      countryCode: "BR",
+      countryName: "Brazil",
+      warehouseId: "BR-W1",
+      warehouseName: "Santos",
+      farmName: "Fazenda Cerrado",
+      batchRef: "BR-2026-0001",
+      qualityGrade: "A",
+      status: "compliant",
+      enteredAt: "2026-01-01T00:00:00Z",
+      shippedAt: null,
+    };
+    vi.spyOn(global, "fetch").mockResolvedValueOnce(
+      jsonResponse(200, { batches: [batch], page: 1, pageSize: 10, totalCount: 1, totalPages: 1 })
+    );
 
-    expect(santos.batches.map((b) => b.id)).toEqual(BR_W1_IDS);
-    expect(cerrado.batches.map((b) => b.id)).toEqual(BR_W2_IDS);
-  });
-
-  it("combines countryCode and warehouseId filters", async () => {
-    const response = await getBatches({ countryCode: "BR", warehouseId: "BR-W1", pageSize: 20 });
-    expect(response.batches.map((b) => b.id)).toEqual(BR_W1_IDS);
-  });
-
-  it("defaults to page 1 and pageSize 10 when omitted", async () => {
     const response = await getBatches();
-    expect(response.page).toBe(1);
-    expect(response.pageSize).toBe(10);
-    expect(response.batches).toHaveLength(10);
-    expect(response.batches.map((b) => b.id)).toEqual(ALL_IDS.slice(0, 10));
+
+    expect(response.batches).toEqual([batch]);
+    expect(response.totalCount).toBe(1);
   });
 
-  it("returns only pageSize items and reports correct pagination metadata", async () => {
-    const response = await getBatches({ pageSize: 8 });
+  it("propagates an ApiError when the backend responds with an error status", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValueOnce(jsonResponse(500, null));
 
-    expect(response.batches).toHaveLength(8);
-    expect(response.batches.map((b) => b.id)).toEqual(ALL_IDS.slice(0, 8));
-    expect(response.totalCount).toBe(20);
-    expect(response.totalPages).toBe(3);
-  });
-
-  it("returns the remaining partial page on the last page", async () => {
-    const response = await getBatches({ pageSize: 8, page: 3 });
-
-    expect(response.batches.map((b) => b.id)).toEqual(ALL_IDS.slice(16, 20));
-    expect(response.page).toBe(3);
-    expect(response.totalPages).toBe(3);
-  });
-
-  it("returns an empty batches array with totalPages 1 when the filtered set is empty", async () => {
-    const response = await getBatches({ countryCode: "EC" });
-
-    expect(response.batches).toEqual([]);
-    expect(response.totalCount).toBe(0);
-    expect(response.totalPages).toBe(1);
+    await expect(getBatches()).rejects.toThrow();
   });
 });
 
 describe("getCountries", () => {
-  it("returns the three configured countries", async () => {
-    const countries = await getCountries();
-    expect(countries.map((c) => c.code)).toEqual(["BR", "EC", "CO"]);
+  afterEach(() => vi.restoreAllMocks());
+
+  it("returns the unwrapped country list", async () => {
+    const countries: Country[] = [{ code: "BR", name: "Brazil" }];
+    vi.spyOn(global, "fetch").mockResolvedValueOnce(jsonResponse(200, { countries }));
+
+    expect(await getCountries()).toEqual(countries);
   });
 });
 
 describe("getWarehouses", () => {
-  it("filters warehouses by country", async () => {
-    const brWarehouses = await getWarehouses("BR");
-    const ecWarehouses = await getWarehouses("EC");
+  afterEach(() => vi.restoreAllMocks());
 
-    expect(brWarehouses.map((w) => w.id)).toEqual(["BR-W1", "BR-W2"]);
-    expect(ecWarehouses.map((w) => w.id)).toEqual(["EC-W1"]);
+  it("requests /api/warehouses without a country param when none is given", async () => {
+    const fetchMock = vi
+      .spyOn(global, "fetch")
+      .mockResolvedValueOnce(jsonResponse(200, { warehouses: [] }));
+
+    await getWarehouses();
+
+    expect(lastUrl(fetchMock).searchParams.has("country")).toBe(false);
   });
 
-  it("returns every warehouse when no country is given", async () => {
-    const warehouses = await getWarehouses();
-    expect(warehouses).toHaveLength(4);
+  it("filters by country when given", async () => {
+    const warehouses: Warehouse[] = [{ id: "BR-W1", name: "Santos", countryCode: "BR" }];
+    const fetchMock = vi
+      .spyOn(global, "fetch")
+      .mockResolvedValueOnce(jsonResponse(200, { warehouses }));
+
+    const response = await getWarehouses("BR");
+
+    expect(lastUrl(fetchMock).searchParams.get("country")).toBe("BR");
+    expect(response).toEqual(warehouses);
   });
 });

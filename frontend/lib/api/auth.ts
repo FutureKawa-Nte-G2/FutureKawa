@@ -8,6 +8,7 @@ export function login(credentials: LoginRequest): Promise<LoginResponse> {
   return apiRequest<LoginResponse>("/api/auth/login", {
     method: "POST",
     body: credentials,
+    skipAuthRetry: true
   });
 }
 
@@ -17,6 +18,7 @@ export function login(credentials: LoginRequest): Promise<LoginResponse> {
 export function refresh(): Promise<LoginResponse> {
   return apiRequest<LoginResponse>("/api/auth/refresh", {
     method: "POST",
+    skipAuthRetry: true
   });
 }
 
@@ -25,6 +27,7 @@ export function refresh(): Promise<LoginResponse> {
 export function logout(): Promise<void> {
   return apiRequest<void>("/api/auth/logout", {
     method: "POST",
+    skipAuthRetry: true
   });
 }
 

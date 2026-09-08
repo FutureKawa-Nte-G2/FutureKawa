@@ -181,6 +181,52 @@ class Measurement(Base):
     )
 
 
+class SensorAssignment(Base):
+    """Which batch a sensor was measuring, and over which window.
+
+    Neither the MCD nor the MLD carries this link: a sensor belongs to a
+    warehouse and a measurement to a sensor, so nothing says which batch a
+    reading concerns. Without it, "the readings of this batch" cannot be
+    expressed — the room's whole history would be served for every batch it
+    ever held.
+
+    A row is open while `released_at` is NULL: the sensor is still on that
+    batch. Released rows are kept rather than deleted — the curves of a batch
+    that has already shipped are exactly what the quality page has to show.
+    """
+
+    __tablename__ = "sensor_assignments"
+
+    sensor_assignment_id: Mapped[uuid.UUID] = mapped_column(
+        primary_key=True, default=uuid.uuid4
+    )
+    sensor_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("sensors.sensor_id"))
+    batch_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("batches.batch_id"))
+    assigned_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("CURRENT_TIMESTAMP")
+    )
+    # NULL while the sensor is still on the batch. The measurement window is
+    # `assigned_at` to `released_at ?? now()`.
+    released_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    __table_args__ = (
+        # One physical sensor cannot be on two batches at once. Partial, so the
+        # same sensor is freely reassigned after release, and a batch may still
+        # carry several sensors at the same time.
+        Index(
+            "uq_sensor_assignment_open_per_sensor",
+            "sensor_id",
+            unique=True,
+            postgresql_where=text("released_at IS NULL"),
+            sqlite_where=text("released_at IS NULL"),
+        ),
+        # The history query reads "the windows of this batch, oldest first".
+        Index("ix_sensor_assignments_batch", "batch_id", "assigned_at"),
+    )
+
+
 class Alert(Base):
     __tablename__ = "alerts"
 

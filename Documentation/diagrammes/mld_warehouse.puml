@@ -59,12 +59,30 @@ class "sensors" as Sensors <<Table>> {
   + is_active : bool
 }
 
+class "sensor_assignments" as SensorAssignments <<Table>> {
+  + sensor_assignment_id : uuid <<PK>>
+  + sensor_id : uuid <<FK>>
+  + batch_id : uuid <<FK>>
+  + assigned_at : timestamptz
+  + released_at : timestamptz?
+}
+
 class "measurements" as Measurements <<Table>> {
   + measurement_id : uuid <<PK>>
   + sensor_id : uuid <<FK, UQ>>
   + meas_date : timestamptz <<PK, UQ>>
   + meas_humidity : numeric(5,2)
   + meas_temp : numeric(5,2)
+}
+
+class "notifications" as Notifications <<Table>> {
+  + notification_id : uuid <<PK>>
+  + warehouse_id : uuid <<FK>>
+  + notification_type : varchar(32)
+  + batch_id : uuid? <<FK>>
+  + order_id : uuid? <<FK>>
+  + created_at : timestamptz
+  + read_at : timestamptz?
 }
 
 class "alerts" as Alerts <<Table>> {
@@ -110,7 +128,12 @@ Warehouses "1" --> "0..*" Batches : warehouse_id
 Warehouses "1" --> "0..*" Users : warehouse_id
 Warehouses "1" --> "0..*" Sensors : warehouse_id
 Warehouses "1" --> "0..*" Alerts : warehouse_id
+Warehouses "1" --> "0..*" Notifications : warehouse_id
+Batches "1" --> "0..*" Notifications : batch_id
+Orders "1" --> "0..*" Notifications : order_id
 Sensors "1" --> "0..*" Measurements : sensor_id
+Sensors "1" --> "0..*" SensorAssignments : sensor_id
+Batches "1" --> "0..*" SensorAssignments : batch_id
 Batches "1" --> "0..*" Alerts : batch_id
 Orders "0..*" --> "0..1" Countries : country_id
 Orders "1" --> "0..*" OrderLines : order_id

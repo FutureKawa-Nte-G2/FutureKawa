@@ -30,6 +30,35 @@ export $(grep -v '^#' .env | xargs)
 `http://127.0.0.1:8000/health` répond `{"status":"ok"}`, et la documentation
 interactive est sur `/docs`.
 
+## Consumers MQTT
+
+Deux services abonnés au broker, indépendants l'un de l'autre : l'un écrit les
+relevés, l'autre évalue les seuils. Ils tournent hors de l'API — celle-ci sert
+des requêtes HTTP, eux consomment un flux.
+
+```bash
+./venv/bin/python -m app.consumers.runner
+```
+
+Ils ont besoin d'un broker joignable (`MQTT_BROKER_HOST`, `MQTT_BROKER_PORT`).
+Sans broker, ils journalisent une tentative de reconnexion toutes les 5
+secondes plutôt que de s'arrêter — Mosquitto n'est pas encore configuré (#31).
+
+Le contrat du message, côté firmware :
+
+```
+topic   : futurekawa/<code du capteur>
+payload : {"measuredAt": "2026-09-06T12:00:00Z", "temp": 21.5, "humidity": 54.1}
+```
+
+`measuredAt` est facultatif : un firmware sans horloge synchronisée n'en envoie
+pas, et la date de réception sert alors d'approximation.
+
+La logique métier vit dans `app/services/ingestion.py` et
+`app/services/quality.py`, qui reçoivent un relevé déjà décodé. `app/consumers/`
+ne fait que décoder et tenir la boucle debout — c'est ce qui rend les règles
+vérifiables sans monter de broker.
+
 ## Tests
 
 ```bash

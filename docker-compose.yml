@@ -62,7 +62,7 @@ services:
       - warehouse-db-data:/var/lib/postgresql/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${WAREHOUSE_DB_USER:-futurekawa}"]
+      test: ["CMD-SHELL", "pg_isready -U ${WAREHOUSE_DB_USER:-futurekawa} -d ${WAREHOUSE_DB_NAME:-futurekawa_br}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -127,13 +127,17 @@ services:
       Odoo__Username: ${ODOO_ADMIN_LOGIN:-admin@admin.com}
       Odoo__Password: ${ODOO_ADMIN_PASSWORD:-Not24get}
       Odoo__WebhookToken: ${ODOO_WEBHOOK_TOKEN:-futurekawa-webhook-shared-token}
-      # Sans ces deux lignes le siège n'appelle jamais l'API pays. En Production
-      # il lit appsettings.json, qui porte UseMockData=true et une LocalApiUrl
-      # pointant sur son propre /api/mock/measurements : il s'interroge lui-même
-      # et invente des relevés, sans rien logger d'anormal. Passer UseMockData à
-      # false seul ne suffit donc pas, il faut aussi dire où joindre l'API pays.
+      # Sans ces deux lignes le siège n'appelle jamais l'API pays. En
+      # Production il lit appsettings.json, qui porte UseMockData=true et une
+      # LocalApiUrl pointant sur son propre /api/mock/measurements : il
+      # s'interroge lui-même et invente des relevés, sans rien logger d'anormal.
+      # Passer UseMockData à false seul ne suffit donc pas, il faut aussi dire
+      # où joindre l'API pays.
       MeasurementSync__UseMockData: "false"
-      MeasurementSync__LocalApiUrl: ${WAREHOUSE_API_URL:-http://country-api:8000/api/measurements}
+      # host.docker.internal = la machine hôte, où tourne uvicorn. Même motif
+      # que la cible odoo-webhook-native du Makefile. À remplacer par le nom du
+      # service le jour où l'API pays est conteneurisée (#59).
+      MeasurementSync__LocalApiUrl: ${WAREHOUSE_API_URL:-http://host.docker.internal:8000/api/measurements}
     ports:
       - "127.0.0.1:${SIEGE_API_PORT:-55648}:8080"
     depends_on:

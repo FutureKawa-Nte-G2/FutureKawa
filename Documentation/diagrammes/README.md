@@ -6,11 +6,18 @@ divergence, le code fait foi et le diagramme est corrigé
 
 **Source de vérité du schéma :** `Api/app/models.py` + `Api/alembic/`.
 
-`er_chart.md` et `er_chart_corrected.md` ont été supprimés : ils décrivaient deux
-modèles concurrents, tous deux antérieurs au schéma en vigueur — identifiants `serial`
-et types `ENUM` là où l'implémentation utilise des UUID et des colonnes `String(n)`.
-Les garder revenait à entretenir trois descriptions divergentes du même schéma, ce que
-l'ADR-001 corrige.
+## `er_chart.md` — à supprimer
+
+Deux versions concurrentes de ce fichier ont existé, ajoutées indépendamment sur deux
+branches. Celle portée par la branche `db` est supprimée ici.
+
+**Celle de `develop` subsiste et doit l'être aussi** : elle décrit `PAYS`, `SITE`,
+`EXPLOITATION` avec des identifiants `int` — des entités qui n'existent plus. Elle ne
+peut pas être supprimée depuis une autre branche, puisque la base de fusion ne la
+contient pas ; la suppression doit être faite sur `develop`.
+
+`er_chart_corrected.md` est supprimé pour la même raison : types `ENUM` et `serial` là
+où l'implémentation utilise des colonnes `String(n)` et des UUID.
 
 Le modèle à jour est le diagramme entité-relation de
 [`database/docs/architecture.md`](../../database/docs/architecture.md) (§2), tenu avec

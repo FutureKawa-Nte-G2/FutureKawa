@@ -84,6 +84,25 @@ export interface BatchListResponse {
   totalPages: number;
 }
 
+// --- Measurements (warehouse temperature/humidity daily aggregates) ---
+// Mirrors the backend MeasurementResponseDto (GET /api/measurements/{warehouseId}).
+// One entry per (warehouse, day) already aggregated (avg/min/max) server-side —
+// there is no raw/sub-daily reading exposed by this endpoint. Used by the batch
+// detail page ("Relevés") to plot the warehouse's readings during a batch's
+// storage period (measDate filtered client-side against Batch.enteredAt/shippedAt).
+export interface Measurement {
+  id: string;
+  warehouseId: string;
+  warehouseName: string;
+  measDate: string; // ISO 8601 date (no time component — backend DateOnly)
+  avgMeasTemp: number;
+  maxMeasTemp: number;
+  minMeasTemp: number;
+  avgMeasHumidity: number;
+  minMeasHumidity: number;
+  maxMeasHumidity: number;
+}
+
 // --- Alerts (warehouse temperature/humidity threshold breaches) ---
 // Mirrors the backend Alert entity (#76): WarehouseId only, no BatchId — an
 // alert is scoped to a warehouse's readings, never to a specific batch (see

@@ -1,5 +1,6 @@
 import { apiRequest } from "./client";
 import type {
+  Batch,
   BatchListResponse,
   Country,
   CountryListResponse,
@@ -35,6 +36,13 @@ export async function getBatches(params: GetBatchesParams = {}): Promise<BatchLi
   return apiRequest<BatchListResponse>(`/api/batches?${query}`, {
     accessToken: params.accessToken,
   });
+}
+
+// GET /api/batches/{id} — a single batch, regardless of shipped status.
+// Used by the batch detail page (measurement curves) to resolve the batch's
+// warehouse and storage period (enteredAt/shippedAt).
+export async function getBatchById(id: string, accessToken?: string | null): Promise<Batch> {
+  return apiRequest<Batch>(`/api/batches/${id}`, { accessToken });
 }
 
 // GET /api/countries — small, fixed dataset, no pagination

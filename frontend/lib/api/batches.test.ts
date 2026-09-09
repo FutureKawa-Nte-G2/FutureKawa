@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { getBatches, getCountries, getWarehouses } from "./batches";
+import { getBatches, getBatchById, getCountries, getWarehouses } from "./batches";
 import type { Batch, Country, Warehouse } from "./types";
 
 function jsonResponse(status: number, data: unknown) {
@@ -77,6 +77,41 @@ describe("getBatches", () => {
     vi.spyOn(global, "fetch").mockResolvedValueOnce(jsonResponse(500, null));
 
     await expect(getBatches()).rejects.toThrow();
+  });
+});
+
+describe("getBatchById", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("requests /api/batches/{id} and returns the unwrapped batch", async () => {
+    const batch: Batch = {
+      id: "1",
+      countryCode: "BR",
+      countryName: "Brazil",
+      warehouseId: "BR-W1",
+      warehouseName: "Santos",
+      farmName: "Fazenda Cerrado",
+      batchRef: "BR-2026-0001",
+      qualityGrade: "A",
+      status: "compliant",
+      enteredAt: "2026-01-01T00:00:00Z",
+      shippedAt: null,
+    };
+    const fetchMock = vi.spyOn(global, "fetch").mockResolvedValueOnce(jsonResponse(200, batch));
+
+    const result = await getBatchById("1");
+
+    const url = lastUrl(fetchMock);
+    expect(url.pathname).toBe("/api/batches/1");
+    expect(result).toEqual(batch);
+  });
+
+  it("propagates an ApiError when the batch doesn't exist", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValueOnce(
+      jsonResponse(404, null)
+    );
+
+    await expect(getBatchById("unknown")).rejects.toThrow();
   });
 });
 

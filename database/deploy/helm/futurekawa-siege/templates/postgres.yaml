@@ -1,0 +1,30 @@
+# Base du siège — cluster CloudNativePG, même opérateur que la stack pays.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {{ include "futurekawa-siege.fullname" . }}-db
+  labels:
+    {{- include "futurekawa-siege.labels" . | nindent 4 }}
+    app.kubernetes.io/component: siege-db
+spec:
+  instances: {{ .Values.postgres.instances }}
+  imageName: {{ .Values.postgres.imageName | quote }}
+  imagePullPolicy: {{ .Values.imagePullPolicy }}
+  primaryUpdateStrategy: unsupervised
+  affinity:
+    enablePodAntiAffinity: true
+    topologyKey: kubernetes.io/hostname
+    podAntiAffinityType: required
+  bootstrap:
+    initdb:
+      database: {{ .Values.postgres.db | quote }}
+      owner: {{ .Values.postgres.owner | quote }}
+  storage:
+    size: {{ .Values.postgres.storage | quote }}
+    {{- if .Values.postgres.storageClass }}
+    storageClass: {{ .Values.postgres.storageClass | quote }}
+    {{- end }}
+  {{- with .Values.postgres.resources }}
+  resources:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}

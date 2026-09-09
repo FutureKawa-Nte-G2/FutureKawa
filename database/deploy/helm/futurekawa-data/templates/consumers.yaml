@@ -1,0 +1,41 @@
+# Consumers MQTT (US #32) : persistance des relevés et évaluation des seuils.
+# Remplace le pont Telegraf, qui visait un contrat de topic que le firmware
+# n'utilise pas (futurekawa/<pays>/<entrepot>/conditions vs futurekawa/<capteur>).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "futurekawa-data.fullname" . }}-consumers
+  labels:
+    {{- include "futurekawa-data.labels" . | nindent 4 }}
+    app.kubernetes.io/component: consumers
+spec:
+  replicas: {{ .Values.consumers.replicas }}
+  # Recreate et non RollingUpdate : deux réplicas partageant un client_id MQTT
+  # se disputeraient la session et provoqueraient des écritures en double.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: consumers
+  template:
+    metadata:
+      labels:
+        {{- include "futurekawa-data.labels" . | nindent 8 }}
+        app.kubernetes.io/component: consumers
+    spec:
+      containers:
+        - name: consumers
+          image: {{ .Values.consumers.image | quote }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          command: ["python", "-m", "app.consumers.runner"]
+          env:
+            {{- include "futurekawa-data.dbEnv" . | nindent 12 }}
+            - name: MQTT_BROKER_HOST
+              value: {{ include "futurekawa-data.fullname" . }}-mosquitto
+            - name: MQTT_BROKER_PORT
+              value: "1883"
+          {{- with .Values.consumers.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}

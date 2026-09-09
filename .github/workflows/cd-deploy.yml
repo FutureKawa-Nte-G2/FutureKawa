@@ -1,0 +1,279 @@
+name: CD-DEPLOY
+
+# Déploiement continu, en deux étages.
+#
+# 1. `ephemeral` — à chaque push sur develop, la stack est réellement déployée
+#    sur un cluster Kubernetes jetable créé dans le runner, puis vérifiée par un
+#    smoke test qui publie un relevé MQTT et contrôle ses trois effets en base.
+#    C'est ce qui rend la chaîne « CD » et non « CI » : les charts sont
+#    exécutés, pas seulement validés. Un chart qui ne s'installe pas casse ici.
+#
+# 2. `production` — déclenchement manuel uniquement. Vise un vrai cluster via un
+#    kubeconfig en secret. Manuel et non automatique : le k3s cible vit sur un
+#    hôte Proxmox privé, injoignable depuis les runners GitHub, et y pousser un
+#    kubeconfig d'administration serait disproportionné pour ce projet.
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  # Aussi sur PR : un chart qui ne s'installe pas doit être vu avant la fusion,
+  # pas après. C'est le principe de l'environnement de revue.
+  pull_request:
+    branches:
+      - develop
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Cible du déploiement"
+        required: true
+        default: ephemeral
+        type: choice
+        options: [ephemeral, production]
+
+jobs:
+  ephemeral:
+    name: Déploiement sur cluster éphémère
+    runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_dispatch' || inputs.target == 'ephemeral'
+    timeout-minutes: 30
+    env:
+      NS: futurekawa
+      TS_IMAGE: futurekawa/cnpg-timescaledb:16-ts
+      API_IMAGE: futurekawa/country-api:ci
+      SIEGE_IMAGE: futurekawa/siege-api:ci
+      FRONTEND_IMAGE: futurekawa/frontend:ci
+      INGRESS_HOST: futurekawa.localhost
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Le runner embarque une vingtaine de gigaoctets d'outillage préinstallé
+      # dont rien n'est utilisé ici : tout est construit dans des conteneurs.
+      # Sans ce ménage, l'import des quatre images sature le disque du nœud k3d,
+      # qui expulse alors ses pods — dont l'opérateur de base de données, ce qui
+      # se manifeste par une erreur trompeuse sur son webhook.
+      - name: Libérer de l'espace disque
+        run: |
+          echo "avant :"; df -h / | tail -1
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/share/boost /opt/hostedtoolcache/CodeQL \
+                      /usr/local/share/powershell /usr/share/swift || true
+          sudo docker image prune -af >/dev/null 2>&1 || true
+          echo "après :"; df -h / | tail -1
+
+      - name: Setup Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # --- Construction des images ---------------------------------------
+      # Construites ici plutôt que téléchargées depuis le workflow de packaging :
+      # un artefact venant d'un autre workflow pourrait dater d'un autre commit,
+      # et on veut déployer exactement ce qui vient d'être poussé.
+
+      - name: Image CNPG + TimescaleDB
+        # L'image CNPG standard n'embarque pas TimescaleDB, or `measurements`
+        # est une hypertable : sans cette image, l'initdb du cluster échoue.
+        run: docker build -f database/Dockerfile.timescaledb -t "$TS_IMAGE" database/
+
+      - name: Image API pays
+        run: docker build -t "$API_IMAGE" Api/
+
+      - name: Image backend siège
+        run: docker build -t "$SIEGE_IMAGE" backend/
+
+      - name: Image frontend
+        # NEXT_PUBLIC_* inlinées au build : l'URL doit correspondre à l'hôte de
+        # l'Ingress, sinon le bundle produit tape sur une origine inexistante.
+        run: |
+          docker build -t "$FRONTEND_IMAGE" \
+            --build-arg NEXT_PUBLIC_API_BASE_URL="http://$INGRESS_HOST" \
+            --build-arg NEXT_PUBLIC_USE_MOCKS=false \
+            frontend/
+
+      # --- Cluster --------------------------------------------------------
+
+      - name: Installer k3d
+        # Installation directe plutôt qu'une action tierce : celle-ci échouait au
+        # téléchargement (exit 22) et ajoutait un intermédiaire pour une seule
+        # commande.
+        run: |
+          curl -sfL https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | TAG=v5.7.4 bash
+          k3d version
+
+      - name: Créer le cluster k3d
+        run: |
+          k3d cluster create futurekawa \
+            --servers 1 --agents 1 \
+            -p "80:80@loadbalancer" \
+            -p "1883:1883@loadbalancer" \
+            --wait
+          kubectl wait --for=condition=Ready nodes --all --timeout=120s
+          kubectl get nodes
+
+      - name: Installer l'opérateur CloudNativePG
+        run: |
+          kubectl apply --server-side -f \
+            https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.25/releases/cnpg-1.25.1.yaml
+          kubectl -n cnpg-system rollout status deployment/cnpg-controller-manager --timeout=300s
+
+          # `rollout status` rend la main dès que le Deployment est disponible,
+          # mais le webhook de mutation n'est pas encore inscrit dans les
+          # endpoints de son Service. Créer un Cluster à cet instant échoue sur
+          # « no endpoints available for service cnpg-webhook-service ».
+          # On attend donc l'endpoint lui-même, pas le pod.
+          echo "Attente des endpoints du webhook CNPG..."
+          for i in $(seq 1 60); do
+            EP=$(kubectl -n cnpg-system get endpoints cnpg-webhook-service \
+                   -o jsonpath='{.subsets[*].addresses[*].ip}' 2>/dev/null || true)
+            if [ -n "$EP" ]; then echo "webhook joignable sur $EP"; break; fi
+            sleep 3
+          done
+          [ -n "$EP" ] || { echo "::error::Le webhook CNPG n'a jamais eu d'endpoint."; exit 1; }
+
+      - name: Importer les images dans le cluster
+        run: |
+          docker images --format '{{.Repository}}:{{.Tag}} {{.Size}}' | grep futurekawa
+          df -h / | tail -1
+          k3d image import -c futurekawa "$TS_IMAGE" "$API_IMAGE" "$SIEGE_IMAGE" "$FRONTEND_IMAGE"
+          df -h / | tail -1
+
+      # --- Déploiement ----------------------------------------------------
+
+      - name: Déployer la stack pays
+        run: |
+          helm upgrade --install fk database/deploy/helm/futurekawa-data \
+            -n "$NS" --create-namespace --wait --timeout 10m \
+            --set postgres.imageName="$TS_IMAGE" \
+            --set countryApi.image="$API_IMAGE" \
+            --set consumers.image="$API_IMAGE" \
+            --set mosquitto.storageClass=
+
+      - name: Déployer la stack siège
+        run: |
+          helm upgrade --install siege database/deploy/helm/futurekawa-siege \
+            -n "$NS" --create-namespace --wait --timeout 10m \
+            --set siegeApi.image="$SIEGE_IMAGE" \
+            --set frontend.image="$FRONTEND_IMAGE" \
+            --set ingress.host="$INGRESS_HOST"
+
+      - name: État du déploiement
+        run: |
+          kubectl -n "$NS" get pods -o wide
+          kubectl -n "$NS" get cluster
+
+      # --- Vérification ---------------------------------------------------
+
+      - name: Smoke test — le frontend et l'API répondent
+        run: |
+          curl -fsS -H "Host: $INGRESS_HOST" http://localhost/ -o /dev/null
+          echo "frontend : OK"
+          TOKEN=$(curl -fsS -H "Host: $INGRESS_HOST" -X POST http://localhost/api/auth/login \
+            -H 'Content-Type: application/json' \
+            -d '{"email":"test@futurekawa.com","password":"TestPass123"}' \
+            | python3 -c 'import sys,json; print(json.load(sys.stdin)["data"]["accessToken"])')
+          curl -fsS -H "Host: $INGRESS_HOST" -H "Authorization: Bearer $TOKEN" \
+            http://localhost/api/countries | python3 -c 'import sys,json; d=json.load(sys.stdin)["data"]["countries"]; assert len(d)==3, d; print("API :", len(d), "pays")'
+
+      - name: Smoke test — la chaîne MQTT écrit en base
+        run: |
+          PG=$(kubectl -n "$NS" get pod -l cnpg.io/instanceRole=primary,cnpg.io/cluster=fk-futurekawa-data-postgres -o jsonpath='{.items[0].metadata.name}')
+          # Un relevé n'est conservé que si son capteur suivait un lot au moment
+          # de la mesure : le jeu minimal ci-dessous pose cette chaîne complète.
+          kubectl -n "$NS" exec -i "$PG" -c postgres -- psql -U postgres -d futurekawa -v ON_ERROR_STOP=1 <<'SQL'
+          INSERT INTO countries VALUES ('11111111-1111-1111-1111-111111111111','Brésil','BR',20,3,55,10);
+          INSERT INTO warehouses VALUES ('22222222-2222-2222-2222-222222222222','11111111-1111-1111-1111-111111111111','Entrepôt Santos','WH-BR-001');
+          INSERT INTO farms VALUES ('33333333-3333-3333-3333-333333333333','11111111-1111-1111-1111-111111111111','Fazenda Cerrado','FARM-BR-001');
+          INSERT INTO batches (batch_id,warehouse_id,farm_id,batch_ref,stored_at,batch_status,is_compliant)
+            VALUES ('44444444-4444-4444-4444-444444444444','22222222-2222-2222-2222-222222222222','33333333-3333-3333-3333-333333333333','BR-2026-0001',CURRENT_DATE-30,'in_stock',true);
+          INSERT INTO sensors (sensor_id,warehouse_id,code,is_active)
+            VALUES ('55555555-5555-5555-5555-555555555555','22222222-2222-2222-2222-222222222222','SENSOR-BR-01',true);
+          INSERT INTO sensor_assignments (sensor_assignment_id,sensor_id,batch_id,assigned_at,released_at)
+            VALUES ('66666666-6666-6666-6666-666666666666','55555555-5555-5555-5555-555555555555','44444444-4444-4444-4444-444444444444',NOW()-INTERVAL '30 days',NULL);
+          SQL
+
+          MQ=$(kubectl -n "$NS" get pod -l app.kubernetes.io/component=mosquitto -o jsonpath='{.items[0].metadata.name}')
+          TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          kubectl -n "$NS" exec "$MQ" -- mosquitto_pub -h localhost -q 1 \
+            -t futurekawa/SENSOR-BR-01 \
+            -m "{\"measuredAt\":\"$TS\",\"temp\":34.0,\"humidity\":88.0}"
+          sleep 15
+
+          # Trois effets attendus d'un relevé hors tolérance : la mesure écrite,
+          # le lot déclaré non conforme, la notification créée.
+          kubectl -n "$NS" exec -i "$PG" -c postgres -- psql -U postgres -d futurekawa -tAc \
+            "SELECT count(*) FROM measurements;" | tee /tmp/m
+          kubectl -n "$NS" exec -i "$PG" -c postgres -- psql -U postgres -d futurekawa -tAc \
+            "SELECT is_compliant FROM batches WHERE batch_ref='BR-2026-0001';" | tee /tmp/c
+          kubectl -n "$NS" exec -i "$PG" -c postgres -- psql -U postgres -d futurekawa -tAc \
+            "SELECT count(*) FROM notifications;" | tee /tmp/n
+          [ "$(cat /tmp/m)" -ge 1 ] || { echo "AUCUNE mesure persistée"; exit 1; }
+          [ "$(cat /tmp/c)" = "f" ] || { echo "le lot aurait dû passer non conforme"; exit 1; }
+          [ "$(cat /tmp/n)" -ge 1 ] || { echo "AUCUNE notification créée"; exit 1; }
+          echo "chaîne MQTT -> base -> non-conformité -> notification : OK"
+
+      - name: Logs en cas d'échec
+        if: failure()
+        run: |
+          kubectl -n "$NS" get pods
+          kubectl -n "$NS" describe pods | tail -80
+          for c in country-api consumers siege-api; do
+            echo "===== $c ====="
+            kubectl -n "$NS" logs -l app.kubernetes.io/component=$c --tail=50 || true
+          done
+
+  production:
+    name: Déploiement production
+    # Sur push vers main, ce job attend que le déploiement éphémère soit passé.
+    # Le smoke test y sert de garde-fou : la version n'atteint la production que
+    # si elle s'est réellement installée ailleurs et que la chaîne MQTT a produit
+    # ses effets. Les environnements protégés de GitHub (validation humaine)
+    # n'étant pas disponibles sur un dépôt privé en plan gratuit, c'est cette
+    # dépendance qui joue ce rôle — et elle vérifie davantage qu'un clic.
+    needs: ephemeral
+    # Runner AUTO-HÉBERGÉ, et c'est structurel : le Proxmox n'est joignable que
+    # depuis le réseau interne. Un runner GitHub est une machine éphémère chez
+    # Microsoft — aucun secret ne lui donnera accès à un réseau privé. Le runner
+    # auto-hébergé, lui, vit dans le réseau et ne s'enregistre qu'en sortante :
+    # rien n'a besoin d'être exposé sur Internet.
+    #
+    # Prérequis (une fois) : déclarer un runner portant le label
+    # `futurekawa-prod` sur une VM du réseau. Voir database/README.md.
+    runs-on: [self-hosted, futurekawa-prod]
+    if: >-
+      always() && (
+        (github.event_name == 'push' && github.ref == 'refs/heads/main'
+         && needs.ephemeral.result == 'success')
+        || (github.event_name == 'workflow_dispatch' && inputs.target == 'production')
+      )
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configurer l'accès au cluster
+        # Deux cas : soit le runner porte déjà un kubeconfig (il tourne sur une
+        # VM du cluster), soit on en fournit un par secret. Le second l'emporte
+        # pour rester explicite sur ce qui est visé.
+        run: |
+          if [ -n "${{ secrets.KUBECONFIG }}" ]; then
+            mkdir -p ~/.kube
+            echo "${{ secrets.KUBECONFIG }}" | base64 -d > ~/.kube/config
+            chmod 600 ~/.kube/config
+            echo "kubeconfig fourni par secret"
+          elif [ -f ~/.kube/config ] || [ -n "$KUBECONFIG" ]; then
+            echo "kubeconfig déjà présent sur le runner"
+          else
+            echo "::error::Aucun kubeconfig : ni secret KUBECONFIG, ni fichier sur le runner."
+            exit 1
+          fi
+          kubectl cluster-info
+          kubectl get nodes
+
+      - name: Déployer les deux stacks
+        run: |
+          helm upgrade --install fk database/deploy/helm/futurekawa-data \
+            -n futurekawa --create-namespace --wait --timeout 15m
+          helm upgrade --install siege database/deploy/helm/futurekawa-siege \
+            -n futurekawa --create-namespace --wait --timeout 15m

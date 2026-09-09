@@ -1,0 +1,39 @@
+#cloud-config
+hostname: ${vm_name}
+users:
+  - name: ${ci_user}
+    groups: [sudo]
+    sudo: "ALL=(ALL) NOPASSWD:ALL"
+    shell: /bin/bash
+    ssh_authorized_keys:
+%{ for key in ssh_public_keys ~}
+      - ${key}
+%{ endfor ~}
+package_update: true
+packages:
+  - qemu-guest-agent
+  - open-iscsi        # requis par Longhorn (PVC réattachable)
+  - nfs-common        # requis par Longhorn (RWX / partages)
+%{ if apply_manifests ~}
+write_files:
+  - path: /var/lib/rancher/k3s/server/manifests/futurekawa-namespaces.yaml
+    content: |
+%{ for ns in namespaces ~}
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: ${ns}
+      ---
+%{ endfor ~}
+%{ endif ~}
+runcmd:
+  - systemctl enable --now qemu-guest-agent
+  - systemctl enable --now iscsid            # Longhorn : démon iSCSI actif sur chaque nœud
+%{ if is_first ~}
+  # Nœud 0 : initialise le cluster HA (etcd embarqué).
+  - curl -sfL https://get.k3s.io | INSTALL_K3S_CHANNEL=${k3s_channel} K3S_TOKEN=${k3s_token} sh -s - server --cluster-init --write-kubeconfig-mode 600
+  - curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+%{ else ~}
+  # Nœuds 1..n : rejoignent le nœud 0 (retry auto tant que l'API n'est pas prête).
+  - curl -sfL https://get.k3s.io | INSTALL_K3S_CHANNEL=${k3s_channel} K3S_TOKEN=${k3s_token} sh -s - server --server https://${server_ip}:6443 --write-kubeconfig-mode 600
+%{ endif ~}

@@ -1,0 +1,70 @@
+# Stack siège — un seul release pour tout le projet (le chart futurekawa-data,
+# lui, se déploie une fois par pays).
+
+nameOverride: ""
+fullnameOverride: ""
+imagePullPolicy: IfNotPresent
+
+# Hôte unique servant le frontend et l'API. Même origine pour les deux : le
+# navigateur n'émet alors aucune requête cross-origin, et la question du CORS et
+# du cookie de refresh SameSite=Strict ne se pose plus.
+#   /      -> frontend
+#   /api   -> backend siège
+ingress:
+  enabled: true
+  className: traefik
+  host: futurekawa.localhost
+
+postgres:
+  # Pas de TimescaleDB ici : le siège ne stocke pas de séries temporelles brutes,
+  # seulement l'agrégat journalier qu'il tire des API pays.
+  imageName: ghcr.io/cloudnative-pg/postgresql:16-bookworm
+  instances: 2
+  db: FutureKawaSiege
+  owner: futurekawa
+  storage: 5Gi
+  storageClass: ""
+  resources:
+    requests: { cpu: 250m, memory: 512Mi }
+    limits:   { cpu: "1",  memory: 1Gi }
+
+siegeApi:
+  image: futurekawa/siege-api:dev
+  replicas: 2
+  # 32 caractères minimum : plus court, le conteneur démarre et le premier login
+  # renvoie 500. En production : --set, Secret externe ou sealed-secrets.
+  jwtSecret: dev-secret-change-in-production-min-32-chars!!
+  resources:
+    requests: { cpu: 200m, memory: 256Mi }
+    limits:   { cpu: "1",  memory: 1Gi }
+  # Seed de démonstration (utilisateur test, 3 pays, 3 entrepôts). À désactiver
+  # en production : le seeder refuse de tourner hors environnement Development.
+  seed:
+    enabled: true
+
+frontend:
+  # ATTENTION : les NEXT_PUBLIC_* sont inlinées dans le bundle au build, pas
+  # lues au démarrage. Changer ingress.host impose de reconstruire cette image
+  # avec --build-arg NEXT_PUBLIC_API_BASE_URL=http://<nouvel hôte>.
+  image: futurekawa/frontend:dev
+  replicas: 2
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits:   { cpu: 500m, memory: 512Mi }
+
+odoo:
+  enabled: true
+  image: odoo:18.0
+  dbImage: postgres:16
+  storage: 5Gi
+  storageClass: ""
+  adminPassword: Not24get
+  dbName: futurekawa
+  webhookToken: futurekawa-webhook-shared-token
+  resources:
+    requests: { cpu: 200m, memory: 512Mi }
+    limits:   { cpu: "1",  memory: 2Gi }
+
+# URL de l'API pays interrogée par la synchro des mesures. Par défaut le Service
+# du chart futurekawa-data déployé dans le même namespace.
+warehouseApiUrl: http://fk-futurekawa-data-api:8000/api/measurements

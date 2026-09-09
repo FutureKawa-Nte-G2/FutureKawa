@@ -16,6 +16,7 @@ name: CD-DEPLOY
 on:
   push:
     branches:
+      - main
       - develop
   # Aussi sur PR : un chart qui ne s'installe pas doit être vu avant la fusion,
   # pas après. C'est le principe de l'environnement de revue.
@@ -192,6 +193,13 @@ jobs:
 
   production:
     name: Déploiement production
+    # Sur push vers main, ce job attend que le déploiement éphémère soit passé.
+    # Le smoke test y sert de garde-fou : la version n'atteint la production que
+    # si elle s'est réellement installée ailleurs et que la chaîne MQTT a produit
+    # ses effets. Les environnements protégés de GitHub (validation humaine)
+    # n'étant pas disponibles sur un dépôt privé en plan gratuit, c'est cette
+    # dépendance qui joue ce rôle — et elle vérifie davantage qu'un clic.
+    needs: ephemeral
     # Runner AUTO-HÉBERGÉ, et c'est structurel : le Proxmox n'est joignable que
     # depuis le réseau interne. Un runner GitHub est une machine éphémère chez
     # Microsoft — aucun secret ne lui donnera accès à un réseau privé. Le runner
@@ -201,7 +209,12 @@ jobs:
     # Prérequis (une fois) : déclarer un runner portant le label
     # `futurekawa-prod` sur une VM du réseau. Voir database/README.md.
     runs-on: [self-hosted, futurekawa-prod]
-    if: github.event_name == 'workflow_dispatch' && inputs.target == 'production'
+    if: >-
+      always() && (
+        (github.event_name == 'push' && github.ref == 'refs/heads/main'
+         && needs.ephemeral.result == 'success')
+        || (github.event_name == 'workflow_dispatch' && inputs.target == 'production')
+      )
     environment: production
     steps:
       - name: Checkout

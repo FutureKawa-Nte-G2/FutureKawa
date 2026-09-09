@@ -85,7 +85,18 @@ les deux charts, puis vérifie par smoke test que le frontend répond, que le lo
 JWT, et qu'un relevé MQTT hors tolérance produit ses trois effets en base. Un chart qui ne
 s'installe pas casse ici, avant la fusion.
 
-**Production** — déclenchement manuel (`workflow_dispatch`, cible `production`).
+**Production** — automatique sur `push` vers `main`, ou manuel (`workflow_dispatch`,
+cible `production`).
+
+Le déploiement en production **attend que le déploiement éphémère soit passé** : une
+version n'atteint le Proxmox que si elle s'est réellement installée ailleurs et que la
+chaîne MQTT y a produit ses effets. Les environnements protégés de GitHub — validation
+humaine avant déploiement — ne sont pas disponibles sur un dépôt privé en plan gratuit ;
+c'est donc cette dépendance qui tient le rôle de garde-fou, et elle vérifie davantage
+qu'un clic d'approbation.
+
+Le flux complet : merge sur `main` → build des images → cluster éphémère → smoke test →
+si tout passe, `helm upgrade` sur le cluster de production.
 
 ### Pourquoi un runner auto-hébergé
 

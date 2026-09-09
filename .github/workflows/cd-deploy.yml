@@ -50,6 +50,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Le runner embarque une vingtaine de gigaoctets d'outillage préinstallé
+      # dont rien n'est utilisé ici : tout est construit dans des conteneurs.
+      # Sans ce ménage, l'import des quatre images sature le disque du nœud k3d,
+      # qui expulse alors ses pods — dont l'opérateur de base de données, ce qui
+      # se manifeste par une erreur trompeuse sur son webhook.
+      - name: Libérer de l'espace disque
+        run: |
+          echo "avant :"; df -h / | tail -1
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/share/boost /opt/hostedtoolcache/CodeQL \
+                      /usr/local/share/powershell /usr/share/swift || true
+          sudo docker image prune -af >/dev/null 2>&1 || true
+          echo "après :"; df -h / | tail -1
+
       - name: Setup Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -119,7 +133,11 @@ jobs:
           [ -n "$EP" ] || { echo "::error::Le webhook CNPG n'a jamais eu d'endpoint."; exit 1; }
 
       - name: Importer les images dans le cluster
-        run: k3d image import -c futurekawa "$TS_IMAGE" "$API_IMAGE" "$SIEGE_IMAGE" "$FRONTEND_IMAGE"
+        run: |
+          docker images --format '{{.Repository}}:{{.Tag}} {{.Size}}' | grep futurekawa
+          df -h / | tail -1
+          k3d image import -c futurekawa "$TS_IMAGE" "$API_IMAGE" "$SIEGE_IMAGE" "$FRONTEND_IMAGE"
+          df -h / | tail -1
 
       # --- Déploiement ----------------------------------------------------
 

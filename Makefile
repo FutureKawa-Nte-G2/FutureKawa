@@ -7,7 +7,7 @@ ODOO_DB_NAME ?= futurekawa
 .DEFAULT_GOAL := help
 
 .PHONY: help env up db ps logs down clean validate migrate odoo-module odoo-webhook-compose odoo-webhook-native \
-        test test-back test-front test-api test-smoke
+        test test-back test-front test-api test-smoke simulate
 
 help: ## Affiche cette aide
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -68,19 +68,39 @@ test-api: ## Tests de l'API pays (pytest)
 	  python:3.13-slim \
 	  sh -c "cp -r /src/. /tmp/api && pip install -q -r requirements-dev.txt && python -m pytest tests -q"
 
-test-smoke: ## Bout en bout : publie un relevé MQTT et vérifie toute la chaîne
-	@echo "Pré-requis : la stack doit tourner (make up) et la base pays contenir"
-	@echo "un capteur actif assigné à un lot. Voir TESTING.md."
-	@TS=$$(date -u +%Y-%m-%dT%H:%M:%SZ); \
-	 $(COMPOSE) exec -T mosquitto mosquitto_pub -h localhost -q 1 \
-	   -t "futurekawa/$${SENSOR:-SENSOR-BR-01}" \
-	   -m "{\"measuredAt\":\"$$TS\",\"temp\":34.0,\"humidity\":88.0}"
-	@echo "Relevé hors tolérance publié, attente du traitement..."
-	@sleep 12
-	@$(COMPOSE) exec -T warehouse-db psql -U $${WAREHOUSE_DB_USER:-futurekawa} -d $${WAREHOUSE_DB_NAME:-futurekawa_br} \
-	  -c 'SELECT s.code, m.meas_date, m.meas_temp, m.meas_humidity FROM measurements m JOIN sensors s USING (sensor_id) ORDER BY m.meas_date DESC LIMIT 3;' \
-	  -c 'SELECT batch_ref, is_compliant FROM batches ORDER BY 1;' \
-	  -c 'SELECT notification_type, created_at FROM notifications ORDER BY created_at DESC LIMIT 3;'
+simulate: ## Génère et publie une campagne de relevés simulés (2 capteurs, 48 h)
+	@echo "Le firmware embarqué ne publie pas encore sur le broker : ce simulateur"
+	@echo "tient sa place pour exercer la chaîne. Voir tools/sensor_simulator.py."
+	@mkdir -p .simdata
+	python3 tools/sensor_simulator.py \
+	  --sensors SENSOR-BR-01,SENSOR-BR-02 \
+	  --drift SENSOR-BR-02 \
+	  --out .simdata
+	@for s in SENSOR-BR-01 SENSOR-BR-02; do \
+	  echo "publication de $$s..."; \
+	  $(COMPOSE) exec -T mosquitto mosquitto_pub -h localhost -q 1 \
+	    -t "futurekawa/$$s" -l < .simdata/$$s.jsonl; \
+	done
+	@echo "Publication terminée."
+
+test-smoke: ## Bout en bout : fixture, campagne simulée, vérification des effets
+	@echo "== 1/3 fixture : capteurs actifs assignés à des lots =="
+	@$(COMPOSE) exec -T warehouse-db psql -q -U $${WAREHOUSE_DB_USER:-futurekawa} \
+	  -d $${WAREHOUSE_DB_NAME:-futurekawa_br} -v ON_ERROR_STOP=1 \
+	  < tools/fixture_country_smoke.sql
+	@echo "== 2/3 campagne de relevés simulés =="
+	@$(MAKE) --no-print-directory simulate
+	@echo "attente du traitement par les consumers..."
+	@sleep 15
+	@echo "== 3/3 effets attendus en base =="
+	@$(COMPOSE) exec -T warehouse-db psql -U $${WAREHOUSE_DB_USER:-futurekawa} \
+	  -d $${WAREHOUSE_DB_NAME:-futurekawa_br} \
+	  -c 'SELECT s.code, count(*) AS releves, round(max(m.meas_temp),1) AS temp_max FROM measurements m JOIN sensors s USING (sensor_id) GROUP BY s.code ORDER BY s.code;' \
+	  -c 'SELECT batch_ref, is_compliant FROM batches ORDER BY batch_ref;' \
+	  -c 'SELECT notification_type, count(*) FROM notifications GROUP BY notification_type;'
+	@echo ""
+	@echo "Attendu : BR-2026-0001 conforme, BR-2026-0002 non conforme, et UNE"
+	@echo "seule notification malgre les nombreux releves hors seuil."
 
 validate: ## Vérifie la syntaxe du docker-compose
 	@$(COMPOSE) config -q && echo "docker-compose OK"

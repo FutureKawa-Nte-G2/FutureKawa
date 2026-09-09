@@ -75,6 +75,58 @@ make k3d-down               # supprime tout
 > dans le bundle, pas lue au démarrage : changer `INGRESS_HOST` impose de reconstruire
 > l'image (`make images` s'en charge).
 
+## Déploiement continu
+
+Deux étages, dans `.github/workflows/cd-deploy.yml`.
+
+**Environnement éphémère** — automatique, à chaque push et chaque PR vers `develop`.
+Construit les quatre images, monte un cluster k3d dans le runner, installe CNPG, applique
+les deux charts, puis vérifie par smoke test que le frontend répond, que le login rend un
+JWT, et qu'un relevé MQTT hors tolérance produit ses trois effets en base. Un chart qui ne
+s'installe pas casse ici, avant la fusion.
+
+**Production** — déclenchement manuel (`workflow_dispatch`, cible `production`).
+
+### Pourquoi un runner auto-hébergé
+
+Le Proxmox n'est joignable que depuis le réseau interne. Un runner GitHub est une machine
+éphémère hébergée par Microsoft : **aucun secret ne lui donnera accès à un réseau privé**.
+La seule voie propre est un runner qui vit *dans* le réseau — il s'enregistre en connexion
+**sortante** vers GitHub, donc rien n'a besoin d'être exposé sur Internet.
+
+### Mise en place (une fois)
+
+1. Sur une VM du réseau interne — idéalement un nœud du cluster :
+
+   ```bash
+   # Jeton à récupérer dans Settings > Actions > Runners > New self-hosted runner
+   mkdir actions-runner && cd actions-runner
+   curl -o runner.tar.gz -L https://github.com/actions/runner/releases/latest/download/actions-runner-linux-x64.tar.gz
+   tar xzf runner.tar.gz
+   ./config.sh --url https://github.com/<org>/<repo> --token <TOKEN> --labels futurekawa-prod
+   sudo ./svc.sh install && sudo ./svc.sh start
+   ```
+
+   Le label `futurekawa-prod` est ce que cible `runs-on` — sans lui le job reste en attente.
+
+2. Donner au runner l'accès au cluster, au choix :
+   - le kubeconfig est déjà sur la VM (cas d'un nœud du cluster) : rien à faire ;
+   - sinon, créer le secret `KUBECONFIG` (base64) dans les paramètres du dépôt :
+
+     ```bash
+     base64 -w0 ~/.kube/config    # coller le résultat dans le secret
+     ```
+
+3. Lancer : **Actions → CD-DEPLOY → Run workflow → cible `production`**.
+
+Sans kubeconfig ni secret, le job échoue avec un message explicite plutôt que de déployer
+dans le vide.
+
+> **État actuel :** ce job n'a jamais été exécuté — l'accès VPN au Proxmox n'est pas encore
+> disponible et aucun cluster cible n'existe. Le chemin de déploiement est en revanche
+> prouvé : le job éphémère le rejoue intégralement à chaque PR, sur la **même distribution**
+> (k3d = k3s dans Docker) que celle installée par le Terraform.
+
 ## Vérifier
 
 Le smoke test suppose un capteur **actif** et **assigné à un lot** : un relevé dont le

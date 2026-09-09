@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { getAlerts, getUnreadAlerts, resolveAlert, getAlertBatches } from "./alerts";
+import { getAlerts, getUnreadAlerts, resolveAlert, getAlertBatches, subscribeToAlertsChange } from "./alerts";
 
 // getAlerts/resolveAlert/getAlertBatches are mock-backed for now (#76, no
 // GET /api/alerts server-side yet) but are generated against the real
@@ -51,6 +51,28 @@ describe("resolveAlert", () => {
     const updated = refreshed.find((a) => a.id === target.id);
     expect(updated?.status).toBe("resolved");
     expect(updated?.resolvedAt).not.toBeNull();
+  });
+
+  it("notifies subscribers", async () => {
+    const { alerts } = await getAlerts({ pageSize: 100 });
+    const listener = vi.fn();
+    const unsubscribe = subscribeToAlertsChange(listener);
+
+    await resolveAlert(alerts[0].id);
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    unsubscribe();
+  });
+
+  it("does not notify unsubscribed listeners", async () => {
+    const { alerts } = await getAlerts({ pageSize: 100 });
+    const listener = vi.fn();
+    const unsubscribe = subscribeToAlertsChange(listener);
+    unsubscribe();
+
+    await resolveAlert(alerts[0].id);
+
+    expect(listener).not.toHaveBeenCalled();
   });
 });
 

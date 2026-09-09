@@ -37,6 +37,18 @@ function mulberry32(seed: number): () => number {
 let mockAlerts: Alert[] | null = null;
 let mockAlertsCacheKey: string | null = null;
 
+type AlertsChangeListener = () => void;
+const alertsChangeListeners = new Set<AlertsChangeListener>();
+
+export function subscribeToAlertsChange(listener: AlertsChangeListener): () => void {
+  alertsChangeListeners.add(listener);
+  return () => alertsChangeListeners.delete(listener);
+}
+
+function notifyAlertsChange(): void {
+  alertsChangeListeners.forEach((listener) => listener());
+}
+
 async function ensureMockAlerts(accessToken?: string | null): Promise<Alert[]> {
   const countries = await getCountries(accessToken);
   const warehousesByCountry = await Promise.all(
@@ -145,6 +157,7 @@ export async function resolveAlert(id: string, accessToken?: string | null): Pro
   if (alert) {
     alert.status = "resolved";
     alert.resolvedAt = new Date().toISOString();
+    notifyAlertsChange();
   }
 }
 

@@ -6,9 +6,16 @@ import type { Alert } from "@/lib/api/types";
 
 const mockGetUnreadAlerts = vi.fn();
 const mockPush = vi.fn();
+let alertsChangeListener: (() => void) | null = null;
 
 vi.mock("@/lib/api/alerts", () => ({
   getUnreadAlerts: () => mockGetUnreadAlerts(),
+  subscribeToAlertsChange: (listener: () => void) => {
+    alertsChangeListener = listener;
+    return () => {
+      alertsChangeListener = null;
+    };
+  },
 }));
 
 vi.mock("@/context/AuthContext", () => ({
@@ -50,6 +57,7 @@ describe("AlertButton", () => {
   beforeEach(() => {
     mockGetUnreadAlerts.mockReset().mockResolvedValue(alerts);
     mockPush.mockReset();
+    alertsChangeListener = null;
   });
 
   it("displays the unread count from the API", async () => {
@@ -78,5 +86,15 @@ describe("AlertButton", () => {
 
     expect(screen.getByText("Aucune alerte non lue")).toBeInTheDocument();
     expect(screen.queryByText("0")).not.toBeInTheDocument();
+  });
+
+  it("refetches the unread count when an alert is acknowledged elsewhere", async () => {
+    render(<AlertButton />);
+    expect(await screen.findByText("2")).toBeInTheDocument();
+
+    mockGetUnreadAlerts.mockResolvedValue([alerts[0]]);
+    alertsChangeListener?.();
+
+    expect(await screen.findByText("1")).toBeInTheDocument();
   });
 });

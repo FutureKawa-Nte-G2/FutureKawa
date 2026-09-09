@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getUnreadAlerts } from "@/lib/api/alerts";
+import { getUnreadAlerts, subscribeToAlertsChange } from "@/lib/api/alerts";
 import type { Alert, AlertType } from "@/lib/api/types";
 import { useAuth } from "@/context/AuthContext";
 
@@ -25,18 +25,24 @@ export function AlertButton() {
   useEffect(() => {
     let cancelled = false;
 
-    getUnreadAlerts(accessToken)
-      .then((result) => {
-        if (!cancelled) setAlerts(result);
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          console.error("Impossible de récupérer les alertes non lues :", error);
-        }
-      });
+    function fetchUnreadAlerts() {
+      getUnreadAlerts(accessToken)
+        .then((result) => {
+          if (!cancelled) setAlerts(result);
+        })
+        .catch((error) => {
+          if (!cancelled) {
+            console.error("Impossible de récupérer les alertes non lues :", error);
+          }
+        });
+    }
+
+    fetchUnreadAlerts();
+    const unsubscribe = subscribeToAlertsChange(fetchUnreadAlerts);
 
     return () => {
       cancelled = true;
+      unsubscribe();
     };
   }, [accessToken]);
 

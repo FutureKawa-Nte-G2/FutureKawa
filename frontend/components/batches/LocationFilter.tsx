@@ -75,8 +75,10 @@ export function LocationFilter({ onSelectionChange }: LocationFilterProps) {
       ]
     : [];
 
+  // Horizontal filter bar, displayed at the top of the FIFO page (was previously
+  // a vertical <aside> occupying the page's left-hand sidebar column — see #74).
   return (
-    <aside className="flex w-(--sidebar-width) flex-col gap-4 bg-background-secondary p-4">
+    <div className="flex flex-wrap items-end gap-4 pb-6">
       <Select
         label="Pays"
         value={countryCode ?? ALL_COUNTRIES}
@@ -91,6 +93,6 @@ export function LocationFilter({ onSelectionChange }: LocationFilterProps) {
         disabled={!countryCode}
         onChange={handleWarehouseChange}
       />
-    </aside>
+    </div>
   );
 }

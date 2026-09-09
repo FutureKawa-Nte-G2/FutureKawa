@@ -5,15 +5,18 @@ import { AlertButton } from "./AlertButton";
 import type { Alert } from "@/lib/api/types";
 
 const mockGetUnreadAlerts = vi.fn();
-const mockResolveAlert = vi.fn();
+const mockPush = vi.fn();
 
 vi.mock("@/lib/api/alerts", () => ({
   getUnreadAlerts: () => mockGetUnreadAlerts(),
-  resolveAlert: (id: string) => mockResolveAlert(id),
 }));
 
 vi.mock("@/context/AuthContext", () => ({
   useAuth: () => ({ accessToken: "test-access-token" }),
+}));
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: mockPush }),
 }));
 
 const alerts: Alert[] = [
@@ -46,7 +49,7 @@ const alerts: Alert[] = [
 describe("AlertButton", () => {
   beforeEach(() => {
     mockGetUnreadAlerts.mockReset().mockResolvedValue(alerts);
-    mockResolveAlert.mockReset().mockResolvedValue(undefined);
+    mockPush.mockReset();
   });
 
   it("displays the unread count from the API", async () => {
@@ -54,19 +57,19 @@ describe("AlertButton", () => {
     expect(await screen.findByText("2")).toBeInTheDocument();
   });
 
-  it("removes an alert from the list and decrements the badge when clicked", async () => {
+  it("navigates to /alertes and closes the menu when an alert is clicked, without resolving it", async () => {
     const user = userEvent.setup();
     render(<AlertButton />);
 
     await user.click(await screen.findByRole("button", { name: /Alertes non lues \(2\)/ }));
     await user.click(await screen.findByRole("menuitem", { name: /Entrepôt Cerrado/ }));
 
-    expect(mockResolveAlert).toHaveBeenCalledWith("1");
-    expect(screen.queryByText(/Entrepôt Cerrado/)).not.toBeInTheDocument();
-    expect(screen.getByText("1")).toBeInTheDocument();
+    expect(mockPush).toHaveBeenCalledWith("/alertes");
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(screen.getByText("2")).toBeInTheDocument();
   });
 
-  it("shows the empty state and hides the badge once all alerts are read", async () => {
+  it("shows the empty state and hides the badge once there are no active alerts", async () => {
     mockGetUnreadAlerts.mockResolvedValue([]);
     const user = userEvent.setup();
     render(<AlertButton />);

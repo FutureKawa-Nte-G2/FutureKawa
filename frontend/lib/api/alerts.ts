@@ -154,10 +154,10 @@ export async function getAlertBatches(alertId: string, accessToken?: string | nu
   const all = await ensureMockAlerts(accessToken);
   const alert = all.find((a) => a.id === alertId);
   const countryCode = alert?.countryCode ?? "BR";
+  const reference = alert ? new Date(alert.createdAt).getTime() : Date.now();
 
   const rng = mulberry32(hashString(alertId));
   const count = 1 + Math.floor(rng() * 4);
-  const now = Date.now();
 
   return Array.from({ length: count }, (_, i) => ({
     id: `mock-alert-batch-${alertId}-${i}`,
@@ -165,6 +165,6 @@ export async function getAlertBatches(alertId: string, accessToken?: string | nu
     batchRef: `${countryCode}-2026-${1000 + Math.floor(rng() * 9000)}`,
     farmName: FARM_NAMES[Math.floor(rng() * FARM_NAMES.length)],
     qualityGrade: QUALITY_GRADES[Math.floor(rng() * QUALITY_GRADES.length)],
-    enteredAt: new Date(now - Math.floor(rng() * 60) * DAY_MS).toISOString(),
+    enteredAt: new Date(reference - Math.floor(rng() * 60) * DAY_MS).toISOString(),
   }));
 }

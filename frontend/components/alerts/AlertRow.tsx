@@ -44,6 +44,7 @@ export function AlertRow({ alert, onResolved }: AlertRowProps) {
     if (!isExpanded || batches !== null) return;
 
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsLoadingBatches(true);
     setError(null);
 

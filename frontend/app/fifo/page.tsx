@@ -24,6 +24,7 @@ function FifoContent() {
   const [selection, setSelection] = useState<LocationSelection>({
     country: null,
     warehouse: null,
+    qualityGrade: null,
   });
   const [batches, setBatches] = useState<Batch[]>([]);
   const [page, setPage] = useState(1);
@@ -84,34 +85,40 @@ function FifoContent() {
     ? `${selection.country?.name} — ${selection.warehouse.name}`
     : selection.country?.name ?? "Tous les pays";
 
+  // Quality grade is filtered client-side, on the page of batches already
+  // fetched — GET /api/batches has no qualityGrade parameter (#74). This
+  // means the filter only covers the current page, not the full paginated
+  // list; see the issue's attention points.
+  const visibleBatches = selection.qualityGrade
+    ? batches.filter((batch) => batch.qualityGrade === selection.qualityGrade)
+    : batches;
+
   return (
-    <div className="flex min-h-screen">
+    <main className="flex-1 p-8">
       <LocationFilter onSelectionChange={handleSelectionChange} />
-      <main className="flex-1 p-8">
-        <h1 className="text-2xl font-semibold text-foreground">{title}</h1>
-        <p className="mt-1 text-sm text-input-text">
-          Suivi des stocks et accès aux courbes de mesures qualité.
-        </p>
-        <div className="mt-8">
-          {error ? (
-            <p role="alert" className="py-8 text-center text-sm text-red-600">
-              {error}
-            </p>
-          ) : isLoading ? (
-            <p className="py-8 text-center text-sm text-input-text">Chargement des lots...</p>
-          ) : (
-            <BatchTable batches={batches} />
-          )}
+      <h1 className="text-2xl font-semibold text-foreground">{title}</h1>
+      <p className="mt-1 text-sm text-input-text">
+        Suivi des stocks et accès aux courbes de mesures qualité.
+      </p>
+      <div className="mt-8">
+        {error ? (
+          <p role="alert" className="py-8 text-center text-sm text-red-600">
+            {error}
+          </p>
+        ) : isLoading ? (
+          <p className="py-8 text-center text-sm text-input-text">Chargement des lots...</p>
+        ) : (
+          <BatchTable batches={visibleBatches} />
+        )}
+      </div>
+      <div className="mt-6 grid grid-cols-3 items-center">
+        <div className="justify-self-start">
+          <PageSizeSelector value={pageSize} onChange={handlePageSizeChange} />
         </div>
-        <div className="mt-6 grid grid-cols-3 items-center">
-          <div className="justify-self-start">
-            <PageSizeSelector value={pageSize} onChange={handlePageSizeChange} />
-          </div>
-          <div className="justify-self-center">
-            <Pagination currentPage={page} totalPages={totalPages} onPageChange={setPage} />
-          </div>
+        <div className="justify-self-center">
+          <Pagination currentPage={page} totalPages={totalPages} onPageChange={setPage} />
         </div>
-      </main>
-    </div>
+      </div>
+    </main>
   );
 }

@@ -1,51 +1,54 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getUnreadAlerts, resolveAlert } from "@/lib/api/alerts";
-import type { AlertItem, AlertType } from "@/lib/api/types";
+import { useRouter } from "next/navigation";
+import { getUnreadAlerts, subscribeToAlertsChange } from "@/lib/api/alerts";
+import type { Alert, AlertType } from "@/lib/api/types";
 import { useAuth } from "@/context/AuthContext";
 
 const TYPE_STYLES: Record<AlertType, string> = {
-  alert: "text-status-alert-text bg-status-alert-bg",
-  expired: "text-status-expired-text bg-status-expired-bg",
+  temperature: "text-status-alert-text bg-status-alert-bg",
+  humidity: "text-status-alert-text bg-status-alert-bg",
+};
+
+const TYPE_LABELS: Record<AlertType, string> = {
+  temperature: "Température",
+  humidity: "Humidité",
 };
 
 export function AlertButton() {
-  const [alerts, setAlerts] = useState<AlertItem[]>([]);
+  const [alerts, setAlerts] = useState<Alert[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const { accessToken } = useAuth();
+  const router = useRouter();
 
   useEffect(() => {
     let cancelled = false;
 
-    // GET /api/alerts isn't implemented on the backend yet
-    getUnreadAlerts(accessToken)
-      .then((result) => {
-        if (!cancelled) setAlerts(result);
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          console.error("Impossible de récupérer les alertes non lues :", error);
-        }
-      });
+    function fetchUnreadAlerts() {
+      getUnreadAlerts(accessToken)
+        .then((result) => {
+          if (!cancelled) setAlerts(result);
+        })
+        .catch((error) => {
+          if (!cancelled) {
+            console.error("Impossible de récupérer les alertes non lues :", error);
+          }
+        });
+    }
+
+    fetchUnreadAlerts();
+    const unsubscribe = subscribeToAlertsChange(fetchUnreadAlerts);
 
     return () => {
       cancelled = true;
+      unsubscribe();
     };
   }, [accessToken]);
 
-  async function handleResolve(id: string) {
-    const previous = alerts;
-    setAlerts((prev) => prev.filter((a) => a.id !== id));
-    try {
-      await resolveAlert(id, accessToken);
-    } catch (error) {
-      // PUT /api/alerts/:id/resolve is also not implemented server-side yet
-      // (deferred to a separate issue per the alerts controller backlog).
-      // Put the alert back rather than silently losing it from the list.
-      console.error("Impossible de résoudre l'alerte :", error);
-      setAlerts(previous);
-    }
+  function handleAlertClick() {
+    setIsOpen(false);
+    router.push("/alertes");
   }
 
   return (
@@ -82,13 +85,15 @@ export function AlertButton() {
                 key={alert.id}
                 type="button"
                 role="menuitem"
-                onClick={() => handleResolve(alert.id)}
+                onClick={handleAlertClick}
                 className="flex w-full items-start gap-2 px-3 py-2 text-left text-sm hover:bg-background-secondary"
               >
-                <span className={`mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${TYPE_STYLES[alert.alertType]}`}>
-                  {alert.alertType === "expired" ? "périmé" : "alerte"}
+                <span className={`mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${TYPE_STYLES[alert.type]}`}>
+                  {TYPE_LABELS[alert.type]}
                 </span>
-                <span className="text-foreground">{alert.message}</span>
+                <span className="text-foreground">
+                  Entrepôt {alert.warehouseName} ({alert.countryName})
+                </span>
               </button>
             ))
           )}

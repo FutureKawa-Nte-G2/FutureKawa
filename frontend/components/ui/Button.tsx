@@ -1,6 +1,6 @@
 import type { ButtonHTMLAttributes } from "react";
 
-type ButtonVariant = "primary" | "alert" | "expired";
+type ButtonVariant = "primary" | "alert" | "expired" | "secondary" | "resolved";
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
@@ -13,6 +13,9 @@ const VARIANT_CLASSES: Record<ButtonVariant, string> = {
     "bg-action-alert-bg text-white hover:bg-action-alert-bg-hover active:bg-black disabled:opacity-50 disabled:hover:bg-action-alert-bg",
   expired:
     "bg-action-expired-bg text-white hover:bg-action-expired-bg-hover active:bg-black disabled:opacity-50 disabled:hover:bg-action-expired-bg",
+  secondary:
+    "border border-border-primary bg-background-secondary text-foreground hover:bg-border-primary active:bg-border-primary disabled:opacity-50",
+  resolved: "border border-border-primary bg-white text-foreground",
 };
 
 export function Button({

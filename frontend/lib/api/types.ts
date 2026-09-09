@@ -84,22 +84,50 @@ export interface BatchListResponse {
   totalPages: number;
 }
 
-// Alert info returned by GET /api/alerts (unread only)
-export type AlertType = 'expired' | 'alert';
-export type AlertStatus = 'open' | 'resolved';
+// --- Alerts (warehouse temperature/humidity threshold breaches) ---
+// Mirrors the backend Alert entity (#76): WarehouseId only, no BatchId — an
+// alert is scoped to a warehouse's readings, never to a specific batch (see
+// backlog-batches-alertes-pr.md). GET /api/alerts doesn't exist server-side
+// yet (backlog-frontend-mesures-alertes-collecte.md), so this is the target
+// contract the frontend mock aligns to, not a confirmed wire format. Enum
+// values follow this project's convention of exposing backend enums as
+// lowercase strings on the wire (see BatchStatus above); backend enum member
+// names are PascalCase (AlertType.Temperature/Humidity, AlertStatus.Active/Resolved).
+export type AlertType = 'temperature' | 'humidity';
+export type AlertStatus = 'active' | 'resolved';
 
-// Alert info returned by GET /api/alerts (open alerts only)
-export interface AlertItem {
+export interface Alert {
   id: string;
-  alertType: AlertType;
-  alertStatus: AlertStatus;
-  batchRef: string | null;
-  warehouseName: string;
-  message: string;
-  createdAt: string; // ISO 8601
-  resolvedAt: string | null;
+  warehouseId: string; // FK to Warehouse.id, used to filter by warehouse
+  warehouseName: string; // display name, consolidated by the backend like Batch.warehouseName
+  countryCode: string; // FK to Country.code, used for the Pays filter cascade
+  countryName: string; // display name
+  type: AlertType;
+  status: AlertStatus;
+  createdAt: string; // ISO 8601 — when the alert was raised
+  resolvedAt: string | null; // ISO 8601; null while active
+  measuredAt: string | null; // ISO 8601 — timestamp of the triggering measurement
 }
 
 export interface AlertListResponse {
-  alerts: AlertItem[];
+  alerts: Alert[];
+  page: number;
+  pageSize: number;
+  totalCount: number;
+  totalPages: number;
+}
+
+// A batch considered "affected" by an alert (the "liste des lots" expand row, #76).
+// No real backend source exists yet: Alert carries no BatchId by design (see
+// backlog-batches-alertes-pr.md) — the eventual computation is a date-overlap
+// query (batch StoredAt/ShippedAt vs alert CreatedAt/ResolvedAt), never
+// implemented. Mocked for this issue only; shape may change once that
+// endpoint (GET /api/alerts/{id}/batches) is actually built.
+export interface AlertBatch {
+  id: string;
+  countryCode: string;
+  batchRef: string;
+  farmName: string;
+  qualityGrade: string;
+  enteredAt: string; // ISO 8601
 }

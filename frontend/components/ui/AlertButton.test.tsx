@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AlertButton } from "./AlertButton";
+import type { Alert } from "@/lib/api/types";
 
 const mockGetUnreadAlerts = vi.fn();
 const mockResolveAlert = vi.fn();
@@ -15,26 +16,30 @@ vi.mock("@/context/AuthContext", () => ({
   useAuth: () => ({ accessToken: "test-access-token" }),
 }));
 
-const alerts = [
+const alerts: Alert[] = [
   {
     id: "1",
-    alertType: "expired" as const,
-    alertStatus: "open" as const,
-    batchRef: "BR-2026-0341",
+    warehouseId: "wh-1",
     warehouseName: "Cerrado",
-    message: "Le lot BR-2026-0341 a dépassé 365 jours de stockage dans l'entrepôt Cerrado (Brésil).",
+    countryCode: "BR",
+    countryName: "Brésil",
+    type: "temperature",
+    status: "active",
     createdAt: "2026-07-27T08:15:00Z",
     resolvedAt: null,
+    measuredAt: "2026-07-27T08:00:00Z",
   },
   {
     id: "2",
-    alertType: "alert" as const,
-    alertStatus: "open" as const,
-    batchRef: null,
+    warehouseId: "wh-2",
     warehouseName: "Santos",
-    message: "Conditions hors plage détectée dans l'entrepôt de Santos (Brésil).",
+    countryCode: "BR",
+    countryName: "Brésil",
+    type: "humidity",
+    status: "active",
     createdAt: "2026-06-01T14:15:00Z",
     resolvedAt: null,
+    measuredAt: "2026-06-01T14:00:00Z",
   },
 ];
 
@@ -54,10 +59,10 @@ describe("AlertButton", () => {
     render(<AlertButton />);
 
     await user.click(await screen.findByRole("button", { name: /Alertes non lues \(2\)/ }));
-    await user.click(await screen.findByRole("menuitem", { name: /BR-2026-0341/ }));
+    await user.click(await screen.findByRole("menuitem", { name: /Entrepôt Cerrado/ }));
 
     expect(mockResolveAlert).toHaveBeenCalledWith("1");
-    expect(screen.queryByText(/Lot BR-2026-0341/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Entrepôt Cerrado/)).not.toBeInTheDocument();
     expect(screen.getByText("1")).toBeInTheDocument();
   });
 

@@ -79,15 +79,23 @@ jobs:
 
       # --- Cluster --------------------------------------------------------
 
+      - name: Installer k3d
+        # Installation directe plutôt qu'une action tierce : celle-ci échouait au
+        # téléchargement (exit 22) et ajoutait un intermédiaire pour une seule
+        # commande.
+        run: |
+          curl -sfL https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | TAG=v5.7.4 bash
+          k3d version
+
       - name: Créer le cluster k3d
-        uses: AbsaOSS/k3d-action@v2
-        with:
-          cluster-name: futurekawa
-          args: >-
-            --servers 1 --agents 1
-            -p "80:80@loadbalancer"
-            -p "1883:1883@loadbalancer"
+        run: |
+          k3d cluster create futurekawa \
+            --servers 1 --agents 1 \
+            -p "80:80@loadbalancer" \
+            -p "1883:1883@loadbalancer" \
             --wait
+          kubectl wait --for=condition=Ready nodes --all --timeout=120s
+          kubectl get nodes
 
       - name: Installer l'opérateur CloudNativePG
         run: |

@@ -104,6 +104,20 @@ jobs:
             https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.25/releases/cnpg-1.25.1.yaml
           kubectl -n cnpg-system rollout status deployment/cnpg-controller-manager --timeout=300s
 
+          # `rollout status` rend la main dès que le Deployment est disponible,
+          # mais le webhook de mutation n'est pas encore inscrit dans les
+          # endpoints de son Service. Créer un Cluster à cet instant échoue sur
+          # « no endpoints available for service cnpg-webhook-service ».
+          # On attend donc l'endpoint lui-même, pas le pod.
+          echo "Attente des endpoints du webhook CNPG..."
+          for i in $(seq 1 60); do
+            EP=$(kubectl -n cnpg-system get endpoints cnpg-webhook-service \
+                   -o jsonpath='{.subsets[*].addresses[*].ip}' 2>/dev/null || true)
+            if [ -n "$EP" ]; then echo "webhook joignable sur $EP"; break; fi
+            sleep 3
+          done
+          [ -n "$EP" ] || { echo "::error::Le webhook CNPG n'a jamais eu d'endpoint."; exit 1; }
+
       - name: Importer les images dans le cluster
         run: k3d image import -c futurekawa "$TS_IMAGE" "$API_IMAGE" "$SIEGE_IMAGE" "$FRONTEND_IMAGE"
 

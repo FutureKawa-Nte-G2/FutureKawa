@@ -1,0 +1,12 @@
+apiVersion: v2
+name: futurekawa-data
+description: Stack pays FutureKawa (PostgreSQL/TimescaleDB via CNPG, Mosquitto, API pays, consumers MQTT) — un release par pays.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - iot
+  - timeseries
+  - mqtt
+maintainers:
+  - name: Alexis Coheleach

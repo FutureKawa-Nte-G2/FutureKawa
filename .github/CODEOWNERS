@@ -1,0 +1,11 @@
+# Périmètres de responsabilité — l'approbation du owner est requise sur ces chemins.
+# (Exécutoire une fois la branch protection "Require review from Code Owners" activée sur develop.)
+
+# Data / DB : schéma, migrations, contrats de données (voir ADR-001)
+/Api/app/models.py                      @AlexisCoheleachEPSI
+/Api/alembic/                           @AlexisCoheleachEPSI
+/database/                              @AlexisCoheleachEPSI
+/Documentation/diagrammes/mld_*.puml    @AlexisCoheleachEPSI
+/Documentation/diagrammes/mcd_*.puml    @AlexisCoheleachEPSI
+/Documentation/diagrammes/er_chart*.md  @AlexisCoheleachEPSI
+/Documentation/adr/                     @AlexisCoheleachEPSI

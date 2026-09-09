@@ -34,3 +34,6 @@ env/
 # stack comme il veut, et le contrat d'équipe reste le Makefile + le compose.
 start.sh
 .logs/
+
+# Sorties du simulateur de capteurs (make simulate)
+.simdata/

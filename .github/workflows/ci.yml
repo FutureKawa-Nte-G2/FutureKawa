@@ -41,3 +41,14 @@ jobs:
           --settings coverlet.runsettings
           --collect:"XPlat Code Coverage"
           --results-directory TestResults
+
+      - name: Upload coverage
+        # La couverture était collectée dans TestResults mais jamais exposée :
+        # elle disparaissait avec le runner. `if: always()` la publie aussi
+        # quand un test échoue, moment où elle est le plus utile.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dotnet-coverage
+          path: backend/TestResults/**/coverage.cobertura.xml
+          if-no-files-found: ignore

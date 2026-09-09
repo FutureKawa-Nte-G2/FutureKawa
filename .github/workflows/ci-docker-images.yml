@@ -1,0 +1,89 @@
+name: CI-DOCKER-IMAGES
+
+# Packaging : construit les trois images de la stack et les met à disposition
+# comme artefacts téléchargeables. Séparé des workflows de test parce qu'il
+# répond à une autre question — « l'image se construit-elle ? » et non « le code
+# passe-t-il ses tests ? » — et parce qu'un échec de build d'image ne doit pas
+# masquer un échec de test, ni l'inverse.
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  build-images:
+    name: Build ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      # fail-fast désactivé : si le frontend casse, on veut quand même savoir si
+      # les deux autres images se construisent.
+      fail-fast: false
+      matrix:
+        include:
+          - name: siege-api
+            context: backend
+          - name: country-api
+            context: Api
+          - name: frontend
+            context: frontend
+            # Les NEXT_PUBLIC_* sont inlinées dans le bundle au build et non
+            # lues au démarrage : l'URL de l'API doit être fournie ici, sinon
+            # l'image produite tape des URL relatives sur sa propre origine.
+            build-args: |
+              NEXT_PUBLIC_API_BASE_URL=http://localhost:55648
+              NEXT_PUBLIC_USE_MOCKS=false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build ${{ matrix.name }}
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          # push: false — pas de registre à ce stade. L'image est exportée en
+          # archive pour être rejouable hors CI (docker load).
+          push: false
+          load: false
+          tags: futurekawa/${{ matrix.name }}:${{ github.sha }}
+          build-args: ${{ matrix.build-args }}
+          outputs: type=docker,dest=/tmp/${{ matrix.name }}.tar
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+      - name: Publier l'image en artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-${{ matrix.name }}
+          path: /tmp/${{ matrix.name }}.tar
+          # Sept jours : de quoi couvrir une démo et une correction, sans
+          # accumuler des centaines de mégaoctets par commit.
+          retention-days: 7
+          if-no-files-found: error
+
+  compose-config:
+    name: Validation du docker-compose
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Créer le .env attendu par le compose
+        # JWT_SECRET est déclaré obligatoire dans le compose (`:?`) : sans .env,
+        # `docker compose config` échoue avant même de valider la syntaxe.
+        run: cp .env.example .env
+
+      - name: Valider la syntaxe et la résolution des variables
+        run: docker compose config --quiet
+
+      - name: Lister les services déclarés
+        run: docker compose config --services

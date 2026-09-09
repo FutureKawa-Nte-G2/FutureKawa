@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getAlertBatches } from "@/lib/api/alerts";
+import { getAlertBatches, resolveAlert } from "@/lib/api/alerts";
 import type { Alert, AlertBatch, AlertType } from "@/lib/api/types";
 import { AlertStatusBadge } from "./AlertStatusBadge";
 import { Button } from "@/components/ui/Button";
@@ -15,14 +15,30 @@ const TYPE_LABELS: Record<AlertType, string> = {
 
 interface AlertRowProps {
   alert: Alert;
+  onResolved?: () => void;
 }
 
-export function AlertRow({ alert }: AlertRowProps) {
+export function AlertRow({ alert, onResolved }: AlertRowProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [batches, setBatches] = useState<AlertBatch[] | null>(null);
   const [isLoadingBatches, setIsLoadingBatches] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isResolving, setIsResolving] = useState(false);
+  const [resolveError, setResolveError] = useState<string | null>(null);
   const { accessToken } = useAuth();
+
+  async function handleAcquitter() {
+    setIsResolving(true);
+    setResolveError(null);
+    try {
+      await resolveAlert(alert.id, accessToken);
+      onResolved?.();
+    } catch {
+      setResolveError("Impossible d'acquitter cette alerte.");
+    } finally {
+      setIsResolving(false);
+    }
+  }
 
   useEffect(() => {
     if (!isExpanded || batches !== null) return;
@@ -65,11 +81,17 @@ export function AlertRow({ alert }: AlertRowProps) {
         </Button>
         <Button
           variant={alert.status === "resolved" ? "resolved" : "alert"}
-          disabled={alert.status === "resolved"}
+          disabled={alert.status === "resolved" || isResolving}
+          onClick={handleAcquitter}
         >
           {alert.status === "resolved" ? "Acquitté" : "Acquitter"}
         </Button>
       </div>
+      {resolveError && (
+        <p role="alert" className="text-sm text-red-600">
+          {resolveError}
+        </p>
+      )}
       {isExpanded && (
         <div className="w-full max-w-[990px] rounded-[4px] border border-border-primary bg-background-secondary px-4 py-3 text-sm text-input-text">
           {isLoadingBatches && <p>Chargement des lots...</p>}

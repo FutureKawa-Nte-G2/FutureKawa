@@ -5,9 +5,11 @@ import { AlertRow } from "./AlertRow";
 import type { Alert, AlertBatch } from "@/lib/api/types";
 
 const mockGetAlertBatches = vi.fn();
+const mockResolveAlert = vi.fn();
 
 vi.mock("@/lib/api/alerts", () => ({
   getAlertBatches: (id: string) => mockGetAlertBatches(id),
+  resolveAlert: (id: string, accessToken?: string | null) => mockResolveAlert(id, accessToken),
 }));
 
 vi.mock("@/context/AuthContext", () => ({
@@ -45,6 +47,7 @@ function makeAlertBatch(overrides: Partial<AlertBatch>): AlertBatch {
 describe("AlertRow", () => {
   beforeEach(() => {
     mockGetAlertBatches.mockReset();
+    mockResolveAlert.mockReset().mockResolvedValue(undefined);
   });
 
   it("displays the warehouse, country, alert date and type", () => {
@@ -130,5 +133,28 @@ describe("AlertRow", () => {
     await user.click(screen.getByRole("button", { name: /Liste des lots/ }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Impossible de charger les lots concernés.");
+  });
+
+  it("resolves the alert and notifies the parent when Acquitter is clicked", async () => {
+    const onResolved = vi.fn();
+    const user = userEvent.setup();
+    render(<AlertRow alert={makeAlert({ id: "alert-1", status: "active" })} onResolved={onResolved} />);
+
+    await user.click(screen.getByRole("button", { name: "Acquitter" }));
+
+    expect(mockResolveAlert).toHaveBeenCalledWith("alert-1", "test-access-token");
+    expect(onResolved).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows an error message and does not notify the parent when resolving fails", async () => {
+    mockResolveAlert.mockRejectedValue(new Error("network error"));
+    const onResolved = vi.fn();
+    const user = userEvent.setup();
+    render(<AlertRow alert={makeAlert({ status: "active" })} onResolved={onResolved} />);
+
+    await user.click(screen.getByRole("button", { name: "Acquitter" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Impossible d'acquitter cette alerte.");
+    expect(onResolved).not.toHaveBeenCalled();
   });
 });

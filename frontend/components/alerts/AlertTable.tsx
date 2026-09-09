@@ -4,6 +4,7 @@ import { GRID_TEMPLATE, HEADER_ROW_CLASSES } from "./grid";
 
 interface AlertTableProps {
   alerts: Alert[];
+  onAlertResolved?: () => void;
 }
 
 const COLUMN_LABELS = [
@@ -16,7 +17,7 @@ const COLUMN_LABELS = [
   "Actions",
 ];
 
-export function AlertTable({ alerts }: AlertTableProps) {
+export function AlertTable({ alerts, onAlertResolved }: AlertTableProps) {
   if (alerts.length === 0) {
     return <p className="text-center text-sm text-input-text">Aucune alerte pour cette sélection.</p>;
   }
@@ -31,7 +32,7 @@ export function AlertTable({ alerts }: AlertTableProps) {
         ))}
       </div>
       {alerts.map((alert) => (
-        <AlertRow key={alert.id} alert={alert} />
+        <AlertRow key={alert.id} alert={alert} onResolved={onAlertResolved} />
       ))}
     </div>
   );

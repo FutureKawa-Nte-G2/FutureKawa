@@ -90,7 +90,7 @@ function AlertesContent() {
         ) : isLoading ? (
           <p className="py-8 text-center text-sm text-input-text">Chargement des alertes...</p>
         ) : (
-          <AlertTable alerts={alerts} />
+          <AlertTable alerts={alerts} onAlertResolved={fetchAlerts} />
         )}
       </div>
       <div className="mt-6 grid grid-cols-3 items-center">

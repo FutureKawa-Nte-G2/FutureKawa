@@ -1,8 +1,18 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AlertRow } from "./AlertRow";
-import type { Alert } from "@/lib/api/types";
+import type { Alert, AlertBatch } from "@/lib/api/types";
+
+const mockGetAlertBatches = vi.fn();
+
+vi.mock("@/lib/api/alerts", () => ({
+  getAlertBatches: (id: string) => mockGetAlertBatches(id),
+}));
+
+vi.mock("@/context/AuthContext", () => ({
+  useAuth: () => ({ accessToken: "test-access-token" }),
+}));
 
 function makeAlert(overrides: Partial<Alert>): Alert {
   return {
@@ -20,7 +30,23 @@ function makeAlert(overrides: Partial<Alert>): Alert {
   };
 }
 
+function makeAlertBatch(overrides: Partial<AlertBatch>): AlertBatch {
+  return {
+    id: "b1",
+    countryCode: "BR",
+    batchRef: "BR-2026-0341",
+    farmName: "Fazenda Boa Vista",
+    qualityGrade: "A",
+    enteredAt: "2026-06-01T00:00:00Z",
+    ...overrides,
+  };
+}
+
 describe("AlertRow", () => {
+  beforeEach(() => {
+    mockGetAlertBatches.mockReset();
+  });
+
   it("displays the warehouse, country, alert date and type", () => {
     render(<AlertRow alert={makeAlert({})} />);
 
@@ -54,16 +80,54 @@ describe("AlertRow", () => {
     expect(screen.getByRole("button", { name: "Acquitter" })).toBeEnabled();
   });
 
-  it("toggles the batches panel when 'Liste des lots' is clicked", async () => {
+  it("fetches and displays the affected batches only once expanded", async () => {
+    mockGetAlertBatches.mockResolvedValue([makeAlertBatch({})]);
+    const user = userEvent.setup();
+    render(<AlertRow alert={makeAlert({ id: "alert-1" })} />);
+
+    expect(mockGetAlertBatches).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: /Liste des lots/ }));
+
+    expect(await screen.findByText("BR-2026-0341")).toBeInTheDocument();
+    expect(screen.getByText("Fazenda Boa Vista")).toBeInTheDocument();
+    expect(mockGetAlertBatches).toHaveBeenCalledWith("alert-1");
+    expect(mockGetAlertBatches).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not refetch when collapsed and re-expanded", async () => {
+    mockGetAlertBatches.mockResolvedValue([makeAlertBatch({})]);
     const user = userEvent.setup();
     render(<AlertRow alert={makeAlert({})} />);
 
-    expect(screen.queryByText(/Chargement des lots/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Liste des lots/ }));
+    await screen.findByText("BR-2026-0341");
 
     await user.click(screen.getByRole("button", { name: /Liste des lots/ }));
-    expect(screen.getByText(/Chargement des lots/)).toBeInTheDocument();
+    expect(screen.queryByText("BR-2026-0341")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /Liste des lots/ }));
-    expect(screen.queryByText(/Chargement des lots/)).not.toBeInTheDocument();
+    expect(await screen.findByText("BR-2026-0341")).toBeInTheDocument();
+    expect(mockGetAlertBatches).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows an empty state when the alert has no affected batches", async () => {
+    mockGetAlertBatches.mockResolvedValue([]);
+    const user = userEvent.setup();
+    render(<AlertRow alert={makeAlert({})} />);
+
+    await user.click(screen.getByRole("button", { name: /Liste des lots/ }));
+
+    expect(await screen.findByText("Aucun lot concerné.")).toBeInTheDocument();
+  });
+
+  it("shows an error message when the batches fail to load", async () => {
+    mockGetAlertBatches.mockRejectedValue(new Error("network error"));
+    const user = userEvent.setup();
+    render(<AlertRow alert={makeAlert({})} />);
+
+    await user.click(screen.getByRole("button", { name: /Liste des lots/ }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Impossible de charger les lots concernés.");
   });
 });

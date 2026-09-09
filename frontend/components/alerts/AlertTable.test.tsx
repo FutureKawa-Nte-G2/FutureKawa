@@ -1,7 +1,11 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { AlertTable } from "./AlertTable";
 import type { Alert } from "@/lib/api/types";
+
+vi.mock("@/context/AuthContext", () => ({
+  useAuth: () => ({ accessToken: "test-access-token" }),
+}));
 
 function makeAlert(overrides: Partial<Alert>): Alert {
   return {

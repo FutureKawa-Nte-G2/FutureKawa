@@ -70,9 +70,10 @@ describe("AlertRow", () => {
     expect(screen.getByText("résolue")).toBeInTheDocument();
   });
 
-  it("disables the Acquitter button once the alert is resolved", () => {
+  it("disables the Acquitter button once the alert is resolved and relabels it Acquitté", () => {
     render(<AlertRow alert={makeAlert({ status: "resolved" })} />);
-    expect(screen.getByRole("button", { name: "Acquitter" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Acquitté" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Acquitter" })).not.toBeInTheDocument();
   });
 
   it("enables the Acquitter button while the alert is active", () => {

@@ -59,12 +59,15 @@ export function AlertRow({ alert }: AlertRowProps) {
         </span>
         <AlertStatusBadge status={alert.status} />
         <span className="min-w-0 text-center text-sm text-foreground">{TYPE_LABELS[alert.type]}</span>
-        <Button variant="primary" onClick={() => setIsExpanded((v) => !v)}>
+        <Button variant="secondary" onClick={() => setIsExpanded((v) => !v)}>
           Liste des lots
           <ChevronIcon expanded={isExpanded} />
         </Button>
-        <Button variant="alert" disabled={alert.status === "resolved"}>
-          Acquitter
+        <Button
+          variant={alert.status === "resolved" ? "resolved" : "alert"}
+          disabled={alert.status === "resolved"}
+        >
+          {alert.status === "resolved" ? "Acquitté" : "Acquitter"}
         </Button>
       </div>
       {isExpanded && (

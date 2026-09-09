@@ -1,0 +1,74 @@
+@HostAddress = https://localhost:55648
+@WebhookToken = futurekawa-webhook-shared-token
+
+### Auth: Login (nécessaire pour relire les orders via les endpoints JWT)
+# @name login
+POST {{HostAddress}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "test@futurekawa.com",
+  "password": "TestPass123"
+}
+
+### Odoo webhook: réception d'une commande confirmée (simule action_confirm() côté Odoo)
+# @name receiveOrder
+POST {{HostAddress}}/api/integration/odoo/orders
+Content-Type: application/json
+X-Webhook-Token: {{WebhookToken}}
+
+{
+  "orderId": 1001,
+  "orderDate": "2026-08-27T10:00:00Z",
+  "client": "Café Import SARL",
+  "country": "BR",
+  "qualityGrade": "A",
+  "batchReferences": ["BATCH-001", "BATCH-002"],
+  "lines": [
+    { "product": "Café Arabica", "quantity": 500 },
+    { "product": "Café Robusta", "quantity": 250 }
+  ]
+}
+
+### Odoo webhook: même commande rejouée (doit être idempotent, "already exists" dans les logs)
+POST {{HostAddress}}/api/integration/odoo/orders
+Content-Type: application/json
+X-Webhook-Token: {{WebhookToken}}
+
+{
+  "orderId": 1001,
+  "orderDate": "2026-08-27T10:00:00Z",
+  "client": "Café Import SARL",
+  "country": "BR",
+  "qualityGrade": "A",
+  "batchReferences": ["BATCH-001", "BATCH-002"],
+  "lines": [
+    { "product": "Café Arabica", "quantity": 500 },
+    { "product": "Café Robusta", "quantity": 250 }
+  ]
+}
+
+### Odoo webhook: mauvais token (doit renvoyer 401)
+POST {{HostAddress}}/api/integration/odoo/orders
+Content-Type: application/json
+X-Webhook-Token: wrong-token
+
+{
+  "orderId": 1002,
+  "orderDate": "2026-08-27T10:00:00Z",
+  "client": "Test Client",
+  "country": "EC",
+  "qualityGrade": "B",
+  "batchReferences": ["BATCH-003"],
+  "lines": [
+    { "product": "Café Robusta", "quantity": 100 }
+  ]
+}
+
+### Orders: lister toutes les commandes reçues d'Odoo
+GET {{HostAddress}}/api/orders
+Authorization: Bearer {{login.response.body.$.data.accessToken}}
+
+### Orders: récupérer la commande créée ci-dessus par son id interne
+GET {{HostAddress}}/api/orders/{{receiveOrder.response.body.$.data.id}}
+Authorization: Bearer {{login.response.body.$.data.accessToken}}

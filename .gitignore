@@ -1,0 +1,36 @@
+# Racine du dépôt. Chaque sous-projet garde le sien pour ce qui lui est propre
+# (Api/, backend/, frontend/, odoo-addons/) ; ici, ce qui traîne partout.
+
+# Systèmes
+.DS_Store
+Thumbs.db
+
+# Éditeurs
+.idea/
+*.swp
+*~
+
+# Python — caches et environnements virtuels, où qu'ils soient
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+venv/
+.venv/
+env/
+
+# Secrets. Le fichier d'exemple du compose reste suivi : il ne contient
+# aucune valeur réelle.
+.env
+.env.*
+!.env.example
+
+# Scripts de confort local et leurs logs. Non versionnés : chacun démarre la
+# stack comme il veut, et le contrat d'équipe reste le Makefile + le compose.
+start.sh
+.logs/

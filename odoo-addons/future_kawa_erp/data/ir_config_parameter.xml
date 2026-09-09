@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- System parameters for the FutureKawa integration -->
+    <!-- These parameters can be configured via: -->
+    <!--   Settings → Technical → Parameters → System Parameters -->
+
+    <record id="webhook_url_param" model="ir.config_parameter">
+        <field name="key">future_kawa.webhook_url</field>
+        <field name="value">http://siege-api:8080/api/integration/odoo/orders</field>
+    </record>
+
+    <record id="webhook_token_param" model="ir.config_parameter">
+        <field name="key">future_kawa.webhook_token</field>
+        <field name="value">futurekawa-webhook-shared-token</field>
+    </record>
+</odoo>

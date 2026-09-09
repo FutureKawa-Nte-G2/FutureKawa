@@ -1,0 +1,17 @@
+# Runtime dependencies of the country API.
+#
+#   python3 -m venv venv && ./venv/bin/pip install -r requirements.txt
+#   ./venv/bin/uvicorn app.main:app --reload
+
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
+SQLAlchemy==2.0.51
+# The async PostgreSQL driver behind postgresql+asyncpg://
+asyncpg==0.31.0
+# Schema migrations. Runtime and not dev-only: the schema has to be
+# created wherever the API is deployed.
+alembic==1.19.1
+# Client MQTT asynchrone des consumers. Le reste de l'application est en
+# asyncio (SQLAlchemy async, asyncpg) : un client bloquant imposerait un thread
+# et un pont entre les deux mondes pour chaque message reçu.
+aiomqtt==2.4.0

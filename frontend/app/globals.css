@@ -2,25 +2,77 @@
 
 :root {
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #0a0a0a;
+  --brand: #59c144;
+  --brand-hover: #4ca425; /* ~15% darker */
+  --input-text: #636060;
+
+  /* Tokens/Border */
+  --border-primary: #e4e4e4;
+  
+  /* Tokens/Background */
+  --background-secondary: #f9f9f9;
+  
+  /* Tokens/Status */
+  --status-compliant-text: #259800;
+  --status-compliant-bg: #f0feed;
+  --status-alert-text: #dc2626;
+  --status-alert-bg: #feeded;
+  --status-expired-text: #c2410c;
+  --status-expired-bg: #fff1e8;
+  
+  /* Tokens/Action (status-driven buttons) */
+  --action-alert-bg: #dc2626;      /* = status-alert-text, reused as a solid button background */
+  --action-alert-bg-hover: #b91c1c;
+  --action-expired-bg: #c2410c;    /* = status-expired-text, reused as a solid button background */
+  --action-expired-bg-hover: #9a3412;
+
+  /* Tokens/Layout */
+ --sidebar-width: 224px;
+ --navbar-height: 64px;
+ --nav-icon-size: 32px;
+ --user-menu-width: 192px;
+
+   /* Tokens/Typography */
+  --font-size-logo: 26px;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-input-text: var(--input-text);
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-border-primary: var(--border-primary);
+  --color-background-secondary: var(--background-secondary);
+
+  --color-status-compliant-text: var(--status-compliant-text);
+  --color-status-compliant-bg: var(--status-compliant-bg);
+  --color-status-alert-text: var(--status-alert-text);
+  --color-status-alert-bg: var(--status-alert-bg);
+  --color-status-expired-text: var(--status-expired-text);
+  --color-status-expired-bg: var(--status-expired-bg);
+
+  --color-action-alert-bg: var(--action-alert-bg);
+  --color-action-alert-bg-hover: var(--action-alert-bg-hover);
+  --color-action-expired-bg: var(--action-expired-bg);
+  --color-action-expired-bg-hover: var(--action-expired-bg-hover);
+
+  --font-sans: var(--font-poppins);
+  --font-mono: var(--font-geist-mono);
+  --font-input: var(--font-rem);
+
+  --spacing-sidebar-width: var(--sidebar-width);
+  --spacing-navbar-height: var(--navbar-height);
+  --spacing-avatar-size: var(--avatar-size);
+  --spacing-user-menu-width: var(--user-menu-width);
+
+    --text-logo: var(--font-size-logo);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
 }

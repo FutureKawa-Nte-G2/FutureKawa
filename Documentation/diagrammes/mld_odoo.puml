@@ -1,0 +1,98 @@
+@startuml MLD_Odoo_FutureKawa
+
+!theme plain
+
+title MLD - Odoo FutureKawa
+
+skinparam class {
+    BackgroundColor<<Table>> LightYellow
+    BackgroundColor<<Extension>> LightBlue
+    ArrowColor DarkSlateGray
+}
+
+class "sale_order" as SaleOrder <<Table>> {
+  + id : serial <<PK>>
+  + name : varchar
+  + partner_id : int4 <<FK>>
+  + company_id : int4 <<FK>>
+  + state : varchar
+  + date_order : timestamp
+  + amount_total : numeric
+  --
+  ~ batch_count : int4 <<extension>>
+  ~ batch_ref : varchar <<extension>>
+  ~ quality_grade : varchar <<extension>>
+  ~ country : varchar <<extension>>
+  ~ integration_status : varchar <<extension>>
+  ~ integration_error_message : text <<extension>>
+}
+
+class "sale_order_line" as SaleOrderLine <<Table>> {
+  + id : serial <<PK>>
+  + order_id : int4 <<FK>>
+  + product_id : int4 <<FK>>
+  + product_uom_qty : numeric
+  + price_unit : numeric
+  + price_subtotal : numeric
+}
+
+class "res_partner" as ResPartner <<Table>> {
+  + id : serial <<PK>>
+  + name : varchar
+  + email : varchar
+  + phone : varchar
+  + is_company : bool
+  + customer_rank : int4
+}
+
+class "res_company" as ResCompany <<Table>> {
+  + id : serial <<PK>>
+  + name : varchar
+  + currency_id : int4 <<FK>>
+}
+
+class "stock_picking" as StockPicking <<Table>> {
+  + id : serial <<PK>>
+  + name : varchar
+  + sale_id : int4 <<FK>>
+  + picking_type_id : int4 <<FK>>
+  + state : varchar
+  + scheduled_date : timestamp
+  --
+  ~ delivery_reference : varchar <<extension>>
+  ~ carrier_tracking_ref : varchar <<extension>>
+}
+
+class "stock_move" as StockMove <<Table>> {
+  + id : serial <<PK>>
+  + picking_id : int4 <<FK>>
+  + product_id : int4 <<FK>>
+  + product_uom_qty : numeric
+  + state : varchar
+}
+
+class "stock_picking_type" as StockPickingType <<Table>> {
+  + id : serial <<PK>>
+  + name : varchar
+  + code : varchar
+  + warehouse_id : int4 <<FK>>
+}
+
+class "product_product" as ProductProduct <<Table>> {
+  + id : serial <<PK>>
+  + name : varchar
+  + default_code : varchar
+  + list_price : numeric
+}
+
+' Relations logiques
+ResPartner "1" --> "0..*" SaleOrder : partner_id
+ResCompany "1" --> "0..*" SaleOrder : company_id
+SaleOrder "1" --> "0..*" SaleOrderLine : order_id
+ProductProduct "1" --> "0..*" SaleOrderLine : product_id
+SaleOrder "1" --> "0..*" StockPicking : sale_id
+StockPickingType "1" --> "0..*" StockPicking : picking_type_id
+StockPicking "1" --> "0..*" StockMove : picking_id
+ProductProduct "1" --> "0..*" StockMove : product_id
+
+@enduml

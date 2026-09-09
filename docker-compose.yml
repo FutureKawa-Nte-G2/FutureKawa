@@ -1,0 +1,245 @@
+name: futurekawa
+
+# Jwt__Secret est requis même par --migrate : Program.cs lève dessus avant
+# builder.Build(), donc avant que le flag ne soit lu.
+x-siege-env: &siege-env
+  ConnectionStrings__Default: "Host=siege-db;Port=5432;Database=${SIEGE_DB_NAME:-FutureKawaSiege};Username=${SIEGE_DB_USER:-postgres};Password=${SIEGE_DB_PASSWORD:-Not24get}"
+  Jwt__Secret: ${JWT_SECRET:?renseigner JWT_SECRET dans .env}
+
+services:
+  odoo-db:
+    image: postgres:16
+    container_name: futurekawa-odoo-db
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+      POSTGRES_USER: ${POSTGRES_USER:-odoo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-odoo}
+    volumes:
+      - odoo-db-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-odoo}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  odoo:
+    image: odoo:18.0
+    container_name: futurekawa-odoo
+    depends_on:
+      odoo-db:
+        condition: service_healthy
+    ports:
+      - "${ODOO_PORT:-8069}:8069"
+    volumes:
+      - odoo-data:/var/lib/odoo
+      - ./odoo-addons:/mnt/extra-addons
+      - ./odoo.conf:/etc/odoo/odoo.conf
+    environment:
+      HOST: odoo-db
+      USER: ${POSTGRES_USER:-odoo}
+      PASSWORD: ${POSTGRES_PASSWORD:-odoo}
+    restart: unless-stopped
+
+  # Base d'un pays, lue par l'API locale (Api/). Séparée de celle d'Odoo :
+  # l'architecture prévoit un backend autonome par pays, et le siège vient les
+  # interroger par HTTP. Port 5434 pour ne pas heurter odoo-db (5433) ni un
+  # PostgreSQL installé sur la machine (5432).
+  warehouse-db:
+    # timescale = postgres 16 + l'extension timescaledb (measurements est une
+    # hypertable, cf. migration initiale). Même version que l'image CNPG k8s.
+    image: timescale/timescaledb:2.17.2-pg16
+    container_name: futurekawa-warehouse-db
+    ports:
+      - "${WAREHOUSE_DB_PORT:-5434}:5432"
+    environment:
+      POSTGRES_DB: ${WAREHOUSE_DB_NAME:-futurekawa_br}
+      POSTGRES_USER: ${WAREHOUSE_DB_USER:-futurekawa}
+      POSTGRES_PASSWORD: ${WAREHOUSE_DB_PASSWORD:-futurekawa}
+    volumes:
+      - warehouse-db-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${WAREHOUSE_DB_USER:-futurekawa} -d ${WAREHOUSE_DB_NAME:-futurekawa_br}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Base applicative du backend siège. Identifiants alignés sur
+  # appsettings.Development.json.
+  siege-db:
+    image: postgres:16
+    container_name: futurekawa-siege-db
+    ports:
+      - "127.0.0.1:${SIEGE_DB_PORT:-5435}:5432"
+    environment:
+      POSTGRES_DB: ${SIEGE_DB_NAME:-FutureKawaSiege}
+      POSTGRES_USER: ${SIEGE_DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${SIEGE_DB_PASSWORD:-Not24get}
+    volumes:
+      - siege-db-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${SIEGE_DB_USER:-postgres} -d ${SIEGE_DB_NAME:-FutureKawaSiege}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  siege-migrate:
+    build:
+      context: ./backend
+    image: futurekawa/siege-api:dev
+    container_name: futurekawa-siege-migrate
+    command: ["--migrate"]
+    environment:
+      <<: *siege-env
+      ASPNETCORE_ENVIRONMENT: Production
+    depends_on:
+      siege-db:
+        condition: service_healthy
+    restart: "no"
+
+  # DevelopmentSeeder refuse de tourner hors Development, et Testing basculerait
+  # le DbContext en mémoire : le seed partirait dans une base fantôme.
+  siege-seed:
+    image: futurekawa/siege-api:dev
+    container_name: futurekawa-siege-seed
+    command: ["--seed"]
+    environment:
+      <<: *siege-env
+      ASPNETCORE_ENVIRONMENT: Development
+    depends_on:
+      siege-migrate:
+        condition: service_completed_successfully
+    restart: "no"
+
+  siege-api:
+    image: futurekawa/siege-api:dev
+    container_name: futurekawa-siege-api
+    environment:
+      <<: *siege-env
+      ASPNETCORE_ENVIRONMENT: Production
+      Cors__AllowedOrigins__0: ${FRONTEND_ORIGIN:-http://localhost:3000}
+      Odoo__Url: http://odoo:8069
+      Odoo__Db: ${ODOO_DB_NAME:-futurekawa}
+      Odoo__Username: ${ODOO_ADMIN_LOGIN:-admin@admin.com}
+      Odoo__Password: ${ODOO_ADMIN_PASSWORD:-Not24get}
+      Odoo__WebhookToken: ${ODOO_WEBHOOK_TOKEN:-futurekawa-webhook-shared-token}
+      # Sans ces deux lignes le siège n'appelle jamais l'API pays. En
+      # Production il lit appsettings.json, qui porte UseMockData=true et une
+      # LocalApiUrl pointant sur son propre /api/mock/measurements : il
+      # s'interroge lui-même et invente des relevés, sans rien logger d'anormal.
+      # Passer UseMockData à false seul ne suffit donc pas, il faut aussi dire
+      # où joindre l'API pays.
+      MeasurementSync__UseMockData: "false"
+      # host.docker.internal = la machine hôte, où tourne uvicorn. Même motif
+      # que la cible odoo-webhook-native du Makefile. À remplacer par le nom du
+      # service le jour où l'API pays est conteneurisée (#59).
+      MeasurementSync__LocalApiUrl: ${WAREHOUSE_API_URL:-http://host.docker.internal:8000/api/measurements}
+    ports:
+      - "127.0.0.1:${SIEGE_API_PORT:-55648}:8080"
+    depends_on:
+      siege-seed:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 3s
+      start_period: 20s
+      retries: 5
+    restart: unless-stopped
+
+  # Schéma de la base pays. Alembic plutôt qu'EF ici : l'API pays est en
+  # Python, et sa migration initiale crée l'hypertable TimescaleDB.
+  country-migrate:
+    build:
+      context: ./Api
+    image: futurekawa/country-api:dev
+    container_name: futurekawa-country-migrate
+    command: ["alembic", "upgrade", "head"]
+    environment: &country-env
+      DATABASE_URL: postgresql+asyncpg://${WAREHOUSE_DB_USER:-futurekawa}:${WAREHOUSE_DB_PASSWORD:-futurekawa}@warehouse-db:5432/${WAREHOUSE_DB_NAME:-futurekawa_br}
+      LOCAL_API_KEY: ${LOCAL_API_KEY:-change-me}
+    depends_on:
+      warehouse-db:
+        condition: service_healthy
+    restart: "no"
+
+  country-api:
+    image: futurekawa/country-api:dev
+    container_name: futurekawa-country-api
+    environment: *country-env
+    ports:
+      - "127.0.0.1:${COUNTRY_API_PORT:-8000}:8000"
+    depends_on:
+      country-migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 3s
+      start_period: 10s
+      retries: 5
+    restart: unless-stopped
+
+  # Broker MQTT. Les capteurs publient dessus, les consumers y sont abonnés ;
+  # il ne porte aucune logique.
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: futurekawa-mosquitto
+    ports:
+      - "127.0.0.1:${MQTT_PORT:-1883}:1883"
+    volumes:
+      - ./infra/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto-data:/mosquitto/data
+    restart: unless-stopped
+    healthcheck:
+      # Un abonnement réel plutôt qu'un ping TCP : le port peut accepter la
+      # connexion avant que le broker ne serve les souscriptions.
+      test: ["CMD-SHELL", "mosquitto_sub -h localhost -t '$$SYS/#' -C 1 -W 2 >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Les deux consumers de l'US #32, dans le processus dédié prévu par
+  # app/consumers/runner.py. Même image que l'API : seule la commande change.
+  country-consumers:
+    image: futurekawa/country-api:dev
+    container_name: futurekawa-country-consumers
+    command: ["python", "-m", "app.consumers.runner"]
+    environment:
+      <<: *country-env
+      MQTT_BROKER_HOST: mosquitto
+      MQTT_BROKER_PORT: "1883"
+    depends_on:
+      country-migrate:
+        condition: service_completed_successfully
+      mosquitto:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # L'URL que le NAVIGATEUR appelle, pas celle du réseau Docker :
+        # http://siege-api:8080 ne résout que depuis un conteneur.
+        NEXT_PUBLIC_API_BASE_URL: http://localhost:${SIEGE_API_PORT:-55648}
+        NEXT_PUBLIC_USE_MOCKS: "false"
+    image: futurekawa/frontend:dev
+    container_name: futurekawa-frontend
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    depends_on:
+      siege-api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  mosquitto-data:
+  odoo-db-data:
+  odoo-data:
+  warehouse-db-data:
+  siege-db-data:

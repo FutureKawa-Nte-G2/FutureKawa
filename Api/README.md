@@ -30,6 +30,38 @@ export $(grep -v '^#' .env | xargs)
 `http://127.0.0.1:8000/health` répond `{"status":"ok"}`, et la documentation
 interactive est sur `/docs`.
 
+## Alertes
+
+Deux routes, sur la table qu'écrit `app/services/quality.py` :
+
+```
+GET   /api/alerts?warehouseRef=BR-ENT-01&status=active&limit=50
+PATCH /api/alerts/{alertId}/resolve?warehouseRef=BR-ENT-01
+```
+
+`warehouseRef` est obligatoire et vient du siège, qui détient la session : cette
+API n'a pas de login à elle. Une référence inconnue répond `404` et non une
+liste vide — « cet entrepôt n'a rien d'ouvert » et « cet entrepôt n'existe pas »
+ne se disent pas de la même façon.
+
+`status` vaut `active` (défaut), `resolved` ou `all`. La lecture est ouverte
+comme `/api/measurements` ; la résolution écrit, donc elle exige `X-API-Key`.
+
+**Résoudre n'est pas du rangement.** `alerts` porte un index unique partiel
+n'autorisant qu'une alerte `condition` active par entrepôt : tant que la
+première n'est pas refermée, une nouvelle dérive de la salle ne peut plus rien
+ouvrir — elle tombe dans le rattrapage d'`IntegrityError` de `evaluate_reading`
+et se réduit à un marquage de lot. La résolution est ce qui réarme la détection.
+
+Elle ne touche pas à `batches.is_compliant` : réparer une salle ne blanchit pas
+le café qui a passé la nuit hors plage. Lever ce drapeau est un jugement porté
+sur le lot, pas un effet de bord de l'accusé de réception de la salle — et cet
+endpoint-là reste à écrire.
+
+Les alertes `expiration` sont lues et affichées, mais **personne ne les crée
+encore** : il faut une tâche périodique, là où les deux consumers actuels sont
+réactifs. À faire.
+
 ## Consumers MQTT
 
 Deux services abonnés au broker, indépendants l'un de l'autre : l'un écrit les

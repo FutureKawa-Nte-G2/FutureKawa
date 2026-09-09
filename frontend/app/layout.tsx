@@ -46,7 +46,7 @@ export default function RootLayout({
             <Navbar />
             <div className="flex flex-1">
               <Sidebar />
-              {children}
+              <div className="min-w-0 flex-1">{children}</div>
             </div>
           </RefreshProvider>
         </AuthProvider>

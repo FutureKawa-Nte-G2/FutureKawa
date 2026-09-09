@@ -17,4 +17,11 @@ public interface IBatchService
         int page,
         int pageSize,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Retrieves a single batch by ID, or null if it doesn't exist.
+    /// </summary>
+    Task<BatchListItemDto?> GetBatchByIdAsync(
+        Guid id,
+        CancellationToken cancellationToken = default);
 }

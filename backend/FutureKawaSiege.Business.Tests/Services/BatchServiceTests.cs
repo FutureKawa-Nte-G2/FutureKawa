@@ -180,6 +180,44 @@ public class BatchServiceTests
         // Assert
         Assert.Equal("compliant", result.Batches.First().Status);
     }
+    [Fact]
+    public async Task GetBatchByIdAsync_Should_ReturnMappedBatch_When_Found()
+    {
+        // Arrange
+        var country = new Country { Id = Guid.NewGuid(), Code = "BR", Name = "Brésil" };
+        var warehouse = new Warehouse { Id = Guid.NewGuid(), Name = "Santos", Country = country };
+        var farm = new Farm { Id = Guid.NewGuid(), Name = "Fazenda Boa Vista" };
+        var batch = CreateBatch(Guid.NewGuid(), warehouse, farm, DateTime.UtcNow.AddDays(-10));
+
+        _batchRepository.GetByIdAsync(batch.Id, Arg.Any<CancellationToken>())
+            .Returns(batch);
+
+        // Act
+        var result = await _service.GetBatchByIdAsync(batch.Id);
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Equal(batch.Id, result!.Id);
+        Assert.Equal(warehouse.Id, result.WarehouseId);
+        Assert.Equal(country.Code, result.CountryCode);
+        Assert.Equal("compliant", result.Status);
+    }
+
+    [Fact]
+    public async Task GetBatchByIdAsync_Should_ReturnNull_When_NotFound()
+    {
+        // Arrange
+        var id = Guid.NewGuid();
+        _batchRepository.GetByIdAsync(id, Arg.Any<CancellationToken>())
+            .Returns((Batch?)null);
+
+        // Act
+        var result = await _service.GetBatchByIdAsync(id);
+
+        // Assert
+        Assert.Null(result);
+    }
+
     private static Batch CreateBatch(Guid id, Warehouse warehouse, Farm farm, DateTime storedAt)
     {
         return new Batch

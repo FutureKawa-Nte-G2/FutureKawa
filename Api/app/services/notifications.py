@@ -13,16 +13,18 @@ from datetime import UTC, datetime
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+# Re-exported rather than redefined: `/api/alerts` raises the same one, and the
+# router imports it from here.
+from app.errors import WarehouseRefUnknownError
 from app.models import Batch, Notification, Order, Warehouse
 from app.schemas.notification import NotificationList, NotificationRead
 
-
-class WarehouseRefUnknownError(Exception):
-    code = "warehouse_ref_unknown"
-
-    def __init__(self, warehouse_ref: str) -> None:
-        self.message = f"No warehouse found with reference {warehouse_ref}."
-        super().__init__(self.message)
+__all__ = [
+    "NotificationNotFoundError",
+    "WarehouseRefUnknownError",
+    "list_notifications",
+    "mark_read",
+]
 
 
 class NotificationNotFoundError(Exception):

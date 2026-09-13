@@ -2,49 +2,42 @@
 
 import { useEffect, useState } from "react";
 import { getCountries, getWarehouses } from "@/lib/api/batches";
-import type { Country, Warehouse } from "@/lib/api/types";
+import type { AlertStatus, Country, Warehouse } from "@/lib/api/types";
 import { Select } from "@/components/ui/Select";
 import { useAuth } from "@/context/AuthContext";
 
-export interface LocationSelection {
+export interface AlertFilterSelection {
   country: Country | null;
   warehouse: Warehouse | null;
-  qualityGrade: string | null;
+  status: AlertStatus | null;
 }
 
 const ALL_COUNTRIES = "ALL_COUNTRIES";
 const ALL_WAREHOUSES = "ALL_WAREHOUSES";
-const ALL_QUALITY_GRADES = "ALL_QUALITY_GRADES";
+const ALL_STATUSES = "ALL_STATUSES";
 
-// Fixed set mirroring the backend BatchQualityGrade enum (A/B/C). Unlike
-// countries/warehouses this isn't fetched from the API — it's a small,
-// stable enum, not reference data.
-const QUALITY_GRADE_OPTIONS = [
-  { value: ALL_QUALITY_GRADES, label: "Toutes les qualités" },
-  { value: "A", label: "A" },
-  { value: "B", label: "B" },
-  { value: "C", label: "C" },
+const STATUS_OPTIONS = [
+  { value: ALL_STATUSES, label: "Tous les statuts" },
+  { value: "active", label: "Active" },
+  { value: "resolved", label: "Résolue" },
 ];
 
-interface LocationFilterProps {
-  onSelectionChange: (selection: LocationSelection) => void;
+interface AlertFilterProps {
+  onSelectionChange: (selection: AlertFilterSelection) => void;
 }
 
-export function LocationFilter({ onSelectionChange }: LocationFilterProps) {
+export function AlertFilter({ onSelectionChange }: AlertFilterProps) {
   const [countries, setCountries] = useState<Country[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [countryCode, setCountryCode] = useState<string | null>(null);
   const [warehouseId, setWarehouseId] = useState<string | null>(null);
-  const [qualityGrade, setQualityGrade] = useState<string | null>(null);
+  const [status, setStatus] = useState<AlertStatus | null>(null);
   const { accessToken } = useAuth();
 
   useEffect(() => {
     getCountries(accessToken).then(setCountries);
   }, [accessToken]);
 
-  // Fetch warehouses only when a country is actually selected.
-  // Clearing warehouses when no country is selected is handled directly
-  // in handleCountryChange (a user event), not here.
   useEffect(() => {
     if (!countryCode) return;
     getWarehouses(countryCode, accessToken).then(setWarehouses);
@@ -55,37 +48,33 @@ export function LocationFilter({ onSelectionChange }: LocationFilterProps) {
       setCountryCode(null);
       setWarehouseId(null);
       setWarehouses([]);
-      onSelectionChange({ country: null, warehouse: null, qualityGrade });
+      onSelectionChange({ country: null, warehouse: null, status });
       return;
     }
     const country = countries.find((c) => c.code === next) ?? null;
     setCountryCode(next);
     setWarehouseId(null);
-    onSelectionChange({ country, warehouse: null, qualityGrade });
+    onSelectionChange({ country, warehouse: null, status });
   }
 
   function handleWarehouseChange(next: string) {
     const country = countries.find((c) => c.code === countryCode) ?? null;
     if (next === ALL_WAREHOUSES) {
       setWarehouseId(null);
-      onSelectionChange({ country, warehouse: null, qualityGrade });
+      onSelectionChange({ country, warehouse: null, status });
       return;
     }
     const warehouse = warehouses.find((w) => w.id === next) ?? null;
     setWarehouseId(next);
-    onSelectionChange({ country, warehouse, qualityGrade });
+    onSelectionChange({ country, warehouse, status });
   }
 
-  // Quality is filtered client-side, on whichever page of batches is already
-  // loaded — GET /api/batches has no qualityGrade parameter today (#74,
-  // attention points). Adding it server-side, to filter the full paginated
-  // list rather than just the current page, is tracked as a follow-up.
-  function handleQualityChange(next: string) {
-    const grade = next === ALL_QUALITY_GRADES ? null : next;
+  function handleStatusChange(next: string) {
+    const nextStatus = next === ALL_STATUSES ? null : (next as AlertStatus);
     const country = countries.find((c) => c.code === countryCode) ?? null;
     const warehouse = warehouses.find((w) => w.id === warehouseId) ?? null;
-    setQualityGrade(grade);
-    onSelectionChange({ country, warehouse, qualityGrade: grade });
+    setStatus(nextStatus);
+    onSelectionChange({ country, warehouse, status: nextStatus });
   }
 
   const countryOptions = [
@@ -100,9 +89,6 @@ export function LocationFilter({ onSelectionChange }: LocationFilterProps) {
       ]
     : [];
 
-  // Horizontal filter bar, displayed at the top of the FIFO page (was
-  // previously a vertical <aside> occupying the page's left-hand sidebar
-  // column — see #74).
   return (
     <div className="flex flex-wrap items-end gap-4 pb-6">
       <Select
@@ -120,10 +106,10 @@ export function LocationFilter({ onSelectionChange }: LocationFilterProps) {
         onChange={handleWarehouseChange}
       />
       <Select
-        label="Qualité"
-        value={qualityGrade ?? ALL_QUALITY_GRADES}
-        options={QUALITY_GRADE_OPTIONS}
-        onChange={handleQualityChange}
+        label="Statut"
+        value={status ?? ALL_STATUSES}
+        options={STATUS_OPTIONS}
+        onChange={handleStatusChange}
       />
     </div>
   );

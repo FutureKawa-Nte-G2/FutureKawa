@@ -3,6 +3,7 @@ import { Geist_Mono, Poppins, REM } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "../context/AuthContext";
 import { Navbar } from "@/components/layout/Navbar";
+import { Sidebar } from "@/components/layout/Sidebar";
 import { RefreshProvider } from "@/context/RefreshContext";
 
 // Body copy: titles, subtitles, labels, buttons
@@ -43,9 +44,12 @@ export default function RootLayout({
         <AuthProvider>
           <RefreshProvider>
             <Navbar />
-              {children}
-           </RefreshProvider>
-          </AuthProvider>
+            <div className="flex flex-1">
+              <Sidebar />
+              <div className="min-w-0 flex-1">{children}</div>
+            </div>
+          </RefreshProvider>
+        </AuthProvider>
       </body>
     </html>
   );

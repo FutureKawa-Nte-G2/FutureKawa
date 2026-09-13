@@ -294,4 +294,83 @@ public class BatchesControllerIntegrationTests : IClassFixture<CustomWebApplicat
         var returnedBatch = Assert.Single(body.Data!.Batches, b => b.Id == batch.Id);
         Assert.Equal("alert", returnedBatch.Status);
     }
+
+    [Fact]
+    public async Task GetById_Should_Return401_When_NoAuth()
+    {
+        var response = await _client.GetAsync($"/api/batches/{Guid.NewGuid()}");
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetById_Should_Return404_When_BatchDoesNotExist()
+    {
+        // Arrange
+        var token = await GetAccessTokenAsync();
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        // Act
+        var response = await _client.GetAsync($"/api/batches/{Guid.NewGuid()}");
+        // Assert
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetById_Should_Return200_WithMatchingBatch_When_Found()
+    {
+        // Arrange: fresh warehouse/farm/batch isolated from other tests' data,
+        // used both to exercise the real EF Include (Warehouse/Country/Farm)
+        // and to confirm the exact batch (not just any batch) is returned.
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var country = new Country
+        {
+            Id = Guid.NewGuid(),
+            Code = "EC",
+            Name = "Équateur",
+            NominalTemp = 27.0m,
+            ToleranceTemp = 3.0m,
+            NominalHumidity = 60.0m,
+            ToleranceHumidity = 2.0m
+        };
+        var warehouse = new Warehouse
+        {
+            Id = Guid.NewGuid(),
+            CountryId = country.Id,
+            Name = $"WH-BYID-{Guid.NewGuid().ToString()[..8]}",
+            Reference = $"WH-BYID-{Guid.NewGuid().ToString()[..8]}"
+        };
+        var farm = new Farm
+        {
+            Id = Guid.NewGuid(),
+            CountryId = country.Id,
+            Name = "Test Farm",
+            Reference = $"FARM-{Guid.NewGuid().ToString()[..8]}"
+        };
+        var batch = new Batch
+        {
+            Id = Guid.NewGuid(),
+            WarehouseId = warehouse.Id,
+            FarmId = farm.Id,
+            Reference = "BATCH-BYID-001",
+            StoredAt = DateTime.UtcNow.AddDays(-3),
+            ShippedAt = null,
+            QualityGrade = BatchQualityGrade.B,
+            Status = BatchStatus.Stored
+        };
+        db.AddRange(country, warehouse, farm, batch);
+        await db.SaveChangesAsync();
+        var token = await GetAccessTokenAsync();
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        // Act
+        var response = await _client.GetAsync($"/api/batches/{batch.Id}");
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<ApiResponse<BatchListItemDto>>();
+        Assert.NotNull(body);
+        Assert.True(body.Success);
+        Assert.Equal(batch.Id, body.Data!.Id);
+        Assert.Equal(warehouse.Id, body.Data.WarehouseId);
+        Assert.Equal("EC", body.Data.CountryCode);
+        Assert.Equal("BATCH-BYID-001", body.Data.BatchRef);
+    }
 }

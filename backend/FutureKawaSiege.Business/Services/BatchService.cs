@@ -38,6 +38,15 @@ public class BatchService : IBatchService
         };
     }
 
+    /// <inheritdoc/>
+    public async Task<BatchListItemDto?> GetBatchByIdAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        var batch = await _batchRepository.GetByIdAsync(id, cancellationToken);
+        return batch is null ? null : MapToDto(batch);
+    }
+
     private static BatchListItemDto MapToDto(Batch batch)
     {
         return new BatchListItemDto

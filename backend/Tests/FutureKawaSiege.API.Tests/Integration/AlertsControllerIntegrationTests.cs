@@ -1,13 +1,21 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using FutureKawaSiege.Business.Services.Abstraction;
 using FutureKawaSiege.Commons.Models.API;
 using FutureKawaSiege.Commons.Models.API.Requests;
+using FutureKawaSiege.Commons.Models.API.Responses;
 using FutureKawaSiege.Data;
 using FutureKawaSiege.Data.Entities;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace FutureKawaSiege.API.Tests.Integration;
 
+// Shares a collection with RateLimiterTests: that class briefly overrides the
+// "alerts_ingest" permit limit via a process-wide env var, which would otherwise be
+// able to race this class's shared factory if both ran in parallel (see the
+// collection's doc comment in RateLimiterTests.cs).
+[Collection("RateLimiterSensitive")]
 public class AlertsControllerIntegrationTests : IClassFixture<CustomWebApplicationFactory>
 {
     private readonly HttpClient _client;
@@ -23,6 +31,35 @@ public class AlertsControllerIntegrationTests : IClassFixture<CustomWebApplicati
     {
         _client.DefaultRequestHeaders.Remove("X-Api-Key");
         _client.DefaultRequestHeaders.Add("X-Api-Key", "local-api-shared-key");
+    }
+
+    private async Task<string> GetAccessTokenAsync()
+    {
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var hasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
+        const string email = "alerts-test@futurekawa.com";
+
+        var user = db.Users.FirstOrDefault(u => u.Email == email);
+        if (user == null)
+        {
+            user = new User
+            {
+                Id = Guid.NewGuid(),
+                Email = email,
+                PasswordHash = hasher.Hash("TestPass123"),
+                Role = UserRole.Admin,
+                CreatedAt = DateTime.UtcNow,
+            };
+            db.Users.Add(user);
+            await db.SaveChangesAsync();
+        }
+
+        var loginResponse = await _client.PostAsJsonAsync("/api/auth/login",
+            new LoginRequest(email, "TestPass123"));
+        loginResponse.EnsureSuccessStatusCode();
+        var loginBody = await loginResponse.Content.ReadFromJsonAsync<ApiResponse<LoginResponse>>();
+        return loginBody!.Data!.AccessToken;
     }
 
     private async Task SeedTestDataAsync()
@@ -77,11 +114,11 @@ public class AlertsControllerIntegrationTests : IClassFixture<CustomWebApplicati
 
         await db.SaveChangesAsync();
 
-        // Store ID for tests
-        _testWarehouseId = warehouse.Id;
+        // Store reference for tests
+        _testWarehouseReference = warehouse.Reference;
     }
 
-    private Guid _testWarehouseId;
+    private string _testWarehouseReference = null!;
 
     [Fact]
     public async Task Create_Should_Return401_When_NoApiKey()
@@ -90,7 +127,7 @@ public class AlertsControllerIntegrationTests : IClassFixture<CustomWebApplicati
         await SeedTestDataAsync();
         var request = new CreateAlertRequest
         {
-            WarehouseId = _testWarehouseId,
+            WarehouseReference = _testWarehouseReference,
             Type = "temperature"
         };
 
@@ -109,7 +146,7 @@ public class AlertsControllerIntegrationTests : IClassFixture<CustomWebApplicati
         await SeedTestDataAsync();
         var request = new CreateAlertRequest
         {
-            WarehouseId = _testWarehouseId,
+            WarehouseReference = _testWarehouseReference,
             Type = "temperature"
         };
 
@@ -131,7 +168,7 @@ public class AlertsControllerIntegrationTests : IClassFixture<CustomWebApplicati
 
         var request = new CreateAlertRequest
         {
-            WarehouseId = _testWarehouseId,
+            WarehouseReference = _testWarehouseReference,
             Type = "temperature",
             MeasuredAt = DateTime.UtcNow
         };
@@ -147,7 +184,7 @@ public class AlertsControllerIntegrationTests : IClassFixture<CustomWebApplicati
     }
 
     [Fact]
-    public async Task Create_Should_Return400_When_WarehouseNotFound()
+    public async Task Create_Should_Return404_When_WarehouseReferenceUnknown()
     {
         // Arrange
         await SeedTestDataAsync();
@@ -155,7 +192,7 @@ public class AlertsControllerIntegrationTests : IClassFixture<CustomWebApplicati
 
         var request = new CreateAlertRequest
         {
-            WarehouseId = Guid.NewGuid(), // Non-existent warehouse
+            WarehouseReference = "WH-DOES-NOT-EXIST",
             Type = "temperature"
         };
 
@@ -163,7 +200,7 @@ public class AlertsControllerIntegrationTests : IClassFixture<CustomWebApplicati
         var response = await _client.PostAsJsonAsync("/api/alerts", request);
 
         // Assert
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
     [Fact]
@@ -175,7 +212,7 @@ public class AlertsControllerIntegrationTests : IClassFixture<CustomWebApplicati
 
         var request = new CreateAlertRequest
         {
-            WarehouseId = _testWarehouseId,
+            WarehouseReference = _testWarehouseReference,
             Type = "invalid_type"
         };
 
@@ -191,6 +228,10 @@ public class AlertsControllerIntegrationTests : IClassFixture<CustomWebApplicati
     [InlineData("humidity")]
     [InlineData("TEMPERATURE")]
     [InlineData("HUMIDITY")]
+    [InlineData("condition")]
+    [InlineData("CONDITION")]
+    [InlineData("expiration")]
+    [InlineData("EXPIRATION")]
     public async Task Create_Should_Accept_ValidAlertTypes(string type)
     {
         // Arrange
@@ -199,7 +240,7 @@ public class AlertsControllerIntegrationTests : IClassFixture<CustomWebApplicati
 
         var request = new CreateAlertRequest
         {
-            WarehouseId = _testWarehouseId,
+            WarehouseReference = _testWarehouseReference,
             Type = type
         };
 
@@ -221,19 +262,20 @@ public class AlertsControllerIntegrationTests : IClassFixture<CustomWebApplicati
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var country = db.Countries.First(c => c.Code == "BR");
+        var freshWarehouseRef = $"WH-IDEM-{Guid.NewGuid().ToString()[..8]}";
         var freshWarehouse = new Warehouse
         {
             Id = Guid.NewGuid(),
             CountryId = country.Id,
-            Name = $"WH-IDEM-{Guid.NewGuid().ToString()[..8]}",
-            Reference = $"WH-IDEM-{Guid.NewGuid().ToString()[..8]}"
+            Name = freshWarehouseRef,
+            Reference = freshWarehouseRef
         };
         db.Warehouses.Add(freshWarehouse);
         await db.SaveChangesAsync();
 
         var request = new CreateAlertRequest
         {
-            WarehouseId = freshWarehouse.Id,
+            WarehouseReference = freshWarehouseRef,
             Type = "temperature"
         };
 
@@ -246,5 +288,68 @@ public class AlertsControllerIntegrationTests : IClassFixture<CustomWebApplicati
 
         // Assert - Both should return OK
         Assert.Equal(HttpStatusCode.OK, response2.StatusCode);
+    }
+
+    [Fact]
+    public async Task Resolve_Should_Return401_When_NoJwt()
+    {
+        // Act
+        var response = await _client.PatchAsync($"/api/alerts/{Guid.NewGuid()}/resolve", null);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Resolve_Should_Return404_When_AlertDoesNotExist()
+    {
+        // Arrange
+        var token = await GetAccessTokenAsync();
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        // Act
+        var response = await _client.PatchAsync($"/api/alerts/{Guid.NewGuid()}/resolve", null);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Resolve_Should_Return200_And_MarkAlertResolved()
+    {
+        // Arrange
+        await SeedTestDataAsync();
+        Guid alertId;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var warehouse = db.Warehouses.First(w => w.Reference == _testWarehouseReference);
+            var alert = new Alert
+            {
+                Id = Guid.NewGuid(),
+                WarehouseId = warehouse.Id,
+                Type = AlertType.Condition,
+                Status = AlertStatus.Active,
+                CreatedAt = DateTime.UtcNow,
+            };
+            db.Alerts.Add(alert);
+            await db.SaveChangesAsync();
+            alertId = alert.Id;
+        }
+
+        var token = await GetAccessTokenAsync();
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        // Act
+        var response = await _client.PatchAsync($"/api/alerts/{alertId}/resolve", null);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using var verifyScope = _factory.Services.CreateScope();
+        var verifyDb = verifyScope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var resolved = verifyDb.Alerts.First(a => a.Id == alertId);
+        Assert.Equal(AlertStatus.Resolved, resolved.Status);
+        Assert.NotNull(resolved.ResolvedAt);
     }
 }

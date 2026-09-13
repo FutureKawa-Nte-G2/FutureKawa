@@ -1,12 +1,16 @@
 namespace FutureKawaSiege.Data.Entities;
 
 /// <summary>
-/// Type of alert triggered by temperature or humidity thresholds.
+/// Type of alert triggered by temperature or humidity thresholds, or by the
+/// country API's own vocabulary (Condition covers both temperature and
+/// humidity without distinguishing which one; Expiration concerns a batch).
 /// </summary>
 public enum AlertType
 {
     Temperature,
-    Humidity
+    Humidity,
+    Condition,
+    Expiration
 }
 
 /// <summary>
@@ -37,6 +41,13 @@ public class Alert
     public DateTime? ResolvedAt { get; set; }
     
     public DateTime? MeasuredAt { get; set; }
+
+    /// <summary>
+    /// The alert's own identifier on the country API that pushed it, used to push
+    /// a resolution back to that same country API. Null for alerts that did not
+    /// originate from a country push (e.g. seeded data).
+    /// </summary>
+    public Guid? SourceAlertId { get; set; }
 
     public Warehouse Warehouse { get; set; } = null!;
 }

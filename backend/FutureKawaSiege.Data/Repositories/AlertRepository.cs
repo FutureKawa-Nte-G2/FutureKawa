@@ -36,4 +36,20 @@ public class AlertRepository : IAlertRepository
             .AsNoTracking()
             .AnyAsync(a => a.WarehouseId == warehouseId && a.Type == type && a.Status == AlertStatus.Active, cancellationToken);
     }
+
+    /// <inheritdoc/>
+    public async Task<Alert?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        return await _context.Alerts
+            .Include(a => a.Warehouse)
+                .ThenInclude(w => w.Country)
+            .FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
+    }
+
+    /// <inheritdoc/>
+    public async Task UpdateAsync(Alert alert, CancellationToken cancellationToken = default)
+    {
+        _context.Alerts.Update(alert);
+        await _context.SaveChangesAsync(cancellationToken);
+    }
 }

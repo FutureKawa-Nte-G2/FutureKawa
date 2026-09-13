@@ -54,17 +54,17 @@ test: test-back test-front test-api ## Lance les trois suites de tests
 	@echo "Les trois suites sont passées."
 
 test-back: ## Tests du backend siège (.NET)
-	docker run --rm -v "$(PWD)/backend":/src:ro -w /tmp/bk \
+	docker run --rm -v "$(PWD)/backend":/src:ro -w //tmp/bk \
 	  mcr.microsoft.com/dotnet/sdk:10.0 \
 	  sh -c "cp -r /src/. /tmp/bk && dotnet test --nologo -v q"
 
 test-front: ## Tests du frontend (Vitest)
-	docker run --rm -v "$(PWD)/frontend":/src:ro -w /tmp/fr \
+	docker run --rm -v "$(PWD)/frontend":/src:ro -w //tmp/fr \
 	  node:24-alpine \
 	  sh -c "cp -r /src/. /tmp/fr && npm ci --silent && npm run test"
 
 test-api: ## Tests de l'API pays (pytest)
-	docker run --rm -v "$(PWD)/Api":/src:ro -w /tmp/api \
+	docker run --rm -v "$(PWD)/Api":/src:ro -w //tmp/api \
 	  python:3.13-slim \
 	  sh -c "cp -r /src/. /tmp/api && pip install -q -r requirements-dev.txt && python -m pytest tests -q"
 

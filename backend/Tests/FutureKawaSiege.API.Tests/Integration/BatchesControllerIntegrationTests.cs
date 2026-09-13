@@ -14,6 +14,10 @@ public class BatchesControllerIntegrationTests : IClassFixture<CustomWebApplicat
 {
     private readonly HttpClient _client;
     private readonly CustomWebApplicationFactory _factory;
+
+    // Allows to log in only once and avoir raise 429 error due to RateLimiter
+    private static string? _cachedAccessToken;
+    private static readonly SemaphoreSlim _tokenLock = new(1, 1);
     public BatchesControllerIntegrationTests(CustomWebApplicationFactory factory)
     {
         _factory = factory;
@@ -21,32 +25,52 @@ public class BatchesControllerIntegrationTests : IClassFixture<CustomWebApplicat
     }
     private async Task<string> GetAccessTokenAsync()
     {
-        using var scope = _factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var hasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
-        // Create test user if not exists
-        var email = "test@futurekawa.com";
-        var user = db.Users.FirstOrDefault(u => u.Email == email);
-        if (user == null)
+        if (_cachedAccessToken is not null)
         {
-            user = new User
-            {
-                Id = Guid.NewGuid(),
-                Email = email,
-                PasswordHash = hasher.Hash("TestPass123"),
-                Role = UserRole.Admin,
-                CreatedAt = DateTime.UtcNow,
-            };
-            db.Users.Add(user);
-            db.SaveChanges();
+            return _cachedAccessToken;
         }
-        // Login to get token
-        var loginResponse = await _client.PostAsJsonAsync("/api/auth/login",
-            new LoginRequest(email, "TestPass123"));
-        loginResponse.EnsureSuccessStatusCode();
-        var loginBody = await loginResponse.Content.ReadFromJsonAsync<ApiResponse<LoginResponse>>();
-        return loginBody!.Data!.AccessToken;
+
+        await _tokenLock.WaitAsync();
+        try
+        {
+            if (_cachedAccessToken is not null)
+            {
+                return _cachedAccessToken;
+            }
+
+            using var scope = _factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var hasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
+            // Create test user if not exists
+            var email = "test@futurekawa.com";
+            var user = db.Users.FirstOrDefault(u => u.Email == email);
+            if (user == null)
+            {
+                user = new User
+                {
+                    Id = Guid.NewGuid(),
+                    Email = email,
+                    PasswordHash = hasher.Hash("TestPass123"),
+                    Role = UserRole.Admin,
+                    CreatedAt = DateTime.UtcNow,
+                };
+                db.Users.Add(user);
+                db.SaveChanges();
+            }
+            // Login to get token
+            var loginResponse = await _client.PostAsJsonAsync("/api/auth/login",
+                new LoginRequest(email, "TestPass123"));
+            loginResponse.EnsureSuccessStatusCode();
+            var loginBody = await loginResponse.Content.ReadFromJsonAsync<ApiResponse<LoginResponse>>();
+            _cachedAccessToken = loginBody!.Data!.AccessToken;
+            return _cachedAccessToken;
+        }
+        finally
+        {
+            _tokenLock.Release();
+        }
     }
+
     private async Task SeedBatchesAsync()
     {
         using var scope = _factory.Services.CreateScope();

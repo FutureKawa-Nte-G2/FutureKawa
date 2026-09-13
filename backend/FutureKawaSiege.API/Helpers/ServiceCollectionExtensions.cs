@@ -15,6 +15,8 @@ public static class ServiceCollectionExtensions
         var refreshWindow = int.Parse(configuration["RateLimiting:Refresh:WindowSeconds"] ?? "60");
         var webhookLimit = int.Parse(configuration["RateLimiting:OdooWebhook:PermitLimit"] ?? "30");
         var webhookWindow = int.Parse(configuration["RateLimiting:OdooWebhook:WindowSeconds"] ?? "60");
+        var alertsLimit = int.Parse(configuration["RateLimiting:AlertsIngest:PermitLimit"] ?? "60");
+        var alertsWindow = int.Parse(configuration["RateLimiting:AlertsIngest:WindowSeconds"] ?? "60");
 
         services.AddRateLimiter(options =>
         {
@@ -52,6 +54,22 @@ public static class ServiceCollectionExtensions
                 config.Window = TimeSpan.FromSeconds(webhookWindow);
                 config.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
                 config.QueueLimit = 0;
+            });
+
+            // Partitioned per API key (not a single shared window like the limiters
+            // above): a compromised or abused key for one country must not exhaust
+            // the budget shared by every other country's key.
+            options.AddPolicy("alerts_ingest", context =>
+            {
+                var apiKey = context.Request.Headers["X-Api-Key"].FirstOrDefault() ?? "unknown";
+
+                return RateLimitPartition.GetFixedWindowLimiter(apiKey, _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = alertsLimit,
+                    Window = TimeSpan.FromSeconds(alertsWindow),
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                    QueueLimit = 0,
+                });
             });
         });
 

@@ -21,4 +21,10 @@ public interface IWarehouseRepository
     /// Retrieves a single warehouse by ID.
     /// </summary>
     Task<Warehouse?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Retrieves a single warehouse by its external reference (<see cref="Warehouse.Reference"/>),
+    /// the identifier country APIs use since they don't know our internal IDs.
+    /// </summary>
+    Task<Warehouse?> GetByReferenceAsync(string reference, CancellationToken cancellationToken = default);
 }

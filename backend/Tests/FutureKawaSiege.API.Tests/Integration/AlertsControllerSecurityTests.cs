@@ -19,23 +19,24 @@ public class AlertsControllerSecurityTests : IClassFixture<CustomWebApplicationF
     }
 
     [Fact]
-    public async Task Create_Should_Return401_When_NoApiKeyIsConfigured()
+    public async Task Create_Should_Return401_When_NoCountryKeyIsConfigured()
     {
-        // Arrange : LocalApi:ApiKey vide -> le middleware doit rejeter la requête (fail-closed)
+        // Arrange : LocalApi:Countries vide -> le middleware doit rejeter la requête (fail-closed)
         await using var factoryWithoutApiKey = _factory.WithWebHostBuilder(builder =>
         {
             builder.ConfigureAppConfiguration((_, config) =>
             {
                 config.AddInMemoryCollection(new Dictionary<string, string?>
                 {
-                    ["LocalApi:ApiKey"] = ""
+                    ["LocalApi:Countries:BR:ApiKey"] = "",
+                    ["LocalApi:Countries:BR:BaseUrl"] = ""
                 });
             });
         });
 
         using var client = factoryWithoutApiKey.CreateClient();
 
-        Guid warehouseId;
+        string warehouseReference;
         using (var scope = factoryWithoutApiKey.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -61,12 +62,12 @@ public class AlertsControllerSecurityTests : IClassFixture<CustomWebApplicationF
             db.AddRange(country, warehouse);
             await db.SaveChangesAsync();
 
-            warehouseId = warehouse.Id;
+            warehouseReference = warehouse.Reference;
         }
 
         var forgedAlert = new CreateAlertRequest
         {
-            WarehouseId = warehouseId,
+            WarehouseReference = warehouseReference,
             Type = "temperature",
             MeasuredAt = DateTime.UtcNow
         };
@@ -79,7 +80,71 @@ public class AlertsControllerSecurityTests : IClassFixture<CustomWebApplicationF
 
         using var verifyScope = factoryWithoutApiKey.Services.CreateScope();
         var verifyDb = verifyScope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var forgedAlertPersisted = verifyDb.Alerts.Any(a => a.WarehouseId == warehouseId);
+        var forgedAlertPersisted = verifyDb.Alerts.Any(a => a.WarehouseId == verifyDb.Warehouses
+            .First(w => w.Reference == warehouseReference).Id);
         Assert.False(forgedAlertPersisted, "A fake alert was sent without authentication.");
+    }
+
+    [Fact]
+    public async Task Create_Should_Return401_When_KeyIsValidForAnotherCountry()
+    {
+        // Arrange : une clé valide pour CO ne doit pas pouvoir créer d'alerte pour un
+        // entrepôt BR — un pays compromis ne doit pas exposer les autres.
+        await using var factoryWithScopedKeys = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureAppConfiguration((_, config) =>
+            {
+                config.AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["LocalApi:Countries:BR:ApiKey"] = "br-secret-key",
+                    ["LocalApi:Countries:CO:ApiKey"] = "co-secret-key"
+                });
+            });
+        });
+
+        using var client = factoryWithScopedKeys.CreateClient();
+
+        string warehouseReference;
+        using (var scope = factoryWithScopedKeys.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            var country = new Country
+            {
+                Id = Guid.NewGuid(),
+                Code = "BR",
+                Name = "Brésil",
+                NominalTemp = 29.0m,
+                ToleranceTemp = 3.0m,
+                NominalHumidity = 55.0m,
+                ToleranceHumidity = 2.0m
+            };
+            var warehouse = new Warehouse
+            {
+                Id = Guid.NewGuid(),
+                CountryId = country.Id,
+                Name = "BR Warehouse",
+                Reference = "WH-BR-SCOPE-TEST"
+            };
+
+            db.AddRange(country, warehouse);
+            await db.SaveChangesAsync();
+
+            warehouseReference = warehouse.Reference;
+        }
+
+        client.DefaultRequestHeaders.Add("X-Api-Key", "co-secret-key");
+
+        var request = new CreateAlertRequest
+        {
+            WarehouseReference = warehouseReference,
+            Type = "temperature"
+        };
+
+        // Act
+        var response = await client.PostAsJsonAsync("/api/alerts", request);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 }

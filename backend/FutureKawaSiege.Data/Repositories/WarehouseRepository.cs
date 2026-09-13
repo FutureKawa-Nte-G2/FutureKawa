@@ -41,4 +41,13 @@ public class WarehouseRepository : IWarehouseRepository
             .Include(w => w.Country)
             .FirstOrDefaultAsync(w => w.Id == id, cancellationToken);
     }
+
+    /// <inheritdoc/>
+    public async Task<Warehouse?> GetByReferenceAsync(string reference, CancellationToken cancellationToken = default)
+    {
+        return await _context.Warehouses
+            .AsNoTracking()
+            .Include(w => w.Country)
+            .FirstOrDefaultAsync(w => w.Reference == reference, cancellationToken);
+    }
 }

@@ -22,4 +22,15 @@ public interface IAlertRepository
     /// Used for idempotency.
     /// </summary>
     Task<bool> ExistsActiveAsync(Guid warehouseId, AlertType type, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Retrieves a single alert by ID, including its warehouse and country, or
+    /// null if it does not exist.
+    /// </summary>
+    Task<Alert?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Persists changes made to an existing alert.
+    /// </summary>
+    Task UpdateAsync(Alert alert, CancellationToken cancellationToken = default);
 }

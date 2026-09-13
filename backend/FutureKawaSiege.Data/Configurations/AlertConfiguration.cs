@@ -29,6 +29,8 @@ public class AlertConfiguration : IEntityTypeConfiguration<Alert>
 
         builder.Property(a => a.MeasuredAt);
 
+        builder.Property(a => a.SourceAlertId);
+
         builder.HasOne(a => a.Warehouse)
             .WithMany(w => w.Alerts)
             .HasForeignKey(a => a.WarehouseId)

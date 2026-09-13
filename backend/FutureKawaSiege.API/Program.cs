@@ -201,22 +201,31 @@ app.Use(async (context, next) =>
     await next();
 });
 
-// Middleware: validate API key for /api/alerts endpoint (local warehouse API)
-// Note: Rejects the request when LocalApi:ApiKey is not configured (fail-closed).
+// Middleware: validate API key for POST /api/alerts (local warehouse/country API).
+// Each country under LocalApi:Countries has its own key, so a key compromised in
+// one country cannot be used to forge alerts for another country's warehouses.
+// Note: Rejects the request when no country key is configured at all (fail-closed).
 app.Use(async (context, next) =>
 {
     if (context.Request.Path.StartsWithSegments("/api/alerts") && context.Request.Method == "POST")
     {
-        var configKey = builder.Configuration["LocalApi:ApiKey"];
-        var headerKey = context.Request.Headers["X-Api-Key"].FirstOrDefault();
+        var countryKeys = builder.Configuration.GetSection("LocalApi:Countries").GetChildren()
+            .Where(country => !string.IsNullOrEmpty(country["ApiKey"]))
+            .ToDictionary(country => country.Key, country => country["ApiKey"]!);
 
-        // Reject when no key is configured (fail-closed) or when the header does not match
-        if (string.IsNullOrEmpty(configKey) || headerKey != configKey)
+        var headerKey = context.Request.Headers["X-Api-Key"].FirstOrDefault();
+        var matchedCountry = countryKeys.FirstOrDefault(kvp => headerKey == kvp.Value);
+
+        // Reject when no country key is configured (fail-closed), no header was sent,
+        // or the header does not match any configured country key.
+        if (countryKeys.Count == 0 || string.IsNullOrEmpty(headerKey) || matchedCountry.Key is null)
         {
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;
             await context.Response.WriteAsync("Unauthorized: invalid or missing X-Api-Key.");
             return;
         }
+
+        context.Items["LocalApiCountryCode"] = matchedCountry.Key;
     }
 
     await next();

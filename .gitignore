@@ -35,6 +35,8 @@ env/
 start.sh
 .logs/
 
+# Sorties du simulateur de capteurs (make simulate)
+.simdata/
 # Consignes destinées aux assistants de code, à quelque niveau qu'elles soient :
 # ce que l'un veut rappeler à son agent n'engage pas l'équipe, et le contrat
 # commun reste le README et le Makefile.

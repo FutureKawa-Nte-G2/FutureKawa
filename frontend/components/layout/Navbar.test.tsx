@@ -15,7 +15,7 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/lib/api/alerts", () => ({
   getUnreadAlerts: () => Promise.resolve([]),
-  markAlertAsRead: () => Promise.resolve(undefined),
+  subscribeToAlertsChange: () => () => {},
 }));
 
 function renderNavbar() {

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { LocationFilter } from "./LocationFilter";
+import { AlertFilter } from "./AlertFilter";
 
 const mockGetCountries = vi.fn();
 const mockGetWarehouses = vi.fn();
@@ -26,14 +26,14 @@ const brWarehouses = [
   { id: "BR-W2", name: "Cerrado Warehouse", countryCode: "BR" },
 ];
 
-describe("LocationFilter", () => {
+describe("AlertFilter", () => {
   beforeEach(() => {
     mockGetCountries.mockReset().mockResolvedValue(countries);
     mockGetWarehouses.mockReset().mockResolvedValue(brWarehouses);
   });
 
   it("loads and displays the countries on mount", async () => {
-    render(<LocationFilter onSelectionChange={vi.fn()} />);
+    render(<AlertFilter onSelectionChange={vi.fn()} />);
 
     expect(await screen.findByRole("option", { name: "Brazil" })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "Ecuador" })).toBeInTheDocument();
@@ -43,7 +43,7 @@ describe("LocationFilter", () => {
   it("loads warehouses for the selected country and reports the selection", async () => {
     const onSelectionChange = vi.fn();
     const user = userEvent.setup();
-    render(<LocationFilter onSelectionChange={onSelectionChange} />);
+    render(<AlertFilter onSelectionChange={onSelectionChange} />);
 
     await screen.findByRole("option", { name: "Brazil" });
     await user.selectOptions(screen.getByLabelText("Pays"), "BR");
@@ -53,14 +53,14 @@ describe("LocationFilter", () => {
     expect(onSelectionChange).toHaveBeenCalledWith({
       country: countries[0],
       warehouse: null,
-      qualityGrade: null,
+      status: null,
     });
   });
 
   it("resets the warehouse selection when the country changes", async () => {
     const onSelectionChange = vi.fn();
     const user = userEvent.setup();
-    render(<LocationFilter onSelectionChange={onSelectionChange} />);
+    render(<AlertFilter onSelectionChange={onSelectionChange} />);
 
     await screen.findByRole("option", { name: "Brazil" });
     await user.selectOptions(screen.getByLabelText("Pays"), "BR");
@@ -73,7 +73,7 @@ describe("LocationFilter", () => {
     expect(onSelectionChange).toHaveBeenCalledWith({
       country: countries[1],
       warehouse: null,
-      qualityGrade: null,
+      status: null,
     });
     expect(screen.getByLabelText("Entrepôt")).toHaveDisplayValue("Tous les entrepôts");
   });
@@ -81,7 +81,7 @@ describe("LocationFilter", () => {
   it("resets the warehouse when 'Tous les pays' is re-selected", async () => {
     const onSelectionChange = vi.fn();
     const user = userEvent.setup();
-    render(<LocationFilter onSelectionChange={onSelectionChange} />);
+    render(<AlertFilter onSelectionChange={onSelectionChange} />);
 
     await screen.findByRole("option", { name: "Brazil" });
     await user.selectOptions(screen.getByLabelText("Pays"), "BR");
@@ -94,14 +94,14 @@ describe("LocationFilter", () => {
     expect(onSelectionChange).toHaveBeenCalledWith({
       country: null,
       warehouse: null,
-      qualityGrade: null,
+      status: null,
     });
   });
 
   it("reports the selected warehouse as a full object, not just its id", async () => {
     const onSelectionChange = vi.fn();
     const user = userEvent.setup();
-    render(<LocationFilter onSelectionChange={onSelectionChange} />);
+    render(<AlertFilter onSelectionChange={onSelectionChange} />);
 
     await screen.findByRole("option", { name: "Brazil" });
     await user.selectOptions(screen.getByLabelText("Pays"), "BR");
@@ -111,52 +111,51 @@ describe("LocationFilter", () => {
     expect(onSelectionChange).toHaveBeenLastCalledWith({
       country: countries[0],
       warehouse: brWarehouses[0],
-      qualityGrade: null,
+      status: null,
     });
   });
 
-  it("renders the quality grade options", async () => {
-    render(<LocationFilter onSelectionChange={vi.fn()} />);
+  it("renders the status options", async () => {
+    render(<AlertFilter onSelectionChange={vi.fn()} />);
 
-    expect(screen.getByRole("option", { name: "Toutes les qualités" })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "A" })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "B" })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "C" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Tous les statuts" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Active" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Résolue" })).toBeInTheDocument();
   });
 
-  it("reports the selected quality grade, preserving the current location selection", async () => {
+  it("reports the selected status, preserving the current location selection", async () => {
     const onSelectionChange = vi.fn();
     const user = userEvent.setup();
-    render(<LocationFilter onSelectionChange={onSelectionChange} />);
+    render(<AlertFilter onSelectionChange={onSelectionChange} />);
 
     await screen.findByRole("option", { name: "Brazil" });
     await user.selectOptions(screen.getByLabelText("Pays"), "BR");
 
     onSelectionChange.mockClear();
-    await user.selectOptions(screen.getByLabelText("Qualité"), "B");
+    await user.selectOptions(screen.getByLabelText("Statut"), "Résolue");
 
     expect(onSelectionChange).toHaveBeenCalledWith({
       country: countries[0],
       warehouse: null,
-      qualityGrade: "B",
+      status: "resolved",
     });
   });
 
-  it("clears the quality grade when 'Toutes les qualités' is re-selected", async () => {
+  it("clears the status when 'Tous les statuts' is re-selected", async () => {
     const onSelectionChange = vi.fn();
     const user = userEvent.setup();
-    render(<LocationFilter onSelectionChange={onSelectionChange} />);
+    render(<AlertFilter onSelectionChange={onSelectionChange} />);
 
     await screen.findByRole("option", { name: "Brazil" });
-    await user.selectOptions(screen.getByLabelText("Qualité"), "B");
+    await user.selectOptions(screen.getByLabelText("Statut"), "Active");
 
     onSelectionChange.mockClear();
-    await user.selectOptions(screen.getByLabelText("Qualité"), "Toutes les qualités");
+    await user.selectOptions(screen.getByLabelText("Statut"), "Tous les statuts");
 
     expect(onSelectionChange).toHaveBeenCalledWith({
       country: null,
       warehouse: null,
-      qualityGrade: null,
+      status: null,
     });
   });
 });

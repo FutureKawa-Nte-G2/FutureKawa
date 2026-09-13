@@ -56,4 +56,24 @@ public class BatchesController : ControllerBase
 
         return Ok(ApiResponse<BatchListResponseDto>.Ok(result));
     }
+
+    /// <summary>
+    /// Returns a single batch by ID, regardless of its shipped status.
+    /// Used by the batch detail page (measurement curves) to resolve the
+    /// batch's warehouse and storage period.
+    /// </summary>
+    [HttpGet("{id:guid}")]
+    public async Task<ActionResult<ApiResponse<BatchListItemDto>>> GetById(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var batch = await _batchService.GetBatchByIdAsync(id, cancellationToken);
+
+        if (batch is null)
+        {
+            return NotFound(ApiResponse<BatchListItemDto>.Fail("Batch not found."));
+        }
+
+        return Ok(ApiResponse<BatchListItemDto>.Ok(batch));
+    }
 }

@@ -34,3 +34,14 @@ env/
 # stack comme il veut, et le contrat d'équipe reste le Makefile + le compose.
 start.sh
 .logs/
+
+# Consignes destinées aux assistants de code, à quelque niveau qu'elles soient :
+# ce que l'un veut rappeler à son agent n'engage pas l'équipe, et le contrat
+# commun reste le README et le Makefile.
+#
+# Les quatre déjà versionnés (Api/, backend/, frontend/) le restent : une règle
+# .gitignore ne s'applique pas à un fichier suivi, et les retirer de l'index les
+# supprimerait du disque des coéquipiers au pull suivant. Cette règle vaut donc
+# pour les prochains.
+AGENTS.md
+CLAUDE.md

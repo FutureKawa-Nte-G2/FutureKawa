@@ -110,22 +110,28 @@ async def evaluate_reading(
         return Evaluation()
 
     batch, country = row
+    # Lu avant toute écriture : un `rollback` expire l'instance, et relire
+    # `batch.batch_id` après coup déclencherait un rechargement synchrone —
+    # interdit hors greenlet, donc une MissingGreenlet en pleine reprise
+    # d'erreur. La reprise doit tenir sans retoucher à l'objet expiré.
+    batch_id = batch.batch_id
+    warehouse_id = batch.warehouse_id
 
     if is_within_band(reading.temperature, reading.humidity, country):
         # Le retour dans la bande ne rétablit pas `is_compliant` : un lot qui a
         # passé une nuit hors plage reste suspect tant qu'un humain n'a pas
         # tranché. La levée est une décision, pas une conséquence mécanique.
-        return Evaluation(batch_id=batch.batch_id, within_band=True)
+        return Evaluation(batch_id=batch_id, within_band=True)
 
     if not batch.is_compliant:
         # Déjà signalé. On ne rouvre rien.
-        return Evaluation(batch_id=batch.batch_id, within_band=False)
+        return Evaluation(batch_id=batch_id, within_band=False)
 
     batch.is_compliant = False
 
     alert = Alert(
         alert_id=uuid.uuid4(),
-        warehouse_id=batch.warehouse_id,
+        warehouse_id=warehouse_id,
         # `condition` concerne la salle, pas le lot : le modèle réserve
         # `batch_id` aux alertes d'expiration. Le lien vers le lot est porté par
         # la notification, qui est ce que le frontend ouvre au clic.
@@ -138,9 +144,9 @@ async def evaluate_reading(
 
     notification = Notification(
         notification_id=uuid.uuid4(),
-        warehouse_id=batch.warehouse_id,
+        warehouse_id=warehouse_id,
         notification_type="batch_non_compliant",
-        batch_id=batch.batch_id,
+        batch_id=batch_id,
         order_id=None,
         created_at=reference_now,
     )
@@ -155,10 +161,10 @@ async def evaluate_reading(
         # signalée ; on garde la bascule du lot et sa notification, qui eux sont
         # propres à ce lot.
         await session.rollback()
-        return await _flag_batch_only(session, batch.batch_id, reference_now)
+        return await _flag_batch_only(session, batch_id, reference_now)
 
     return Evaluation(
-        batch_id=batch.batch_id,
+        batch_id=batch_id,
         within_band=False,
         alert_created=True,
         notification_created=True,

@@ -90,7 +90,7 @@ public class OrderService : IOrderService
 
         var qualityGrade = ParseQualityGrade(dto.QualityGrade);
 
-        order.Batches = await ResolveBatchesAsync(
+        order.Batches = await ResolveOrderBatchAsync(
             dto.BatchReferences,
             qualityGrade,
             countryId,
@@ -212,58 +212,91 @@ public class OrderService : IOrderService
     }
 
     /// <summary>
-    /// Resolves existing batches by reference. Missing batches are created
-    /// with a default warehouse and farm so the order flow remains functional.
+    /// Implements FIFO batch allocation for a newly received order.
+    ///
+    /// Instead of creating a batch dedicated to the order, the order is
+    /// associated with the oldest available batch currently in stock (FIFO),
+    /// while a new batch is created in parallel to replenish the stock pool
+    /// for future orders. Missing batches are created with a default
+    /// warehouse and farm so the order flow remains functional.
+    ///
+    /// A batch already associated with another order is considered
+    /// allocated and is excluded from the FIFO pick, so two orders never
+    /// end up sharing the same batch.
+    ///
+    /// If no batch is available (e.g. the very first order, or every batch
+    /// already allocated), the newly created batch is used to fulfill the
+    /// order instead.
     /// </summary>
-    private async Task<List<Batch>> ResolveBatchesAsync(
+    private async Task<List<Batch>> ResolveOrderBatchAsync(
         IEnumerable<string> batchReferences,
         BatchQualityGrade qualityGrade,
         Guid? countryId,
         CancellationToken cancellationToken)
     {
-        var references = batchReferences
+        // Oldest available batch currently in stock, before this order's
+        // replenishment batch is created, so it never allocates the batch
+        // to itself. A batch already tied to an order is excluded.
+        var oldestBatch = await _context.Batches
+            .Where(b => b.ShippedAt == null && !b.Orders.Any())
+            .OrderBy(b => b.StoredAt)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var newReferences = batchReferences
             .Where(r => !string.IsNullOrWhiteSpace(r))
             .Distinct()
             .ToList();
 
-        if (references.Count == 0)
-            return [];
-
-        var existingBatches = await _context.Batches
-            .Where(b => references.Contains(b.Reference))
-            .ToListAsync(cancellationToken);
-
-        var existingReferences = existingBatches.Select(b => b.Reference).ToHashSet();
-        var missingReferences = references.Where(r => !existingReferences.Contains(r)).ToList();
-
-        if (missingReferences.Count > 0)
+        if (newReferences.Count > 0)
         {
-            var defaults = await EnsureDefaultBatchDependenciesAsync(countryId, cancellationToken);
+            var existingReferences = await _context.Batches
+                .Where(b => newReferences.Contains(b.Reference))
+                .Select(b => b.Reference)
+                .ToListAsync(cancellationToken);
 
-            foreach (var reference in missingReferences)
+            var missingReferences = newReferences
+                .Where(r => !existingReferences.Contains(r))
+                .ToList();
+
+            if (missingReferences.Count > 0)
             {
-                var batch = new Batch
+                var defaults = await EnsureDefaultBatchDependenciesAsync(countryId, cancellationToken);
+
+                foreach (var reference in missingReferences)
                 {
-                    Reference = reference,
-                    WarehouseId = defaults.WarehouseId,
-                    FarmId = defaults.FarmId,
-                    StoredAt = DateTime.UtcNow.Date,
-                    QualityGrade = qualityGrade,
-                    Status = BatchStatus.Stored,
-                };
+                    _context.Batches.Add(new Batch
+                    {
+                        Reference = reference,
+                        WarehouseId = defaults.WarehouseId,
+                        FarmId = defaults.FarmId,
+                        StoredAt = DateTime.UtcNow.Date,
+                        QualityGrade = qualityGrade,
+                        Status = BatchStatus.Stored,
+                    });
+                }
 
-                _context.Batches.Add(batch);
-                existingBatches.Add(batch);
+                await _context.SaveChangesAsync(cancellationToken);
+                _logger.LogInformation(
+                    "Created {Count} new batch(es) entering the FIFO stock pool: {References}",
+                    missingReferences.Count,
+                    string.Join(", ", missingReferences));
             }
-
-            await _context.SaveChangesAsync(cancellationToken);
-            _logger.LogInformation(
-                "Created {Count} missing batches for order references: {References}",
-                missingReferences.Count,
-                string.Join(", ", missingReferences));
         }
 
-        return existingBatches;
+        if (oldestBatch is not null)
+        {
+            _logger.LogInformation(
+                "Order associated with oldest available batch in stock (FIFO): {Reference} (stored on {StoredAt:yyyy-MM-dd})",
+                oldestBatch.Reference,
+                oldestBatch.StoredAt);
+            return [oldestBatch];
+        }
+
+        // No batch was available (empty stock, or all batches already
+        // allocated to another order): fall back to the batch(es) just created.
+        return await _context.Batches
+            .Where(b => newReferences.Contains(b.Reference))
+            .ToListAsync(cancellationToken);
     }
 
     private static BatchQualityGrade ParseQualityGrade(string? grade)

@@ -28,31 +28,38 @@ public class OrderShipmentBackgroundService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await foreach (var job in _channel.Reader.ReadAllAsync(stoppingToken))
+        try
         {
-            var delay = job.ExecuteAt - DateTimeOffset.UtcNow;
-            if (delay > TimeSpan.Zero)
+            await foreach (var job in _channel.Reader.ReadAllAsync(stoppingToken))
             {
+                var delay = job.ExecuteAt - DateTimeOffset.UtcNow;
+                if (delay > TimeSpan.Zero)
+                {
+                    try
+                    {
+                        await Task.Delay(delay, stoppingToken);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        break;
+                    }
+                }
+
                 try
                 {
-                    await Task.Delay(delay, stoppingToken);
+                    using var scope = _serviceProvider.CreateScope();
+                    var orderService = scope.ServiceProvider.GetRequiredService<IOrderService>();
+                    await orderService.ShipOrderAsync(job.OrderId, stoppingToken);
                 }
-                catch (OperationCanceledException)
+                catch (Exception ex)
                 {
-                    break;
+                    _logger.LogError(ex, "Failed to auto-ship order {OrderId}", job.OrderId);
                 }
             }
-
-            try
-            {
-                using var scope = _serviceProvider.CreateScope();
-                var orderService = scope.ServiceProvider.GetRequiredService<IOrderService>();
-                await orderService.ShipOrderAsync(job.OrderId, stoppingToken);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to auto-ship order {OrderId}", job.OrderId);
-            }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // Expected when the host shuts down while waiting on the channel.
         }
     }
 }

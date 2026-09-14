@@ -46,7 +46,11 @@ export function LocationFilter({
   const [countries, setCountries] = useState<Country[]>([]);
   const [countriesLoaded, setCountriesLoaded] = useState(false);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
-  const [warehousesLoaded, setWarehousesLoaded] = useState(false);
+  // Which countryCode the current `warehouses` list was fetched for — not a
+  // plain boolean, so that "loaded" can be derived (`=== countryCode` below)
+  // instead of needing a synchronous reset-to-false setState when countryCode
+  // changes (that pattern trips react-hooks/set-state-in-effect).
+  const [warehousesLoadedFor, setWarehousesLoadedFor] = useState<string | null>(null);
   const [countryCode, setCountryCode] = useState<string | null>(initialCountryCode);
   const [warehouseId, setWarehouseId] = useState<string | null>(initialWarehouseId);
   const [qualityGrade, setQualityGrade] = useState<string | null>(initialQualityGrade);
@@ -64,12 +68,13 @@ export function LocationFilter({
   // in handleCountryChange (a user event), not here.
   useEffect(() => {
     if (!countryCode) return;
-    setWarehousesLoaded(false);
     getWarehouses(countryCode, accessToken).then((result) => {
       setWarehouses(result);
-      setWarehousesLoaded(true);
+      setWarehousesLoadedFor(countryCode);
     });
   }, [countryCode, accessToken]);
+
+  const warehousesLoaded = warehousesLoadedFor === countryCode;
 
   // Restores a selection carried in via initialCountryCode/initialWarehouseId
   // (the FIFO page seeds these from the URL, so a filter picked before
@@ -101,7 +106,12 @@ export function LocationFilter({
     if (!warehousesLoaded) return;
     const warehouse = warehouses.find((w) => w.id === warehouseId) ?? null;
     hasNotifiedRestore.current = true;
-    if (!warehouse) setWarehouseId(null); // stale/unknown warehouse id
+    // A stale/unknown warehouse id simply resolves to warehouse: null here —
+    // we don't also clear the warehouseId state (that would be a synchronous
+    // setState in this effect, flagged by react-hooks/set-state-in-effect).
+    // The Select below already falls back to "Tous les entrepôts" whenever
+    // warehouseId doesn't match any loaded option, so nothing renders
+    // incorrectly either way.
     onSelectionChange({ country, warehouse, qualityGrade });
   }, [countriesLoaded, countries, warehousesLoaded, warehouses, countryCode, warehouseId, qualityGrade, onSelectionChange]);
 
@@ -155,20 +165,23 @@ export function LocationFilter({
       ]
     : [];
 
+  // Fall back to the "all" option whenever the current code doesn't match
+  // any loaded option — covers both "nothing selected" and a stale/unknown
+  // code restored from the URL (see the restoration effect above).
+  const countrySelectValue =
+    countryCode && countryOptions.some((option) => option.value === countryCode) ? countryCode : ALL_COUNTRIES;
+  const warehouseSelectValue =
+    warehouseId && warehouseOptions.some((option) => option.value === warehouseId) ? warehouseId : ALL_WAREHOUSES;
+
   // Horizontal filter bar, displayed at the top of the FIFO page (was
   // previously a vertical <aside> occupying the page's left-hand sidebar
   // column — see #74).
   return (
     <div className="flex flex-wrap items-end gap-4 pb-6">
-      <Select
-        label="Pays"
-        value={countryCode ?? ALL_COUNTRIES}
-        options={countryOptions}
-        onChange={handleCountryChange}
-      />
+      <Select label="Pays" value={countrySelectValue} options={countryOptions} onChange={handleCountryChange} />
       <Select
         label="Entrepôt"
-        value={warehouseId ?? ALL_WAREHOUSES}
+        value={warehouseSelectValue}
         options={warehouseOptions}
         placeholder="Sélectionnez d'abord un pays"
         disabled={!countryCode}

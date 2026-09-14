@@ -50,31 +50,32 @@ public class AlertEmailService : IAlertEmailService
         var fromAddress = _configuration["Email:From:Address"] ?? "alerts@futurekawa.com";
         var fromName = _configuration["Email:From:Name"] ?? "FutureKawa Alerts";
 
-        using var message = new MailMessage
-        {
-            From = new MailAddress(fromAddress, fromName),
-            Subject = BuildSubject(alert),
-            Body = BuildBody(alert),
-            IsBodyHtml = true,
-        };
-
-        foreach (var recipient in recipients)
-        {
-            message.To.Add(recipient);
-        }
-
-        using var client = new SmtpClient(host, port)
-        {
-            EnableSsl = enableSsl,
-        };
-
-        if (!string.IsNullOrWhiteSpace(username))
-        {
-            client.Credentials = new NetworkCredential(username, password);
-        }
-
         try
         {
+            using var message = new MailMessage
+            {
+                From = new MailAddress(fromAddress, fromName),
+                Subject = BuildSubject(alert),
+                Body = BuildBody(alert),
+                IsBodyHtml = true,
+            };
+
+            foreach (var recipient in recipients)
+            {
+                message.To.Add(recipient);
+            }
+
+            using var client = new SmtpClient(host, port)
+            {
+                EnableSsl = enableSsl,
+                Timeout = 5000,
+            };
+
+            if (!string.IsNullOrWhiteSpace(username))
+            {
+                client.Credentials = new NetworkCredential(username, password);
+            }
+
             await client.SendMailAsync(message, cancellationToken);
 
             _logger.LogInformation(

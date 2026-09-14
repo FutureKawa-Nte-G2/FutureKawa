@@ -109,8 +109,11 @@ export interface Measurement {
 // backlog-batches-alertes-pr.md). Backed by GET /api/alerts (#85). Enum values
 // follow this project's convention of exposing backend enums as lowercase
 // strings on the wire (see BatchStatus above); backend enum member names are
-// PascalCase (AlertType.Temperature/Humidity, AlertStatus.Active/Resolved).
-export type AlertType = 'temperature' | 'humidity';
+// PascalCase (AlertType.Temperature/Humidity/Condition/Expiration,
+// AlertStatus.Active/Resolved). "condition" is the country API's own
+// vocabulary: it covers a temperature-or-humidity breach without
+// distinguishing which one; "expiration" concerns a batch, not a reading.
+export type AlertType = 'temperature' | 'humidity' | 'condition' | 'expiration';
 export type AlertStatus = 'active' | 'resolved';
 
 export interface Alert {

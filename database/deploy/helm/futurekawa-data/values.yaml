@@ -51,6 +51,14 @@ mosquitto:
 migrations:
   backoffLimit: 3
 
+# Country key, sent in X-API-Key both ways with head office. Without it every
+# protected route answers 500 (fail-closed). Must equal the siege chart's
+# localApi.countries.<pays>.apiKey. Dev value: override in production.
+localApiKey: change-me
+
+# Where the evaluation consumer pushes alerts (siege release in the same namespace).
+headOfficeAlertsUrl: http://siege-futurekawa-siege-api:8080/api/alerts
+
 # API pays (FastAPI). Une instance sert un pays.
 countryApi:
   image: futurekawa/country-api:dev

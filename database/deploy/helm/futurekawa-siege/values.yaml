@@ -65,6 +65,15 @@ odoo:
     requests: { cpu: 200m, memory: 512Mi }
     limits:   { cpu: "1",  memory: 2Gi }
 
+# One entry per country release. Without a key, POST /api/alerts rejects every
+# pushed alert (fail-closed). apiKey must equal that release's localApiKey.
+# Dev value: override in production.
+localApi:
+  countries:
+    BR:
+      apiKey: change-me
+      baseUrl: http://fk-futurekawa-data-api:8000
+
 # URL de l'API pays interrogée par la synchro des mesures. Par défaut le Service
 # du chart futurekawa-data déployé dans le même namespace.
 warehouseApiUrl: http://fk-futurekawa-data-api:8000/api/measurements

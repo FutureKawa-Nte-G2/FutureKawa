@@ -1,4 +1,4 @@
-# API pays (FastAPI). Lue par le siège en HTTP ; elle n'appelle personne.
+# API pays (FastAPI). Lue par le siège en HTTP.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -27,6 +27,7 @@ spec:
               containerPort: 8000
           env:
             {{- include "futurekawa-data.dbEnv" . | nindent 12 }}
+            {{- include "futurekawa-data.localApiKeyEnv" . | nindent 12 }}
           # /health ne touche pas la base (cf. app/main.py) : il dit que le
           # process répond. C'est exactement ce qu'on veut pour la liveness ;
           # la readiness s'appuie sur le même point, la base étant garantie par

@@ -35,6 +35,9 @@ spec:
               value: {{ include "futurekawa-data.fullname" . }}-mosquitto
             - name: MQTT_BROKER_PORT
               value: "1883"
+            {{- include "futurekawa-data.localApiKeyEnv" . | nindent 12 }}
+            - name: HEAD_OFFICE_ALERTS_URL
+              value: {{ .Values.headOfficeAlertsUrl | quote }}
           {{- with .Values.consumers.resources }}
           resources:
             {{- toYaml . | nindent 12 }}

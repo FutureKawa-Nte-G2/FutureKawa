@@ -41,9 +41,10 @@ start.sh
 # ce que l'un veut rappeler à son agent n'engage pas l'équipe, et le contrat
 # commun reste le README et le Makefile.
 #
-# Les quatre déjà versionnés (Api/, backend/, frontend/) le restent : une règle
+# Ceux de backend/ et frontend/, déjà versionnés, le restent : une règle
 # .gitignore ne s'applique pas à un fichier suivi, et les retirer de l'index les
-# supprimerait du disque des coéquipiers au pull suivant. Cette règle vaut donc
-# pour les prochains.
+# supprimerait du disque des coéquipiers au pull suivant. Celui d'Api/ a été
+# retiré (#80), après que son contenu d'équipe a rejoint
+# Documentation/api-pays-contrats.md. Cette règle vaut pour tous les suivants.
 AGENTS.md
 CLAUDE.md

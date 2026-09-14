@@ -1,4 +1,9 @@
-# CLAUDE.md — API locale (pays / warehouse)
+# Contrats de l'API pays (warehouse)
+
+Ce que l'API pays échange avec le siège et les autres systèmes : les contrats
+qu'on nous impose, ceux qu'on a choisis, et les décisions de vocabulaire qui
+vont avec. Le fonctionnement et le démarrage de l'API sont dans
+[Api/README.md](../Api/README.md).
 
 ## Contrat imposé : `GET /api/measurements`
 
@@ -113,6 +118,9 @@ branchent**, et ajoutée des deux côtés en même temps.
 
 ### `warehouseId` : toujours pas envoyé
 
+> ⚠️ **À revérifier.** Côté pays, `GET /api/measurements` accepte désormais un
+> paramètre facultatif `warehouse_ref`. Le siège, lui, ne l'envoie toujours pas.
+
 `FetchMeasurementsAsync(Guid warehouseId, ...)` reçoit bien l'identifiant mais
 ne le met pas dans l'URL. Le siège itère sur ses entrepôts et attribue la
 réponse à celui qu'il traite. Une seule URL sert donc tous les entrepôts.
@@ -138,6 +146,11 @@ l'entrepôt sur la période. Source : `measurements` joint à `sensors`
 
 ### État côté siège
 
+> ⚠️ **À revérifier.** Ce paragraphe est antérieur à la conteneurisation :
+> `UseMockData` n'est plus à `true` que dans `appsettings.json`. Il vaut `false`
+> dans `appsettings.Development.json`, et le `docker-compose.yml` le force à
+> `false` en pointant `LocalApiUrl` sur `country-api`.
+
 `MeasurementSync:UseMockData` est à **`true`** et `LocalApiUrl` pointe sur leur
 propre `MockMeasurementsController` (`/api/mock/measurements`). Le siège ne nous
 appelle donc pas encore : il fabrique ses données en mémoire. Pour un essai
@@ -160,6 +173,74 @@ fois n'est plus corrigeable depuis notre base.
    UTC-3) : change les min/max sur un cycle jour/nuit.
 4. **`warehouseRef` en paramètre** — nécessaire dès qu'un deuxième entrepôt
    existe, puisqu'une seule URL sert tout le monde.
+
+---
+
+## Contrat imposé : `POST /api/alerts` (envoi au siège)
+
+Sens inverse des mesures : c'est l'API pays qui appelle le siège, dès qu'une
+alerte `condition` est commitée (#80). Source de vérité côté siège :
+`backend/FutureKawaSiege.Commons/Models/API/Requests/CreateAlertRequest.cs` et
+`AlertService.ReceiveAlertAsync`, mergés par #82.
+
+### Requête
+
+En-tête `X-API-Key` : la clé du pays, `LOCAL_API_KEY` chez nous,
+`LocalApi:Countries:{code}:ApiKey` au siège. C'est la même valeur dans les deux
+sens.
+
+```json
+{
+  "warehouseReference": "WH-BR-SANTOS",
+  "type": "temperature",
+  "measuredAt": "2026-08-10T12:00:00Z",
+  "sourceAlertId": "7f1c…"
+}
+```
+
+| Champ | Source côté pays | Contrainte |
+|---|---|---|
+| `warehouseReference` | `warehouses.warehouse_ref` | doit exister au siège **et** appartenir au pays de la clé |
+| `type` | grandeur ayant franchi son seuil en premier | `temperature` ou `humidity`, jamais `condition` : le frontend n'affiche que ces deux-là |
+| `measuredAt` | `alerts.measured_at`, l'horodatage du relevé | UTC explicite ; **jamais** `created_at` |
+| `sourceAlertId` | `alerts.alert_id` | le siège le garde pour renvoyer la résolution sur `PATCH /api/alerts/{id}/resolve` |
+
+### Choix de `type`
+
+Une alerte `condition` porte sur la salle, le siège veut une grandeur :
+
+1. une seule grandeur hors bande → celle-là ;
+2. les deux hors bande sur le même relevé → le relevé précédent du capteur
+   (15 min au plus) départage : la grandeur déjà hors bande, sinon celle dont
+   l'instant de franchissement, interpolé linéairement, est le plus précoce ;
+3. rien pour départager → le plus gros écart relatif,
+   `|valeur − nominal| / tolérance`.
+
+### Réponses
+
+| Code | Sens | Ce que fait l'API pays |
+|---|---|---|
+| `200` | reçue, ou déjà active au siège pour cet entrepôt et ce type (idempotent) | rien de plus |
+| `400` | type invalide | abandon, log d'erreur |
+| `401` | clé absente, inconnue, ou non autorisée pour cet entrepôt | abandon, log d'erreur |
+| `404` | entrepôt inconnu du siège | abandon, log d'erreur |
+| `429` | limite de débit (60/min par clé par défaut) | nouvelle tentative, `Retry-After` respecté |
+| `5xx`, erreur réseau | siège indisponible | nouvelle tentative, délai croissant, 5 essais |
+
+Les tentatives sont en mémoire : un envoi en cours au moment d'un arrêt du
+consumer est perdu, mais tout abandon se termine par un log d'erreur qui nomme
+l'alerte.
+
+### Limites connues
+
+- **Une seule alerte `condition` active par entrepôt côté pays.** Si l'humidité
+  déborde alors que la température a déjà ouvert l'alerte, rien n'est créé,
+  donc rien n'est poussé.
+- **Le siège dédoublonne par `(entrepôt, type)` actif** et répond `200` sans
+  enregistrer le nouveau `sourceAlertId`.
+- **La résolution renvoyée par le siège n'est tentée qu'une fois.** Si elle
+  échoue, l'alerte reste active côté pays, et la salle ne peut plus en lever
+  d'autre.
 
 ---
 

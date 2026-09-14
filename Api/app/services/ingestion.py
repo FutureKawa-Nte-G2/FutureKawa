@@ -1,18 +1,9 @@
-"""Consumer 1 — écriture des relevés.
+"""Consumer 1: storing readings.
 
-Un capteur appartient à une salle, pas à un lot. Il publie en continu, y compris
-quand la salle est vide ou que le lot qu'il suivait est parti. Écrire tout ce
-qui arrive remplirait `measurements` de bruit qu'aucune requête ne sait plus
-rattacher à quoi que ce soit.
-
-Le filtre est donc l'assignation : un relevé n'est conservé que si le capteur
-suivait un lot au moment où il a mesuré. C'est le critère que l'US #30 énonce —
-`SENSOR_ASSIGNMENT.released_at IS NULL` — étendu ici à la date du relevé plutôt
-qu'à l'instant présent, pour qu'un message retardé par le broker soit jugé sur
-le moment où il a été pris.
-
-Ce module ne sait rien de MQTT. Il reçoit un relevé déjà décodé, ce qui le rend
-testable sans broker — le câblage vit dans `app/consumers/`.
+A sensor belongs to a room and publishes even when no batch is there; storing
+everything would fill `measurements` with readings tied to nothing. A reading
+is kept only if the sensor was assigned to a batch when it measured (US #30),
+judged on the reading's date so a message delayed by the broker still counts.
 """
 
 import uuid
@@ -29,12 +20,7 @@ from app.models import Measurement, Sensor, SensorAssignment
 
 @dataclass(frozen=True)
 class Reading:
-    """Un relevé, tel qu'un capteur le publie.
-
-    Le capteur est désigné par son `code` — le topic MQTT sur lequel il
-    publie — jamais par un identifiant interne : le firmware ne connaît pas nos
-    UUID, et rien ne les lui apprend.
-    """
+    """Identified by sensor `code`, never by UUID: the firmware does not know ours."""
 
     sensor_code: str
     measured_at: datetime
@@ -43,16 +29,10 @@ class Reading:
 
 
 async def persist_reading(session: AsyncSession, reading: Reading) -> uuid.UUID | None:
-    """Écrit le relevé s'il concerne un lot, sinon l'ignore.
+    """Returns `None` for a reading deliberately skipped, which is not an error.
 
-    Renvoie l'identifiant écrit, ou `None` quand le relevé a été reçu et
-    volontairement laissé de côté — un capteur inconnu, inactif, ou au repos
-    entre deux lots. Aucun de ces cas n'est une erreur : ils sont le
-    fonctionnement normal d'une salle où les capteurs tournent en permanence.
-
-    Idempotent. Un broker MQTT en QoS 1 redélivre, et rejouer un message ne doit
-    pas dupliquer une ligne — d'où la contrainte `(sensor_id, meas_date)` en
-    base et le rattrapage de son violation ici.
+    Idempotent because QoS 1 redelivers: the `(sensor_id, meas_date)`
+    constraint rejects the replay.
     """
     sensor = await session.scalar(
         select(Sensor).where(Sensor.code == reading.sensor_code, Sensor.is_active)
@@ -84,8 +64,7 @@ async def persist_reading(session: AsyncSession, reading: Reading) -> uuid.UUID 
     try:
         await session.commit()
     except IntegrityError:
-        # Déjà écrit : le broker a redélivré. Rien à faire, et surtout pas
-        # remonter une erreur qui ferait boucler la redélivraison.
+        # Redelivered message: raising would only loop the redelivery.
         await session.rollback()
         return None
 
@@ -93,19 +72,14 @@ async def persist_reading(session: AsyncSession, reading: Reading) -> uuid.UUID 
 
 
 def _released_after(moment: datetime):
-    """Assignation encore ouverte, ou fermée après le relevé."""
+    """Assignment still open, or closed after the reading."""
     return (SensorAssignment.released_at.is_(None)) | (
         SensorAssignment.released_at > moment
     )
 
 
 def _as_naive_utc(value: datetime) -> datetime:
-    """Ramène en UTC naïf.
-
-    SQLite rend un `timestamptz` naïf là où PostgreSQL le rend conscient :
-    comparer les deux lèverait un TypeError selon le moteur. Tout est comparé
-    en UTC ici, donc le décalage ne porte plus d'information une fois normalisé.
-    """
+    """SQLite returns naive timestamps, PostgreSQL aware ones: comparing both raises."""
     if value.tzinfo is None:
         return value
     return value.astimezone(UTC).replace(tzinfo=None)

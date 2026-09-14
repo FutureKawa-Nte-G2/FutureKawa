@@ -1,22 +1,19 @@
-"""Les deux consumers abonnés au broker (US #32).
+"""The two MQTT consumers once a message is decoded (US #32).
 
-Ce que font les deux consumers une fois le message décodé. Le décodage et la
-règle de bande, qui ne touchent pas la base, sont dans `test_mqtt_payload.py`.
-
-Aucun broker n'est monté : les services reçoivent un relevé déjà décodé,
-précisément pour être vérifiables sans Mosquitto, qui n'est pas encore
-configuré (#31). Le test d'intégration bout en bout « message MQTT → écriture
-en base » exigé par la DoD reste à faire le jour où le broker existe.
+Decoding and the band rule are in `test_mqtt_payload.py`.
 """
 
+import asyncio
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 
 import pytest
 from sqlalchemy import func, select
 
+from app.consumers import runner
 from app.models import Alert, Batch, Notification, Sensor, SensorAssignment
+from app.services.head_office import AlertPush
 from app.services.ingestion import Reading, persist_reading
 from app.services.quality import evaluate_reading
 from tests.conftest import (
@@ -24,6 +21,7 @@ from tests.conftest import (
     SENSOR_CODE,
     SENSOR_ID,
     WAREHOUSE_ID,
+    WAREHOUSE_REF,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -42,6 +40,15 @@ def _reading(temp: str = "20.00", humidity: str = "55.00", day: int = 10) -> Rea
     )
 
 
+def _timed_reading(at: datetime, temp: str, humidity: str) -> Reading:
+    return Reading(
+        sensor_code=SENSOR_CODE,
+        measured_at=at,
+        temperature=Decimal(temp),
+        humidity=Decimal(humidity),
+    )
+
+
 async def _assign(session, start=None, end=None) -> None:
     session.add(
         SensorAssignment(
@@ -55,7 +62,7 @@ async def _assign(session, start=None, end=None) -> None:
     await session.commit()
 
 
-# --- consumer 1 : écriture --------------------------------------------------
+# --- consumer 1: ingestion -------------------------------------------------
 
 
 async def test_should_write_a_reading_from_an_assigned_sensor(session):
@@ -68,7 +75,7 @@ async def test_should_write_a_reading_from_an_assigned_sensor(session):
 
 
 async def test_should_ignore_a_reading_from_a_sensor_with_no_assignment(session):
-    """Un capteur au repos publie quand même : ce bruit ne doit pas être stocké."""
+    """An idle sensor still publishes: that noise must not be stored."""
     written = await persist_reading(session, _reading())
 
     assert written is None
@@ -81,7 +88,7 @@ async def test_should_ignore_a_reading_taken_after_the_sensor_was_released(sessi
 
 
 async def test_should_judge_a_late_message_on_when_it_was_taken(session):
-    """Le broker retarde ; le relevé se juge à sa date, pas à sa réception."""
+    """The broker delays: a reading is judged on its date, not its arrival."""
     await _assign(session, start=_at(1), end=_at(5))
 
     assert await persist_reading(session, _reading(day=3)) is not None
@@ -109,7 +116,7 @@ async def test_should_ignore_a_reading_from_a_deactivated_sensor(session):
 
 
 async def test_should_not_duplicate_a_redelivered_message(session):
-    """QoS 1 redélivre : rejouer ne doit pas créer une seconde ligne."""
+    """QoS 1 redelivers."""
     await _assign(session)
     reading = _reading()
 
@@ -120,7 +127,7 @@ async def test_should_not_duplicate_a_redelivered_message(session):
     assert second is None
 
 
-# --- consumer 2 : évaluation ------------------------------------------------
+# --- consumer 2: evaluation ------------------------------------------------
 
 
 async def test_should_leave_a_compliant_batch_alone_when_the_reading_is_in_band(session):
@@ -135,7 +142,6 @@ async def test_should_leave_a_compliant_batch_alone_when_the_reading_is_in_band(
 
 
 async def test_should_flip_the_batch_and_raise_alert_and_notification_together(session):
-    """La DoD : bascule + ALERT + NOTIFICATION en une seule fois."""
     await _assign(session)
 
     result = await evaluate_reading(session, _reading("31.00", "55.00"))
@@ -156,8 +162,75 @@ async def test_should_flip_the_batch_and_raise_alert_and_notification_together(s
     assert notification.warehouse_id == WAREHOUSE_ID
 
 
+async def test_should_date_the_alert_with_the_reading_not_with_the_evaluation(session):
+    await _assign(session)
+    processed_at = _at(12, hour=18)
+
+    await evaluate_reading(session, _reading("31.00", "55.00", day=10), now=processed_at)
+
+    alert = await session.scalar(select(Alert))
+    assert alert.measured_at == _at(10)
+    assert alert.created_at == processed_at
+
+
+async def test_should_describe_the_alert_to_push_to_head_office(session):
+    await _assign(session)
+    processed_at = _at(12, hour=18)
+
+    result = await evaluate_reading(session, _reading("31.00", "55.00", day=10), now=processed_at)
+
+    alert = await session.scalar(select(Alert))
+    assert result.alert_push == AlertPush(
+        source_alert_id=alert.alert_id,
+        warehouse_ref=WAREHOUSE_REF,
+        metric="temperature",
+        measured_at=_at(10),
+    )
+
+
+async def test_should_push_nothing_for_a_reading_in_band(session):
+    await _assign(session)
+
+    result = await evaluate_reading(session, _reading("21.00", "56.00"))
+
+    assert result.alert_push is None
+
+
+async def test_should_name_the_metric_when_only_one_is_out(session):
+    await _assign(session)
+
+    result = await evaluate_reading(session, _reading("20.00", "61.00"))
+
+    assert result.alert_push.metric == "humidity"
+
+
+async def test_should_read_the_previous_reading_when_both_metrics_are_out(session):
+    await _assign(session)
+    trigger_at = _at(10)
+    await persist_reading(
+        session, _timed_reading(trigger_at - timedelta(minutes=5), "24.80", "52.00")
+    )
+
+    # Alone, this reading would point to humidity (larger deviation).
+    result = await evaluate_reading(session, _timed_reading(trigger_at, "26.00", "65.00"))
+
+    assert result.alert_push.metric == "temperature"
+
+
+async def test_should_ignore_a_previous_reading_outside_the_interpolation_window(session):
+    await _assign(session)
+    trigger_at = _at(10)
+    await persist_reading(
+        session, _timed_reading(trigger_at - timedelta(minutes=16), "24.80", "52.00")
+    )
+
+    result = await evaluate_reading(session, _timed_reading(trigger_at, "26.00", "65.00"))
+
+    assert result.alert_push.metric == "humidity"
+
+
 async def test_should_not_raise_a_second_alert_for_an_already_flagged_batch(session):
-    """Anti-spam : sans ça, 288 notifications par jour pour un seul incident."""
+    """Otherwise 288 notifications a day for a single incident."""
     await _assign(session)
 
     await evaluate_reading(session, _reading("31.00", "55.00", day=10))
@@ -166,12 +239,14 @@ async def test_should_not_raise_a_second_alert_for_an_already_flagged_batch(sess
 
     assert second.alert_created is False
     assert third.alert_created is False
+    assert second.alert_push is None
+    assert third.alert_push is None
     assert await session.scalar(select(func.count()).select_from(Alert)) == 1
     assert await session.scalar(select(func.count()).select_from(Notification)) == 1
 
 
 async def test_should_not_restore_compliance_when_the_reading_comes_back_in_band(session):
-    """La levée est une décision humaine, pas une conséquence mécanique."""
+    """Lifting the flag is a human decision."""
     await _assign(session)
     await evaluate_reading(session, _reading("31.00", "55.00", day=10))
 
@@ -189,13 +264,67 @@ async def test_should_evaluate_nothing_for_a_sensor_with_no_assignment(session):
 
 
 async def test_should_stay_independent_of_whether_the_reading_was_stored(session):
-    """Les deux consumers sont indépendants : l'un peut agir sans l'autre."""
     await _assign(session)
 
     result = await evaluate_reading(session, _reading("31.00", "55.00"))
 
     assert result.alert_created is True
-    # Aucune mesure écrite : personne n'a appelé le consumer de persistance.
     from app.models import Measurement
 
     assert await session.scalar(select(func.count()).select_from(Measurement)) == 0
+
+
+# --- push to head office ---------------------------------------------------
+
+
+class _RecordingPush:
+    def __init__(self) -> None:
+        self.pushed: list[AlertPush] = []
+
+    async def __call__(self, client, push: AlertPush) -> bool:
+        self.pushed.append(push)
+        return True
+
+
+async def test_should_push_a_new_alert_without_blocking_the_consumer(session, monkeypatch):
+    await _assign(session)
+    recorder = _RecordingPush()
+    monkeypatch.setattr(runner, "push_alert", recorder)
+    pending: set = set()
+    handler = runner._evaluate_and_push(client=None, pending=pending)
+
+    evaluation = await handler(session, _reading("31.00", "55.00"))
+
+    assert len(pending) == 1
+    await asyncio.gather(*pending)
+    assert recorder.pushed == [evaluation.alert_push]
+
+
+async def test_should_push_nothing_when_no_alert_was_opened(session, monkeypatch):
+    await _assign(session)
+    recorder = _RecordingPush()
+    monkeypatch.setattr(runner, "push_alert", recorder)
+    pending: set = set()
+    handler = runner._evaluate_and_push(client=None, pending=pending)
+
+    await handler(session, _reading("21.00", "56.00"))
+
+    assert pending == set()
+    assert recorder.pushed == []
+
+
+async def test_should_log_an_unexpected_push_failure(session, monkeypatch, caplog):
+    await _assign(session)
+
+    async def broken_push(client, push):
+        raise RuntimeError("bug")
+
+    monkeypatch.setattr(runner, "push_alert", broken_push)
+    pending: set = set()
+    handler = runner._evaluate_and_push(client=None, pending=pending)
+
+    await handler(session, _reading("31.00", "55.00"))
+    await asyncio.gather(*pending, return_exceptions=True)
+    await asyncio.sleep(0)
+
+    assert "Unexpected failure while pushing an alert to head office" in caplog.text

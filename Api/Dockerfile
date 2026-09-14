@@ -1,25 +1,22 @@
 # syntax=docker/dockerfile:1
 
-# Une image, deux usages :
-#   uvicorn app.main:app          -> l'API pays
-#   alembic upgrade head          -> migrations, puis sortie
-# Contexte de build : ./Api
+# One image, two uses:
+#   uvicorn app.main:app          -> the country API
+#   alembic upgrade head          -> migrations, then exit
+# Build context: ./Api
 
-# Même version que le job CI de l'API Python : une image plus ancienne ferait
-# diverger l'exécution locale de ce que la CI valide.
+# Same version as the Python API CI job, so local runs match what CI validates.
 ARG PYTHON_VERSION=3.13
 
 FROM python:${PYTHON_VERSION}-slim AS runtime
 WORKDIR /app
 
-# Le healthcheck compose interroge /health en HTTP, et l'image slim n'embarque
-# aucun client. curl plutôt que wget : même invocation que les autres services.
+# The compose healthcheck needs an HTTP client, which slim does not ship.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl \
  && rm -rf /var/lib/apt/lists/*
 
-# requirements.txt seul d'abord : l'install reste en cache tant qu'aucune
-# dépendance ne change, même quand tout le code a changé.
+# Copied alone first so the install stays cached until a dependency changes.
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
@@ -27,12 +24,11 @@ COPY alembic.ini .
 COPY alembic/ alembic/
 COPY app/ app/
 
-# asyncpg ne lit pas PYTHONPATH depuis le WORKDIR sans ça : `alembic upgrade`
-# importe app.models, qui doit être résolvable depuis /app.
+# `alembic upgrade` imports app.models, which must resolve from /app.
 ENV PYTHONPATH=/app \
     PYTHONUNBUFFERED=1
 
-# Un utilisateur non root, comme l'image .NET du backend qui tourne en `app`.
+# Non-root, like the backend .NET image.
 RUN useradd --create-home --uid 1000 apiuser
 USER apiuser
 

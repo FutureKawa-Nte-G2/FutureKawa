@@ -84,7 +84,7 @@ async def test_should_ignore_readings_taken_before_the_sensor_was_assigned(sessi
     await _assign(session, _at(10, 0), _at(12, 0))
     session.add_all(
         [
-            _reading(SENSOR_ID, _at(9, 23), "99.00", "99.00"),  # veille, hors fenêtre
+            _reading(SENSOR_ID, _at(9, 23), "99.00", "99.00"),  # day before, outside the window
             _reading(SENSOR_ID, _at(10, 6), "20.00", "55.00"),
         ]
     )
@@ -101,7 +101,7 @@ async def test_should_ignore_readings_taken_after_the_sensor_was_released(sessio
     session.add_all(
         [
             _reading(SENSOR_ID, _at(11, 6), "20.00", "55.00"),
-            _reading(SENSOR_ID, _at(13, 6), "99.00", "99.00"),  # après libération
+            _reading(SENSOR_ID, _at(13, 6), "99.00", "99.00"),  # after release
         ]
     )
     await session.commit()

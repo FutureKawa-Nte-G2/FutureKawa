@@ -33,12 +33,16 @@ Projet EPSI MSPR Bloc de compétences 4 : Concevoir et développer des solutions
        └──────────────────────────────────────► │  Entrepôt local  │
                                                  │  capteurs IoT    │
                                                  └──────────────────┘
+
+Backend .NET ◄── POST /api/alerts (alerte ouverte) ─────────── API pays
+Backend .NET ─── PATCH /api/alerts/{id}/resolve (résolution) ─► API pays
 ```
 
 - **Odoo 18** gère les commandes et déclenche un webhook vers le backend à la confirmation.
 - **Backend .NET 10** expose l'API métier, reçoit les commandes Odoo, synchronise les mesures des entrepôts et sert le frontend.
 - **Frontend Next.js** consomme l'API backend (portail web).
 - **Entrepôts locaux** fournissent les mesures agrégées quotidiennes de température et d'humidité.
+- **Alertes** : l'API pays pousse au backend chaque alerte de conditions (`temperature` ou `humidity`) dès qu'elle l'ouvre ; le backend renvoie la résolution à l'API pays. Chaque pays s'authentifie avec sa propre clé. Détail dans [Api/README.md](Api/README.md#envoi-des-alertes-au-siège) et [Documentation/api-pays-contrats.md](Documentation/api-pays-contrats.md).
 
 Voir [Documentation/diagrammes/architecture_odoo_integration.md](Documentation/diagrammes/architecture_odoo_integration.md) pour le détail.
 
@@ -203,6 +207,8 @@ Le backend utilise les sections suivantes dans `appsettings.json` / `appsettings
 | `MeasurementSync`   | `LocalApiUrl`            | URL de l'API locale d'un entrepôt                                  |
 |                     | `IntervalMinutes`        | Intervalle entre deux synchronisations (défaut 60 min)             |
 |                     | `UseMockData`            | `true` pour générer des données fictives sans appeler d'API réelle |
+| `LocalApi`          | `Countries:{code}:ApiKey`  | Clé du pays : attendue en `X-Api-Key` sur `POST /api/alerts`, présentée à l'API pays pour la résolution. Même valeur que `LOCAL_API_KEY` côté pays. Sans aucune clé configurée, tout envoi d'alerte est rejeté (`401`) |
+|                     | `Countries:{code}:BaseUrl` | URL de base de l'API pays, où renvoyer la résolution d'une alerte  |
 
 ### Configuration de développement pour les mesures
 

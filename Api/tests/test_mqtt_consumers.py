@@ -9,6 +9,7 @@ configuré (#31). Le test d'intégration bout en bout « message MQTT → écrit
 en base » exigé par la DoD reste à faire le jour où le broker existe.
 """
 
+import asyncio
 import uuid
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -16,7 +17,9 @@ from decimal import Decimal
 import pytest
 from sqlalchemy import func, select
 
+from app.consumers import runner
 from app.models import Alert, Batch, Notification, Sensor, SensorAssignment
+from app.services.head_office import AlertPush
 from app.services.ingestion import Reading, persist_reading
 from app.services.quality import evaluate_reading
 from tests.conftest import (
@@ -24,6 +27,7 @@ from tests.conftest import (
     SENSOR_CODE,
     SENSOR_ID,
     WAREHOUSE_ID,
+    WAREHOUSE_REF,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -177,12 +181,36 @@ async def test_should_date_the_alert_with_the_reading_not_with_the_evaluation(se
     assert alert.created_at == processed_at
 
 
+async def test_should_describe_the_alert_to_push_to_head_office(session):
+    await _assign(session)
+    processed_at = _at(12, hour=18)
+
+    result = await evaluate_reading(session, _reading("31.00", "55.00", day=10), now=processed_at)
+
+    alert = await session.scalar(select(Alert))
+    assert result.alert_push == AlertPush(
+        source_alert_id=alert.alert_id,
+        warehouse_ref=WAREHOUSE_REF,
+        metric="temperature",
+        # Le relevé, pas le traitement : c'est ce que le siège doit recevoir.
+        measured_at=_at(10),
+    )
+
+
+async def test_should_push_nothing_for_a_reading_in_band(session):
+    await _assign(session)
+
+    result = await evaluate_reading(session, _reading("21.00", "56.00"))
+
+    assert result.alert_push is None
+
+
 async def test_should_name_the_metric_when_only_one_is_out(session):
     await _assign(session)
 
     result = await evaluate_reading(session, _reading("20.00", "61.00"))
 
-    assert result.breached_metric == "humidity"
+    assert result.alert_push.metric == "humidity"
 
 
 async def test_should_read_the_previous_reading_when_both_metrics_are_out(session):
@@ -197,7 +225,7 @@ async def test_should_read_the_previous_reading_when_both_metrics_are_out(sessio
     # précédent montre que la température a franchi sa borne bien avant.
     result = await evaluate_reading(session, _timed_reading(trigger_at, "26.00", "65.00"))
 
-    assert result.breached_metric == "temperature"
+    assert result.alert_push.metric == "temperature"
 
 
 async def test_should_ignore_a_previous_reading_outside_the_interpolation_window(session):
@@ -209,7 +237,7 @@ async def test_should_ignore_a_previous_reading_outside_the_interpolation_window
 
     result = await evaluate_reading(session, _timed_reading(trigger_at, "26.00", "65.00"))
 
-    assert result.breached_metric == "humidity"
+    assert result.alert_push.metric == "humidity"
 
 
 async def test_should_not_raise_a_second_alert_for_an_already_flagged_batch(session):
@@ -222,6 +250,8 @@ async def test_should_not_raise_a_second_alert_for_an_already_flagged_batch(sess
 
     assert second.alert_created is False
     assert third.alert_created is False
+    assert second.alert_push is None
+    assert third.alert_push is None
     assert await session.scalar(select(func.count()).select_from(Alert)) == 1
     assert await session.scalar(select(func.count()).select_from(Notification)) == 1
 
@@ -255,3 +285,63 @@ async def test_should_stay_independent_of_whether_the_reading_was_stored(session
     from app.models import Measurement
 
     assert await session.scalar(select(func.count()).select_from(Measurement)) == 0
+
+
+# --- envoi au siège ---------------------------------------------------------
+
+
+class _RecordingPush:
+    """Remplace `push_alert` : enregistre ce qui aurait été envoyé."""
+
+    def __init__(self) -> None:
+        self.pushed: list[AlertPush] = []
+
+    async def __call__(self, client, push: AlertPush) -> bool:
+        self.pushed.append(push)
+        return True
+
+
+async def test_should_push_a_new_alert_without_blocking_the_consumer(session, monkeypatch):
+    await _assign(session)
+    recorder = _RecordingPush()
+    monkeypatch.setattr(runner, "push_alert", recorder)
+    pending: set = set()
+    handler = runner._evaluate_and_push(client=None, pending=pending)
+
+    evaluation = await handler(session, _reading("31.00", "55.00"))
+
+    # Le handler a rendu la main avant l'envoi, qui tourne dans sa tâche.
+    assert len(pending) == 1
+    await asyncio.gather(*pending)
+    assert recorder.pushed == [evaluation.alert_push]
+
+
+async def test_should_push_nothing_when_no_alert_was_opened(session, monkeypatch):
+    await _assign(session)
+    recorder = _RecordingPush()
+    monkeypatch.setattr(runner, "push_alert", recorder)
+    pending: set = set()
+    handler = runner._evaluate_and_push(client=None, pending=pending)
+
+    await handler(session, _reading("21.00", "56.00"))
+
+    assert pending == set()
+    assert recorder.pushed == []
+
+
+async def test_should_log_an_unexpected_push_failure(session, monkeypatch, caplog):
+    """Une exception imprévue dans la tâche ne doit pas disparaître en silence."""
+    await _assign(session)
+
+    async def broken_push(client, push):
+        raise RuntimeError("bug")
+
+    monkeypatch.setattr(runner, "push_alert", broken_push)
+    pending: set = set()
+    handler = runner._evaluate_and_push(client=None, pending=pending)
+
+    await handler(session, _reading("31.00", "55.00"))
+    await asyncio.gather(*pending, return_exceptions=True)
+    await asyncio.sleep(0)
+
+    assert "échec inattendu de l'envoi au siège" in caplog.text

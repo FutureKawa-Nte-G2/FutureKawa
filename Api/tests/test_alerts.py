@@ -391,6 +391,8 @@ async def test_should_not_open_a_second_room_alert_while_the_first_is_active(ses
     second = await evaluate_reading(session, _out_of_band(SECOND_SENSOR_CODE, day=11))
 
     assert second.alert_created is False
+    # Refusée par l'index unique : rien à pousser au siège, qui a déjà la première.
+    assert second.alert_push is None
     assert await _count_alerts(session, alert_type="condition") == 1
 
 

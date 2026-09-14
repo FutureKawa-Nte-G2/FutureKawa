@@ -12,7 +12,6 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from typing import Literal
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -28,11 +27,8 @@ from app.models import (
     SensorAssignment,
     Warehouse,
 )
+from app.services.head_office import AlertPush, Metric
 from app.services.ingestion import Reading, _as_naive_utc, _released_after
-
-# Le vocabulaire du siège et du frontend. Une alerte `condition` du pays porte
-# sur la salle ; le siège, lui, veut savoir laquelle des deux grandeurs a dérivé.
-Metric = Literal["temperature", "humidity"]
 
 # Au-delà, le relevé précédent est trop ancien pour qu'une évolution linéaire
 # entre les deux reste crédible : coupure, capteur hors ligne, relevé perdu.
@@ -92,9 +88,10 @@ class Evaluation:
     notification_created: bool = False
     # Vrai la première fois que le lot bascule, faux les fois suivantes.
     compliance_flipped: bool = False
-    # La grandeur qui a franchi son seuil en premier, renseignée seulement
-    # quand une alerte est ouverte.
-    breached_metric: Metric | None = None
+    # Ce qu'il faut pousser au siège, renseigné seulement quand une alerte a
+    # été ouverte et commitée. L'envoi est laissé à l'appelant : ce module
+    # décide, il ne fait pas de réseau.
+    alert_push: AlertPush | None = None
 
 
 def _bands(country: Country) -> tuple[Band, Band]:
@@ -243,7 +240,7 @@ async def evaluate_reading(
 
     row = (
         await session.execute(
-            select(Batch, Country)
+            select(Batch, Country, Warehouse.warehouse_ref)
             .join(SensorAssignment, SensorAssignment.batch_id == Batch.batch_id)
             .join(Sensor, Sensor.sensor_id == SensorAssignment.sensor_id)
             .join(Warehouse, Warehouse.warehouse_id == Batch.warehouse_id)
@@ -261,7 +258,7 @@ async def evaluate_reading(
         # Capteur inconnu, inactif, ou au repos : rien à évaluer.
         return Evaluation()
 
-    batch, country = row
+    batch, country, warehouse_ref = row
     # Lu avant toute écriture : un `rollback` expire l'instance, et relire
     # `batch.batch_id` après coup déclencherait un rechargement synchrone —
     # interdit hors greenlet, donc une MissingGreenlet en pleine reprise
@@ -285,12 +282,14 @@ async def evaluate_reading(
         # Lu seulement quand les deux grandeurs débordent : c'est le seul cas
         # où le relevé déclencheur ne suffit pas à dire laquelle a dérivé.
         previous = await _previous_sample(session, reading.sensor_code, measured_at)
+    # Jamais `None` ici : le relevé est hors bande, sinon on serait déjà sorti.
     breached_metric = select_breached_metric(current, previous, country)
 
     batch.is_compliant = False
 
+    alert_id = uuid.uuid4()
     alert = Alert(
-        alert_id=uuid.uuid4(),
+        alert_id=alert_id,
         warehouse_id=warehouse_id,
         # `condition` concerne la salle, pas le lot : le modèle réserve
         # `batch_id` aux alertes d'expiration. Le lien vers le lot est porté par
@@ -334,7 +333,14 @@ async def evaluate_reading(
         alert_created=True,
         notification_created=True,
         compliance_flipped=True,
-        breached_metric=breached_metric,
+        # Construit après le commit seulement : une alerte que la base a refusée
+        # ne doit jamais atteindre le siège.
+        alert_push=AlertPush(
+            source_alert_id=alert_id,
+            warehouse_ref=warehouse_ref,
+            metric=breached_metric,
+            measured_at=measured_at,
+        ),
     )
 
 

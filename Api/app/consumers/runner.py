@@ -18,11 +18,13 @@ import os
 from collections.abc import Awaitable, Callable
 
 import aiomqtt
+import httpx
 
 from app.consumers.payload import TOPIC_FILTER, MalformedPayloadError, decode
 from app.db import get_session_factory
+from app.services.head_office import push_alert
 from app.services.ingestion import Reading, persist_reading
-from app.services.quality import evaluate_reading
+from app.services.quality import Evaluation, evaluate_reading
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +38,43 @@ RECONNECT_DELAY_SECONDS = 5
 
 
 Handler = Callable[[object, Reading], Awaitable[object]]
+
+
+def _evaluate_and_push(client: httpx.AsyncClient, pending: set[asyncio.Task]) -> Handler:
+    """Le handler du consumer d'évaluation : évaluer, puis pousser au siège.
+
+    L'envoi part dans sa propre tâche. L'attendre ici bloquerait la boucle :
+    les messages sont traités un par un, et un siège en panne, avec ses
+    nouvelles tentatives, suspendrait la surveillance de toutes les salles.
+
+    `pending` garde une référence sur chaque tâche en cours : asyncio n'en
+    garde qu'une faible, et une tâche que plus rien ne référence peut être
+    ramassée avant d'avoir fini.
+    """
+
+    async def handler(session, reading: Reading) -> Evaluation:
+        evaluation = await evaluate_reading(session, reading)
+        if evaluation.alert_push is not None:
+            task = asyncio.create_task(push_alert(client, evaluation.alert_push))
+            pending.add(task)
+            task.add_done_callback(pending.discard)
+            task.add_done_callback(_log_unexpected_push_failure)
+        return evaluation
+
+    return handler
+
+
+def _log_unexpected_push_failure(task: asyncio.Task) -> None:
+    """`push_alert` ne lève pas sur une panne du siège ; ceci couvre le reste.
+
+    Sans ce rappel, une exception imprévue dans la tâche ne serait signalée
+    qu'au ramassage de celle-ci, au mieux — une alerte perdue en silence.
+    """
+    if task.cancelled():
+        return
+    exc = task.exception()
+    if exc is not None:
+        logger.error("évaluation : échec inattendu de l'envoi au siège", exc_info=exc)
 
 
 async def _consume(name: str, client_id: str, handler: Handler) -> None:
@@ -91,10 +130,18 @@ async def main() -> None:
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s"
     )
-    await asyncio.gather(
-        _consume("persistance", "futurekawa-ingestion", persist_reading),
-        _consume("évaluation", "futurekawa-quality", evaluate_reading),
-    )
+    pending_pushes: set[asyncio.Task] = set()
+    # Un seul client pour tous les envois : il garde ses connexions ouvertes
+    # d'une alerte à l'autre.
+    async with httpx.AsyncClient() as client:
+        await asyncio.gather(
+            _consume("persistance", "futurekawa-ingestion", persist_reading),
+            _consume(
+                "évaluation",
+                "futurekawa-quality",
+                _evaluate_and_push(client, pending_pushes),
+            ),
+        )
 
 
 if __name__ == "__main__":

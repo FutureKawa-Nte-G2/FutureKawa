@@ -10,7 +10,7 @@ en base » exigé par la DoD reste à faire le jour où le broker existe.
 """
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 
 import pytest
@@ -37,6 +37,15 @@ def _reading(temp: str = "20.00", humidity: str = "55.00", day: int = 10) -> Rea
     return Reading(
         sensor_code=SENSOR_CODE,
         measured_at=_at(day),
+        temperature=Decimal(temp),
+        humidity=Decimal(humidity),
+    )
+
+
+def _timed_reading(at: datetime, temp: str, humidity: str) -> Reading:
+    return Reading(
+        sensor_code=SENSOR_CODE,
+        measured_at=at,
         temperature=Decimal(temp),
         humidity=Decimal(humidity),
     )
@@ -166,6 +175,41 @@ async def test_should_date_the_alert_with_the_reading_not_with_the_evaluation(se
     alert = await session.scalar(select(Alert))
     assert alert.measured_at == _at(10)
     assert alert.created_at == processed_at
+
+
+async def test_should_name_the_metric_when_only_one_is_out(session):
+    await _assign(session)
+
+    result = await evaluate_reading(session, _reading("20.00", "61.00"))
+
+    assert result.breached_metric == "humidity"
+
+
+async def test_should_read_the_previous_reading_when_both_metrics_are_out(session):
+    """Les deux débordent : le relevé écrit juste avant départage par interpolation."""
+    await _assign(session)
+    trigger_at = _at(10)
+    await persist_reading(
+        session, _timed_reading(trigger_at - timedelta(minutes=5), "24.80", "52.00")
+    )
+
+    # Seul, ce relevé désignerait l'humidité (2 tolérances contre 1,2) ; le
+    # précédent montre que la température a franchi sa borne bien avant.
+    result = await evaluate_reading(session, _timed_reading(trigger_at, "26.00", "65.00"))
+
+    assert result.breached_metric == "temperature"
+
+
+async def test_should_ignore_a_previous_reading_outside_the_interpolation_window(session):
+    await _assign(session)
+    trigger_at = _at(10)
+    await persist_reading(
+        session, _timed_reading(trigger_at - timedelta(minutes=16), "24.80", "52.00")
+    )
+
+    result = await evaluate_reading(session, _timed_reading(trigger_at, "26.00", "65.00"))
+
+    assert result.breached_metric == "humidity"
 
 
 async def test_should_not_raise_a_second_alert_for_an_already_flagged_batch(session):

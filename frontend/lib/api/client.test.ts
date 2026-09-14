@@ -148,4 +148,14 @@ describe("apiRequest — concurrence, corps non-JSON, timeout", () => {
 
     expect(fetchMock.mock.calls[0][1]?.signal).toBeInstanceOf(AbortSignal);
   });
+
+  it("sends the method given in options, e.g. PATCH for resolveAlert (#85)", async () => {
+    const fetchMock = vi
+      .spyOn(global, "fetch")
+      .mockResolvedValueOnce(jsonResponse(200, { success: true, data: null, message: null, errors: null }));
+
+    await apiRequest("/api/alerts/some-id/resolve", { method: "PATCH", accessToken: "token" });
+
+    expect(fetchMock.mock.calls[0][1]?.method).toBe("PATCH");
+  });
 });

@@ -11,6 +11,8 @@ import { GRID_TEMPLATE, ROW_CLASSES } from "./grid";
 const TYPE_LABELS: Record<AlertType, string> = {
   temperature: "Température",
   humidity: "Humidité",
+  condition: "Condition",
+  expiration: "Expiration",
 };
 
 interface AlertRowProps {

@@ -33,4 +33,17 @@ public interface IAlertRepository
     /// Persists changes made to an existing alert.
     /// </summary>
     Task UpdateAsync(Alert alert, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Retrieves a paginated list of alerts, optionally filtered by country code,
+    /// warehouse ID and status (#85). Includes Warehouse and Warehouse.Country for
+    /// display names. Ordered by CreatedAt descending (most recent first).
+    /// </summary>
+    Task<(IEnumerable<Alert> Items, int TotalCount)> GetPagedAsync(
+        string? countryCode,
+        Guid? warehouseId,
+        AlertStatus? status,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default);
 }

@@ -16,7 +16,7 @@ export class ApiError extends Error {
 }
 
 interface RequestOptions {
-  method?: "GET" | "POST" | "PUT" | "DELETE";
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: unknown;
   accessToken?: string | null;
   skipAuthRetry?: boolean; // Internal use only: set by auth.ts on login/refresh/logout calls,

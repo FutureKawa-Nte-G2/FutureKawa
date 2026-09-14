@@ -62,7 +62,13 @@ function BatchDetailContent() {
     <main className="flex-1 p-8">
       <button
         type="button"
-        onClick={() => router.push("/fifo")}
+        // This page is only ever reached from a batch row on the FIFO page
+        // (see BatchRow.tsx), so the previous history entry is always
+        // /fifo?... with whatever country/warehouse/quality filter the user
+        // had selected. router.back() returns there directly, instead of
+        // router.push("/fifo") which dropped the filter by navigating to
+        // the bare, param-less URL.
+        onClick={() => router.back()}
         className="mb-4 text-sm text-input-text hover:text-foreground"
       >
         ← Retour au FIFO
@@ -114,6 +120,16 @@ function BatchDetailContent() {
   );
 }
 
+// Anchored at local midnight on the UTC calendar date (matching the
+// yyyy-MM-dd prefix filterMeasurementsByStoragePeriod compares against),
+// not converted from the full UTC instant — otherwise a late-UTC time of
+// day (e.g. 22:47Z) can roll over to the next day once rendered in a
+// timezone ahead of UTC, showing an "Entré en stock" date one day later
+// than the first point actually plotted in the Relevés charts.
 function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("fr-FR", { year: "numeric", month: "short", day: "numeric" });
+  return new Date(`${iso.slice(0, 10)}T00:00:00`).toLocaleDateString("fr-FR", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
 }

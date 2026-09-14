@@ -9,11 +9,15 @@ import { useAuth } from "@/context/AuthContext";
 const TYPE_STYLES: Record<AlertType, string> = {
   temperature: "text-status-alert-text bg-status-alert-bg",
   humidity: "text-status-alert-text bg-status-alert-bg",
+  condition: "text-status-alert-text bg-status-alert-bg",
+  expiration: "text-status-alert-text bg-status-alert-bg",
 };
 
 const TYPE_LABELS: Record<AlertType, string> = {
   temperature: "Température",
   humidity: "Humidité",
+  condition: "Condition",
+  expiration: "Expiration",
 };
 
 export function AlertButton() {

@@ -12,16 +12,17 @@ public class AlertServiceTests
 {
     private readonly IAlertRepository _alertRepository = Substitute.For<IAlertRepository>();
     private readonly IWarehouseRepository _warehouseRepository = Substitute.For<IWarehouseRepository>();
+    private readonly IBatchRepository _batchRepository = Substitute.For<IBatchRepository>();
     private readonly ILocalAlertPushClient _localAlertPushClient = Substitute.For<ILocalAlertPushClient>();
     private readonly IAlertEmailService _alertEmailService = Substitute.For<IAlertEmailService>();
     private readonly ILogger<AlertService> _logger = Substitute.For<ILogger<AlertService>>();
     private readonly AlertService _service;
 
     public AlertServiceTests()
-    {
-        _service = new AlertService(
-            _alertRepository, _warehouseRepository, _localAlertPushClient, _alertEmailService, _logger);
-    }
+{
+    _service = new AlertService(
+        _alertRepository, _warehouseRepository, _batchRepository, _localAlertPushClient, _alertEmailService, _logger);
+}
 
     private static Warehouse MakeWarehouse(Guid id, string reference, string countryCode) => new()
     {
@@ -29,6 +30,16 @@ public class AlertServiceTests
         Name = "Test Warehouse",
         Reference = reference,
         Country = new Country { Id = Guid.NewGuid(), Code = countryCode, Name = countryCode }
+    };
+
+    private static Alert MakeAlert(Warehouse warehouse, AlertType type, AlertStatus status, DateTime createdAt) => new()
+    {
+        Id = Guid.NewGuid(),
+        WarehouseId = warehouse.Id,
+        Warehouse = warehouse,
+        Type = type,
+        Status = status,
+        CreatedAt = createdAt
     };
 
     [Fact]
@@ -418,5 +429,185 @@ public class AlertServiceTests
         await _alertRepository.DidNotReceive().UpdateAsync(Arg.Any<Alert>(), Arg.Any<CancellationToken>());
         await _localAlertPushClient.DidNotReceive().PushResolutionAsync(
             Arg.Any<string>(), Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task GetAlertsAsync_Should_ReturnPaginatedResults()
+    {
+        // Arrange
+        var warehouse = MakeWarehouse(Guid.NewGuid(), "WH-BR-01", "BR");
+        var alerts = new List<Alert>
+        {
+            MakeAlert(warehouse, AlertType.Temperature, AlertStatus.Active, DateTime.UtcNow.AddHours(-1)),
+            MakeAlert(warehouse, AlertType.Humidity, AlertStatus.Resolved, DateTime.UtcNow.AddDays(-2))
+        };
+
+        _alertRepository.GetPagedAsync(null, null, null, 1, 10, Arg.Any<CancellationToken>())
+            .Returns((alerts, 2));
+
+        // Act
+        var result = await _service.GetAlertsAsync(null, null, null, 1, 10);
+
+        // Assert
+        Assert.Equal(2, result.TotalCount);
+        Assert.Equal(1, result.Page);
+        Assert.Equal(10, result.PageSize);
+        Assert.Equal(1, result.TotalPages);
+        Assert.Equal(2, result.Alerts.Count());
+    }
+
+    [Fact]
+    public async Task GetAlertsAsync_Should_FilterByCountryCode()
+    {
+        // Arrange
+        var countryCode = "BR";
+
+        _alertRepository.GetPagedAsync(countryCode, null, null, 1, 10, Arg.Any<CancellationToken>())
+            .Returns((new List<Alert>(), 0));
+
+        // Act
+        await _service.GetAlertsAsync(countryCode, null, null, 1, 10);
+
+        // Assert
+        await _alertRepository.Received(1).GetPagedAsync(countryCode, null, null, 1, 10, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task GetAlertsAsync_Should_FilterByWarehouseId()
+    {
+        // Arrange
+        var warehouseId = Guid.NewGuid();
+
+        _alertRepository.GetPagedAsync(null, warehouseId, null, 1, 10, Arg.Any<CancellationToken>())
+            .Returns((new List<Alert>(), 0));
+
+        // Act
+        await _service.GetAlertsAsync(null, warehouseId, null, 1, 10);
+
+        // Assert
+        await _alertRepository.Received(1).GetPagedAsync(null, warehouseId, null, 1, 10, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task GetAlertsAsync_Should_FilterByStatus()
+    {
+        // Arrange
+        _alertRepository.GetPagedAsync(null, null, AlertStatus.Active, 1, 10, Arg.Any<CancellationToken>())
+            .Returns((new List<Alert>(), 0));
+
+        // Act
+        await _service.GetAlertsAsync(null, null, AlertStatus.Active, 1, 10);
+
+        // Assert
+        await _alertRepository.Received(1).GetPagedAsync(null, null, AlertStatus.Active, 1, 10, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task GetAlertsAsync_Should_MapFieldsCorrectly()
+    {
+        // Arrange
+        var warehouse = MakeWarehouse(Guid.NewGuid(), "WH-BR-01", "BR");
+        warehouse.Name = "Santos";
+        warehouse.Country.Name = "Brésil";
+        var createdAt = DateTime.UtcNow.AddHours(-3);
+        var measuredAt = DateTime.UtcNow.AddHours(-4);
+        var alert = MakeAlert(warehouse, AlertType.Humidity, AlertStatus.Active, createdAt);
+        alert.MeasuredAt = measuredAt;
+
+        _alertRepository.GetPagedAsync(null, null, null, 1, 10, Arg.Any<CancellationToken>())
+            .Returns(([alert], 1));
+
+        // Act
+        var result = await _service.GetAlertsAsync(null, null, null, 1, 10);
+        var dto = result.Alerts.Single();
+
+        // Assert
+        Assert.Equal(alert.Id, dto.Id);
+        Assert.Equal(warehouse.Id, dto.WarehouseId);
+        Assert.Equal("Santos", dto.WarehouseName);
+        Assert.Equal("BR", dto.CountryCode);
+        Assert.Equal("Brésil", dto.CountryName);
+        Assert.Equal("humidity", dto.Type);
+        Assert.Equal("active", dto.Status);
+        Assert.Equal(createdAt, dto.CreatedAt);
+        Assert.Null(dto.ResolvedAt);
+        Assert.Equal(measuredAt, dto.MeasuredAt);
+    }
+
+    [Fact]
+    public async Task GetAlertBatchesAsync_Should_ReturnNull_When_AlertNotFound()
+    {
+        // Arrange
+        _alertRepository.GetByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns((Alert?)null);
+
+        // Act
+        var result = await _service.GetAlertBatchesAsync(Guid.NewGuid());
+
+        // Assert
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task GetAlertBatchesAsync_Should_QueryBatchRepository_WithAlertWarehouseAndPeriod()
+    {
+        // Arrange
+        var warehouse = MakeWarehouse(Guid.NewGuid(), "WH-BR-01", "BR");
+        var alert = MakeAlert(warehouse, AlertType.Temperature, AlertStatus.Active, DateTime.UtcNow.AddDays(-2));
+
+        _alertRepository.GetByIdAsync(alert.Id, Arg.Any<CancellationToken>())
+            .Returns(alert);
+        _batchRepository.GetOverlappingWarehousePeriodAsync(
+                warehouse.Id, alert.CreatedAt, alert.ResolvedAt, Arg.Any<CancellationToken>())
+            .Returns(new List<Batch>());
+
+        // Act
+        await _service.GetAlertBatchesAsync(alert.Id);
+
+        // Assert
+        await _batchRepository.Received(1).GetOverlappingWarehousePeriodAsync(
+            warehouse.Id, alert.CreatedAt, alert.ResolvedAt, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task GetAlertBatchesAsync_Should_ReturnMappedBatches_When_AlertExists()
+    {
+        // Arrange
+        var warehouse = MakeWarehouse(Guid.NewGuid(), "WH-BR-01", "BR");
+        var alert = MakeAlert(warehouse, AlertType.Temperature, AlertStatus.Active, DateTime.UtcNow.AddDays(-2));
+        var farm = new Farm { Id = Guid.NewGuid(), Name = "Fazenda Boa Vista" };
+        var storedAt = DateTime.UtcNow.AddDays(-5);
+        var batch = new Batch
+        {
+            Id = Guid.NewGuid(),
+            WarehouseId = warehouse.Id,
+            Warehouse = warehouse,
+            FarmId = farm.Id,
+            Farm = farm,
+            Reference = "BATCH-BR-001",
+            StoredAt = storedAt,
+            ShippedAt = null,
+            QualityGrade = BatchQualityGrade.A,
+            Status = BatchStatus.Stored
+        };
+
+        _alertRepository.GetByIdAsync(alert.Id, Arg.Any<CancellationToken>())
+            .Returns(alert);
+        _batchRepository.GetOverlappingWarehousePeriodAsync(
+                warehouse.Id, alert.CreatedAt, alert.ResolvedAt, Arg.Any<CancellationToken>())
+            .Returns(new List<Batch> { batch });
+
+        // Act
+        var result = await _service.GetAlertBatchesAsync(alert.Id);
+
+        // Assert
+        Assert.NotNull(result);
+        var dto = Assert.Single(result!);
+        Assert.Equal(batch.Id, dto.Id);
+        Assert.Equal("BR", dto.CountryCode);
+        Assert.Equal("BATCH-BR-001", dto.BatchRef);
+        Assert.Equal("Fazenda Boa Vista", dto.FarmName);
+        Assert.Equal("A", dto.QualityGrade);
+        Assert.Equal(storedAt, dto.EnteredAt);
     }
 }

@@ -61,4 +61,29 @@ public class BatchRepository : IBatchRepository
             .AsNoTracking()
             .AnyAsync(b => b.Id == id, cancellationToken);
     }
+
+    /// <inheritdoc/>
+    public async Task<IEnumerable<Batch>> GetOverlappingWarehousePeriodAsync(
+        Guid warehouseId,
+        DateTime periodStart,
+        DateTime? periodEnd,
+        CancellationToken cancellationToken = default)
+    {
+        // An open-ended period (still ongoing, e.g. an active alert) overlaps
+        // anything that started on or before "now or later" -> use MaxValue rather
+        // than DateTime.UtcNow so a batch entering after this call still overlaps
+        // a period that is genuinely still open at read time.
+        var effectivePeriodEnd = periodEnd ?? DateTime.MaxValue;
+
+        return await _context.Batches
+            .AsNoTracking()
+            .Include(b => b.Warehouse)
+                .ThenInclude(w => w.Country)
+            .Include(b => b.Farm)
+            .Where(b => b.WarehouseId == warehouseId)
+            .Where(b => b.StoredAt <= effectivePeriodEnd)
+            .Where(b => b.ShippedAt == null || b.ShippedAt >= periodStart)
+            .OrderBy(b => b.StoredAt)
+            .ToListAsync(cancellationToken);
+    }
 }

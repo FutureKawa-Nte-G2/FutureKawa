@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AlertRow } from "./AlertRow";
-import type { Alert, AlertBatch } from "@/lib/api/types";
+import type { Alert, AlertBatch, AlertType } from "@/lib/api/types";
 
 const mockGetAlertBatches = vi.fn();
 const mockResolveAlert = vi.fn();
@@ -56,6 +56,16 @@ describe("AlertRow", () => {
     expect(screen.getByText("Cerrado (Brésil)")).toBeInTheDocument();
     expect(screen.getByText("1 juil. 2026")).toBeInTheDocument();
     expect(screen.getByText("Température")).toBeInTheDocument();
+  });
+
+  it.each([
+    ["temperature", "Température"],
+    ["humidity", "Humidité"],
+    ["condition", "Condition"],
+    ["expiration", "Expiration"],
+  ] satisfies [AlertType, string][])("displays %s alerts with the %s label", (type, label) => {
+    render(<AlertRow alert={makeAlert({ type })} />);
+    expect(screen.getByText(label)).toBeInTheDocument();
   });
 
   it("displays a dash for the resolution date while the alert is active", () => {

@@ -29,6 +29,14 @@ export function BatchRow({ batch }: BatchRowProps) {
   );
 }
 
+// Anchored at local midnight on the UTC calendar date (the yyyy-MM-dd
+// prefix), not converted from the full UTC instant — otherwise a late-UTC
+// time of day can roll over to the next day once rendered in a timezone
+// ahead of UTC. See the batch detail page's formatDate for the same fix.
 function formatEnteredAt(iso: string): string {
-  return new Date(iso).toLocaleDateString("fr-FR", { year: "numeric", month: "short", day: "numeric" });
+  return new Date(`${iso.slice(0, 10)}T00:00:00`).toLocaleDateString("fr-FR", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
 }

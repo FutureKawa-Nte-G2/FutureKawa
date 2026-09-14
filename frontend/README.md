@@ -70,10 +70,13 @@ a copy of the shapes here.
 |---|---|
 | `POST /api/auth/login`, `/refresh`, `/logout`, `/me` | `lib/api/auth.ts` |
 | `GET /api/batches` | `lib/api/batches.ts` — sorted oldest-first, filterable by country/warehouse, excludes shipped batches, server-side paginated (`page`/`pageSize` params, response includes `totalCount`/`totalPages`) |
+| `GET /api/batches/{id}` | `lib/api/batches.ts` — a single batch regardless of shipped status, used by the batch detail page |
 | `GET /api/countries` | `lib/api/batches.ts` |
 | `GET /api/warehouses` | `lib/api/batches.ts` — filterable by country |
-| `GET /api/alerts` | `lib/api/alerts.ts` — open alerts only (out-of-range measurement or batch past 365-day expiry) |
-| `PUT /api/alerts/:id/resolve` | `lib/api/alerts.ts` — marks an alert as resolved |
+| `GET /api/alerts` | `lib/api/alerts.ts` — most recent first, filterable by country/warehouse/status, server-side paginated (`page`/`pageSize` params) |
+| `PATCH /api/alerts/:id/resolve` | `lib/api/alerts.ts` — marks an alert as resolved |
+| `GET /api/alerts/:id/batches` | `lib/api/alerts.ts` — batches concerned by an alert |
+| `GET /api/measurements/{warehouseId}` | `lib/api/measurements.ts` — daily temperature/humidity aggregates for a warehouse; filtered client-side to a batch's storage period for the "Relevés" charts |
 
 ## Available scripts
 
@@ -105,16 +108,22 @@ npm run test
 | `components/auth/LoginForm.test.tsx` | Field validation, generic error messages on failure, password visibility toggle |
 | `components/layout/Navbar.test.tsx` | TODO — describe what this file covers |
 | `lib/api/batches.test.ts` | Query params sent to the backend (page/pageSize defaults, country/warehouse filters), response unwrapping, error propagation |
-| `lib/api/alerts.test.ts` | GET /api/alerts and PUT /api/alerts/:id/resolve request shape, response unwrapping |
+| `lib/api/alerts.test.ts` | `GET /api/alerts` (filters, pagination), `PATCH /api/alerts/:id/resolve` (request shape, pub/sub notification to `AlertButton`), `GET /api/alerts/:id/batches` — response unwrapping |
+| `lib/api/measurements.test.ts` | `GET /api/measurements/{warehouseId}`, `filterMeasurementsByStoragePeriod` date-range filtering |
 | `lib/api/client.test.ts` | 401 handling: refresh-and-retry on expired token, `skipAuthRetry` guard, `ApiError` on failure |
-| `components/batches/LocationFilter.test.tsx` | Country → warehouse cascading selection, reset behavior, "all countries/warehouses" options |
+| `components/alerts/AlertFilter.test.tsx` | Country → warehouse cascading selection plus Active/Résolue status filter |
+| `components/alerts/AlertRow.test.tsx` | Type/date/status display for all 4 alert types, "Liste des lots" expand/collapse, "Acquitter" resolve flow |
+| `components/alerts/AlertTable.test.tsx` | Empty state, row rendering, column headers |
+| `components/batches/LocationFilter.test.tsx` | Country → warehouse cascading selection, reset behavior, "all countries/warehouses" options, restoring a selection from `initialCountryCode`/`initialWarehouseId` props (e.g. carried in via the URL) once reference data loads |
 | `components/batches/BatchTable.test.tsx` | Empty state, row rendering, column headers |
 | `components/batches/BatchRow.test.tsx` | Displayed fields (ERP reference, not internal id), status badge, navigation to batch detail |
+| `components/batches/MeasurementsCharts.test.tsx` | Chart rendering from a batch's filtered measurement list |
+| `components/ui/AlertButton.test.tsx` | Unread alert count, dropdown contents, navigation to `/alertes` |
 | `components/ui/Badge.test.tsx` | French status labels, per-status color classes |
 | `components/ui/PageSizeSelector.test.tsx` | Available page size options, numeric (not string) value on change |
 | `components/ui/Pagination.test.tsx` | Ellipsis logic at start/middle/end of range, current page highlighting, arrow disabling on first/last page |
 
-**Missing coverage:** `components/ui/AlertButton.tsx` has no test file yet — to be added.
+**Missing coverage:** `components/alerts/AlertStatusBadge.tsx` has no test file yet — to be added.
 
 End-to-end coverage of the full authentication flow (login → session persistence →
 logout) requires a running backend and database, and is tracked separately from this
@@ -145,21 +154,33 @@ Always re-run the test suite and manually verify the app after any dependency bu
 ## Project structure
 frontend/
 ├── app/                               # Next.js App Router: routes and root layout
+│   ├── alertes
+│   │   └── page.tsx                   # Alerts page: filters + table + pagination, wired to getAlerts
+│   ├── batches
+│   │   └── [countryCode]/[id]/page.tsx  # Batch detail: metadata + measurement curves ("Relevés")
 │   ├── fifo
 │   │   └── page.tsx                   # Batches FIFO listing screen
 │   ├── layout.tsx                     # Root layout, font loading, AuthProvider
 │   ├── page.tsx                       # "/" — login page (also the sole public entry point)
 │   └── globals.css                    # Tailwind import, design tokens (colors, fonts, layout dimensions)
 ├── components/
+│   ├── alerts/
+│   │   ├── AlertFilter.tsx            # Country → warehouse cascade + Active/Résolue status filter
+│   │   ├── AlertTable.tsx             # Alert list table, empty state
+│   │   ├── AlertRow.tsx               # Single alert row: type/dates/status, "Liste des lots", "Acquitter"
+│   │   ├── AlertStatusBadge.tsx       # Active/Résolue status badge
+│   │   └── grid.ts                    # Shared grid-template-columns + row styling
 │   ├── auth/
 │   │   ├── LoginForm.tsx              # Login form: validation, submit, error handling
 │   │   ├── LoginForm.test.tsx
 │   │   └── LoginGate.tsx              # Silent-reconnect gate shown at "/"
 │   ├── batches/
-│   │   ├── LocationFilter.tsx         # Country → warehouse cascading select sidebar
+│   │   ├── LocationFilter.tsx         # Country → warehouse cascading select, restorable from the URL
 │   │   ├── BatchTable.tsx             # Batch list table, empty state
 │   │   ├── BatchRow.tsx               # Single batch row, links to quality tracking
 │   │   ├── QualityTrackingButton.tsx  # Status-colored action button per row
+│   │   ├── MeasurementChart.tsx       # Single temperature/humidity chart (Recharts)
+│   │   ├── MeasurementsCharts.tsx     # Wraps MeasurementChart for a batch's "Relevés"
 │   │   └── grid.ts                    # Shared grid-template-columns + row styling,
 │   │                                  # used by both BatchTable and BatchRow
 │   ├── layout/
@@ -168,9 +189,9 @@ frontend/
 │   │   ├── UserMenu.tsx               # Avatar, role label, logout dropdown
 │   │   └── UserMenu.test.tsx
 │   └── ui/
-│       ├── AlertButton.tsx
+│       ├── AlertButton.tsx            # Navbar bell — unread alerts dropdown, links to /alertes
 │       ├── Avatar.tsx                 # Generic placeholder avatar
-│       ├── Button.tsx                 # Shared button component (variants: primary/alert/expired)
+│       ├── Button.tsx                 # Shared button component (variants: primary/alert/expired/resolved)
 │       ├── Badge.tsx                  # Status badge (compliant/alert/expired)
 │       ├── Badge.test.tsx
 │       ├── PageSizeSelector.tsx       # Rows-per-page selector (10/15/20), reusable
@@ -185,11 +206,12 @@ frontend/
 │
 ├── lib/
 │   └── api/
-│       ├── alerts.ts                  # getUnreadAlerts / resolveAlert
+│       ├── alerts.ts                  # getAlerts / getAlertBatches / resolveAlert (+ getUnreadAlerts convenience wrapper)
 │       ├── auth.ts                    # login / refresh / logout / me functions
-│       ├── batches.ts                 # getBatches / getCountries / getWarehouses, getBatches is server-side paginated
+│       ├── batches.ts                 # getBatches / getBatchById / getCountries / getWarehouses, getBatches is server-side paginated
 │       ├── client.ts                  # Low-level fetch wrapper (ApiResponse unwrapping, 401 refresh-and-retry)
 │       ├── constants.ts               # API base URL
+│       ├── measurements.ts            # getWarehouseMeasurements / filterMeasurementsByStoragePeriod
 │       └── types.ts                   # Shared API request/response types
 │
 ├── public/

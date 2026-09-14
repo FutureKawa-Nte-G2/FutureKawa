@@ -66,6 +66,23 @@ public class DevelopmentSeeder
         ("BR-2026-0091", "WH-BR-SANTOS",  "Fazenda Serra Alta", BatchQualityGrade.B, new DateTime(2026, 7, 26, 9, 15, 0, DateTimeKind.Utc),  null, BatchStatus.Stored),
     };
 
+    // Six demo alerts across both Brazil warehouses and all four AlertType values
+    // (Temperature/Humidity/Condition/Expiration, #85), 4 active + 2 resolved, so
+    // the /alertes page has enough variety to demo filters, type labels, "lots
+    // concernés" and Acquitter without a real IoT pipeline. WarehouseReference +
+    // Type + CreatedAt act as the idempotency key (Alert has no natural business
+    // key) — stable enough that re-running --seed never duplicates these, and
+    // never touches one already resolved manually (e.g. from the UI).
+    private static readonly (string WarehouseReference, AlertType Type, AlertStatus Status, DateTime CreatedAt, DateTime? ResolvedAt, DateTime? MeasuredAt)[] AlertDefinitions =
+    {
+        ("WH-BR-CERRADO", AlertType.Temperature, AlertStatus.Active,   new DateTime(2026, 7, 13, 6, 0, 0, DateTimeKind.Utc),  null,                                                   new DateTime(2026, 7, 13, 6, 0, 0, DateTimeKind.Utc)),
+        ("WH-BR-SANTOS",  AlertType.Humidity,    AlertStatus.Active,   new DateTime(2026, 7, 18, 7, 30, 0, DateTimeKind.Utc), null,                                                   new DateTime(2026, 7, 18, 7, 30, 0, DateTimeKind.Utc)),
+        ("WH-BR-SANTOS",  AlertType.Condition,   AlertStatus.Active,   new DateTime(2026, 7, 21, 5, 45, 0, DateTimeKind.Utc), null,                                                   new DateTime(2026, 7, 21, 5, 45, 0, DateTimeKind.Utc)),
+        ("WH-BR-CERRADO", AlertType.Expiration,  AlertStatus.Active,   new DateTime(2026, 7, 24, 9, 0, 0, DateTimeKind.Utc),  null,                                                   null),
+        ("WH-BR-SANTOS",  AlertType.Temperature, AlertStatus.Resolved, new DateTime(2026, 7, 15, 8, 0, 0, DateTimeKind.Utc),  new DateTime(2026, 7, 16, 10, 0, 0, DateTimeKind.Utc), new DateTime(2026, 7, 15, 8, 0, 0, DateTimeKind.Utc)),
+        ("WH-BR-CERRADO", AlertType.Humidity,    AlertStatus.Resolved, new DateTime(2026, 7, 19, 6, 15, 0, DateTimeKind.Utc), new DateTime(2026, 7, 20, 8, 30, 0, DateTimeKind.Utc), new DateTime(2026, 7, 19, 6, 15, 0, DateTimeKind.Utc)),
+    };
+
     private const string DemoCountryCode = "BR";
     private const string DemoFarmReference = "FARM-BR-BOAVISTA";
     private const string DemoBatchReference = "BR-DEMO-0001";
@@ -231,28 +248,35 @@ public class DevelopmentSeeder
 
     private async Task SeedAlertsAsync(Dictionary<string, Warehouse> warehouses)
     {
-        var cerrado = warehouses["WH-BR-CERRADO"];
+        var addedCount = 0;
 
-        var exists = await _db.Alerts.AnyAsync(a => a.WarehouseId == cerrado.Id && a.Status == AlertStatus.Active);
-        if (exists)
+        foreach (var def in AlertDefinitions)
         {
-            _logger.LogInformation("Seed alert already exists for {Reference}", cerrado.Reference);
-            return;
+            var warehouse = warehouses[def.WarehouseReference];
+
+            var exists = await _db.Alerts.AnyAsync(a =>
+                a.WarehouseId == warehouse.Id && a.Type == def.Type && a.CreatedAt == def.CreatedAt);
+            if (exists) continue;
+
+            _db.Alerts.Add(new Alert
+            {
+                Id = Guid.NewGuid(),
+                WarehouseId = warehouse.Id,
+                Type = def.Type,
+                Status = def.Status,
+                CreatedAt = def.CreatedAt,
+                ResolvedAt = def.ResolvedAt,
+                MeasuredAt = def.MeasuredAt,
+            });
+            addedCount++;
+            _logger.LogInformation(
+                "Seed alert created: {Reference}, {Type}, {Status}", def.WarehouseReference, def.Type, def.Status);
         }
 
-        var createdAt = new DateTime(2026, 7, 13, 6, 0, 0, DateTimeKind.Utc);
-        _db.Alerts.Add(new Alert
+        if (addedCount > 0)
         {
-            Id = Guid.NewGuid(),
-            WarehouseId = cerrado.Id,
-            Type = AlertType.Temperature,
-            Status = AlertStatus.Active,
-            CreatedAt = createdAt,
-            MeasuredAt = createdAt,
-            ResolvedAt = null,
-        });
-        await _db.SaveChangesAsync();
-        _logger.LogInformation("Seed alert created: Cerrado, Temperature, Active");
+            await _db.SaveChangesAsync();
+        }
     }
 
     private async Task SeedMeasurementsAsync(Dictionary<string, Warehouse> warehouses)

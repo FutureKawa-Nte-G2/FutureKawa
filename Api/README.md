@@ -1,9 +1,11 @@
 # API pays — FutureKawa
 
-API locale d'un pays. Elle lit la base de ce pays (stock, capteurs, alertes) et
-le siège vient l'interroger en HTTP. Une instance = un pays.
+API locale d'un pays. Elle lit la base de ce pays (stock, capteurs, alertes), le
+siège vient l'interroger en HTTP, et elle pousse au siège chaque alerte qu'elle
+ouvre. Une instance = un pays.
 
-Le contrat imposé par le siège est dans [CLAUDE.md](./CLAUDE.md).
+Les contrats échangés avec le siège sont dans
+[Documentation/api-pays-contrats.md](../Documentation/api-pays-contrats.md).
 
 ## Démarrer
 
@@ -35,11 +37,11 @@ interactive est sur `/docs`.
 Deux routes, sur la table qu'écrit `app/services/quality.py` :
 
 ```
-GET   /api/alerts?warehouseRef=BR-ENT-01&status=active&limit=50
-PATCH /api/alerts/{alertId}/resolve?warehouseRef=BR-ENT-01
+GET   /api/alerts?warehouse_ref=WH-BR-SANTOS&status=active&limit=50
+PATCH /api/alerts/{alertId}/resolve?warehouse_ref=WH-BR-SANTOS
 ```
 
-`warehouseRef` est obligatoire et vient du siège, qui détient la session : cette
+`warehouse_ref` est obligatoire et vient du siège, qui détient la session : cette
 API n'a pas de login à elle. Une référence inconnue répond `404` et non une
 liste vide — « cet entrepôt n'a rien d'ouvert » et « cet entrepôt n'existe pas »
 ne se disent pas de la même façon.
@@ -58,9 +60,62 @@ le café qui a passé la nuit hors plage. Lever ce drapeau est un jugement port�
 sur le lot, pas un effet de bord de l'accusé de réception de la salle — et cet
 endpoint-là reste à écrire.
 
-Les alertes `expiration` sont lues et affichées, mais **personne ne les crée
-encore** : il faut une tâche périodique, là où les deux consumers actuels sont
-réactifs. À faire.
+Les alertes `expiration` sont lues et affichées, mais **aucune n'est créée** :
+ce n'est pas prévu. Seules les alertes `condition` sont produites, et poussées
+au siège.
+
+## Envoi des alertes au siège
+
+Chaque alerte `condition` commitée par `evaluate_reading` est poussée au siège
+sur `POST /api/alerts`, sans attendre que celui-ci vienne la chercher. Le
+contrat détaillé est dans
+[Documentation/api-pays-contrats.md](../Documentation/api-pays-contrats.md#contrat-imposé--post-apialerts-envoi-au-siège).
+
+```
+evaluate_reading (commit) → Evaluation.alert_push
+                          → runner : tâche asyncio → head_office.push_alert → siège
+```
+
+**Le consumer ne se bloque pas.** L'envoi part dans sa propre tâche : les
+messages MQTT sont traités un par un, et un siège en panne suspendrait sinon la
+surveillance de toutes les salles. `quality.py` ne fait aucun appel réseau ; il
+décrit l'alerte à envoyer, et `app/consumers/runner.py` lance l'envoi.
+
+**`type` : `temperature` ou `humidity`, jamais `condition`.** Le siège et le
+frontend veulent une grandeur, une alerte `condition` porte sur la salle. On
+envoie celle qui a franchi son seuil **en premier** :
+
+| Relevé déclencheur | Grandeur envoyée |
+|---|---|
+| une seule grandeur hors bande | celle-là |
+| les deux, et le relevé précédent du capteur en avait déjà une hors bande | celle-là |
+| les deux, relevé précédent dans la bande et vieux de 15 min au plus | la plus précoce, par interpolation linéaire de l'instant de franchissement |
+| les deux, sans relevé précédent utilisable, ou instants égaux | le plus gros écart relatif, `\|valeur − nominal\| / tolérance` |
+
+Le relevé précédent est lu dans `measurements`, seulement quand les deux
+grandeurs débordent. La règle elle-même, `select_breached_metric`, est une
+fonction pure.
+
+**`measuredAt` est l'horodatage du relevé, pas celui de l'alerte.**
+`alerts.measured_at` reprend `reading.measured_at` ; `created_at` reste le
+moment où le consumer a traité le message. Les deux divergent quand un capteur
+bufferise hors ligne ou qu'un consumer rattrape une coupure du broker.
+
+**Siège injoignable.** Tentatives en mémoire, dans `app/services/head_office.py` :
+
+| Réponse | Comportement |
+|---|---|
+| `2xx` | reçue |
+| erreur réseau, `5xx` | nouvelle tentative : 5 essais, délais de 2, 4, 8, 16 s |
+| `429` | nouvelle tentative, `Retry-After` respecté (60 s au plus) |
+| `400`, `401`, `404` | abandon immédiat : la prochaine réponse serait la même |
+
+Un envoi encore en cours quand le consumer s'arrête est perdu, mais jamais en
+silence : tout abandon finit sur un log d'erreur qui nomme l'`alert_id`. La clé
+n'apparaît dans aucun log.
+
+**La résolution ne part pas d'ici.** Elle est décidée au siège, qui la renvoie
+sur `PATCH /api/alerts/{id}/resolve` grâce au `sourceAlertId` reçu.
 
 ## Consumers MQTT
 
@@ -72,9 +127,14 @@ des requêtes HTTP, eux consomment un flux.
 ./venv/bin/python -m app.consumers.runner
 ```
 
-Ils ont besoin d'un broker joignable (`MQTT_BROKER_HOST`, `MQTT_BROKER_PORT`).
-Sans broker, ils journalisent une tentative de reconnexion toutes les 5
-secondes plutôt que de s'arrêter — Mosquitto n'est pas encore configuré (#31).
+Ils ont besoin d'un broker joignable (`MQTT_BROKER_HOST`, `MQTT_BROKER_PORT`) :
+`docker compose up -d mosquitto` en local, le service `country-consumers` du
+compose sinon. Sans broker, ils journalisent une tentative de reconnexion toutes
+les 5 secondes plutôt que de s'arrêter.
+
+Le consumer d'évaluation a aussi besoin de `HEAD_OFFICE_ALERTS_URL` pour pousser
+ses alertes. Sans elle, il continue de surveiller, mais chaque alerte ouverte
+produit un log d'erreur au lieu d'un envoi.
 
 Le contrat du message, côté firmware :
 
@@ -129,7 +189,12 @@ perte de données.
 | Variable | Rôle |
 |---|---|
 | `DATABASE_URL` | base du pays, en `postgresql+asyncpg://` |
-| `LOCAL_API_KEY` | secret partagé attendu en `X-API-Key` sur les routes que le siège consomme |
+| `LOCAL_API_KEY` | clé du pays en `X-API-Key`, dans les deux sens : attendue sur les routes qui écrivent, présentée au siège lors de l'envoi des alertes. Doit valoir `LocalApi:Countries:{code}:ApiKey` côté siège |
+| `HEAD_OFFICE_ALERTS_URL` | URL complète de `POST /api/alerts` du siège (consumers seulement), par exemple `http://localhost:55648/api/alerts` |
+| `MQTT_BROKER_HOST`, `MQTT_BROKER_PORT` | broker des consumers (défaut `localhost:1883`) |
 
-Les deux échouent à l'usage plutôt que de se replier sur une valeur par défaut :
-une variable oubliée est une erreur de déploiement, elle doit se voir.
+`DATABASE_URL` et `LOCAL_API_KEY` échouent à l'usage plutôt que de se replier sur
+une valeur par défaut : une variable oubliée est une erreur de déploiement, elle
+doit se voir. `HEAD_OFFICE_ALERTS_URL` absente ne fait pas tomber le consumer —
+couper la surveillance pour une configuration d'envoi serait pire — mais chaque
+alerte non envoyée est journalisée en erreur.

@@ -1,107 +1,189 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { getAlerts, getUnreadAlerts, resolveAlert, getAlertBatches, subscribeToAlertsChange } from "./alerts";
+import type { Alert, AlertBatch } from "./types";
 
-// getAlerts/resolveAlert/getAlertBatches are mock-backed for now (#76, no
-// GET /api/alerts server-side yet) but are generated against the real
-// getCountries/getWarehouses — mock those two instead of `fetch` directly.
-vi.mock("./batches", () => ({
-  getCountries: vi.fn().mockResolvedValue([{ code: "BR", name: "Brésil" }]),
-  getWarehouses: vi.fn().mockResolvedValue([{ id: "wh-1", name: "Cerrado", countryCode: "BR" }]),
-}));
+function jsonResponse(status: number, data: unknown) {
+  return new Response(
+    JSON.stringify({ success: status < 400, data, message: null, errors: null }),
+    { status }
+  );
+}
+
+function lastUrl(fetchMock: ReturnType<typeof vi.spyOn>) {
+  return new URL(fetchMock.mock.calls.at(-1)![0] as string);
+}
+
+function lastRequestInit(fetchMock: ReturnType<typeof vi.spyOn>) {
+  return fetchMock.mock.calls.at(-1)![1] as RequestInit;
+}
+
+const alert: Alert = {
+  id: "1",
+  warehouseId: "wh-1",
+  warehouseName: "Cerrado",
+  countryCode: "BR",
+  countryName: "Brazil",
+  type: "temperature",
+  status: "active",
+  createdAt: "2026-07-27T08:15:00Z",
+  resolvedAt: null,
+  measuredAt: "2026-07-27T08:00:00Z",
+};
 
 describe("getAlerts", () => {
-  it("returns alerts generated for the real warehouses only", async () => {
-    const { alerts } = await getAlerts({ pageSize: 100 });
+  afterEach(() => vi.restoreAllMocks());
 
-    expect(alerts.length).toBeGreaterThan(0);
-    expect(alerts.every((a) => a.warehouseId === "wh-1" && a.countryCode === "BR")).toBe(true);
+  it("requests page 1 / pageSize 10 by default, with no filters", async () => {
+    const fetchMock = vi
+      .spyOn(global, "fetch")
+      .mockResolvedValueOnce(
+        jsonResponse(200, { alerts: [], page: 1, pageSize: 10, totalCount: 0, totalPages: 1 })
+      );
+
+    await getAlerts();
+
+    const url = lastUrl(fetchMock);
+    expect(url.pathname).toBe("/api/alerts");
+    expect(url.searchParams.get("page")).toBe("1");
+    expect(url.searchParams.get("pageSize")).toBe("10");
+    expect(url.searchParams.has("country")).toBe(false);
+    expect(url.searchParams.has("warehouseId")).toBe(false);
+    expect(url.searchParams.has("status")).toBe(false);
   });
 
-  it("filters by status", async () => {
-    const { alerts } = await getAlerts({ status: "active", pageSize: 100 });
+  it("forwards country, warehouseId and status filters, and custom page/pageSize", async () => {
+    const fetchMock = vi
+      .spyOn(global, "fetch")
+      .mockResolvedValueOnce(
+        jsonResponse(200, { alerts: [], page: 2, pageSize: 5, totalCount: 0, totalPages: 1 })
+      );
 
-    expect(alerts.every((a) => a.status === "active")).toBe(true);
+    await getAlerts({
+      countryCode: "BR",
+      warehouseId: "wh-1",
+      status: "active",
+      page: 2,
+      pageSize: 5,
+    });
+
+    const url = lastUrl(fetchMock);
+    expect(url.searchParams.get("country")).toBe("BR");
+    expect(url.searchParams.get("warehouseId")).toBe("wh-1");
+    expect(url.searchParams.get("status")).toBe("active");
+    expect(url.searchParams.get("page")).toBe("2");
+    expect(url.searchParams.get("pageSize")).toBe("5");
   });
 
-  it("sorts alerts most-recent first", async () => {
-    const { alerts } = await getAlerts({ pageSize: 100 });
-    const timestamps = alerts.map((a) => new Date(a.createdAt).getTime());
+  it("returns the unwrapped alert list data", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValueOnce(
+      jsonResponse(200, { alerts: [alert], page: 1, pageSize: 10, totalCount: 1, totalPages: 1 })
+    );
 
-    expect(timestamps).toEqual([...timestamps].sort((a, b) => b - a));
+    const response = await getAlerts();
+
+    expect(response.alerts).toEqual([alert]);
+    expect(response.totalCount).toBe(1);
   });
 
-  it("paginates using page/pageSize/totalCount/totalPages", async () => {
-    const all = await getAlerts({ pageSize: 100 });
-    const firstPage = await getAlerts({ pageSize: 1, page: 1 });
+  it("propagates an ApiError when the backend responds with an error status", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValueOnce(jsonResponse(500, null));
 
-    expect(firstPage.alerts).toHaveLength(1);
-    expect(firstPage.totalCount).toBe(all.alerts.length);
-    expect(firstPage.totalPages).toBe(all.alerts.length);
+    await expect(getAlerts()).rejects.toThrow();
+  });
+});
+
+describe("getUnreadAlerts", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("requests active alerts only, with a page size of 50", async () => {
+    const fetchMock = vi
+      .spyOn(global, "fetch")
+      .mockResolvedValueOnce(
+        jsonResponse(200, { alerts: [alert], page: 1, pageSize: 50, totalCount: 1, totalPages: 1 })
+      );
+
+    const alerts = await getUnreadAlerts("test-token");
+
+    const url = lastUrl(fetchMock);
+    expect(url.searchParams.get("status")).toBe("active");
+    expect(url.searchParams.get("pageSize")).toBe("50");
+    expect(alerts).toEqual([alert]);
   });
 });
 
 describe("resolveAlert", () => {
-  it("marks the alert resolved and sets resolvedAt", async () => {
-    const { alerts } = await getAlerts({ status: "active", pageSize: 100 });
-    const target = alerts[0];
+  afterEach(() => vi.restoreAllMocks());
 
-    await resolveAlert(target.id);
+  it("sends a PATCH to /api/alerts/:id/resolve with the access token", async () => {
+    const fetchMock = vi.spyOn(global, "fetch").mockResolvedValueOnce(jsonResponse(200, "ok"));
 
-    const { alerts: refreshed } = await getAlerts({ pageSize: 100 });
-    const updated = refreshed.find((a) => a.id === target.id);
-    expect(updated?.status).toBe("resolved");
-    expect(updated?.resolvedAt).not.toBeNull();
+    await resolveAlert("1", "test-token");
+
+    const url = lastUrl(fetchMock);
+    const init = lastRequestInit(fetchMock);
+    expect(url.pathname).toBe("/api/alerts/1/resolve");
+    expect(init.method).toBe("PATCH");
+    expect((init.headers as Record<string, string>)["Authorization"]).toBe("Bearer test-token");
   });
 
-  it("notifies subscribers", async () => {
-    const { alerts } = await getAlerts({ pageSize: 100 });
+  it("notifies subscribers once the resolve succeeds", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValueOnce(jsonResponse(200, "ok"));
     const listener = vi.fn();
     const unsubscribe = subscribeToAlertsChange(listener);
 
-    await resolveAlert(alerts[0].id);
+    await resolveAlert("1", "test-token");
 
     expect(listener).toHaveBeenCalledTimes(1);
     unsubscribe();
   });
 
-  it("does not notify unsubscribed listeners", async () => {
-    const { alerts } = await getAlerts({ pageSize: 100 });
+  it("does not notify listeners that already unsubscribed", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValueOnce(jsonResponse(200, "ok"));
     const listener = vi.fn();
     const unsubscribe = subscribeToAlertsChange(listener);
     unsubscribe();
 
-    await resolveAlert(alerts[0].id);
+    await resolveAlert("1", "test-token");
 
     expect(listener).not.toHaveBeenCalled();
   });
-});
 
-describe("getUnreadAlerts", () => {
-  it("only returns active alerts", async () => {
-    const alerts = await getUnreadAlerts();
+  it("does not notify subscribers when the request fails", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValueOnce(jsonResponse(500, null));
+    const listener = vi.fn();
+    const unsubscribe = subscribeToAlertsChange(listener);
 
-    expect(alerts.every((a) => a.status === "active")).toBe(true);
+    await expect(resolveAlert("1", "test-token")).rejects.toThrow();
+
+    expect(listener).not.toHaveBeenCalled();
+    unsubscribe();
   });
 });
 
 describe("getAlertBatches", () => {
-  it("returns a non-empty mock batch list for a given alert id", async () => {
-    const { alerts } = await getAlerts({ pageSize: 100 });
-    const batches = await getAlertBatches(alerts[0].id);
+  afterEach(() => vi.restoreAllMocks());
 
-    expect(batches.length).toBeGreaterThan(0);
-    expect(batches[0]).toMatchObject({
-      batchRef: expect.any(String),
-      farmName: expect.any(String),
-      qualityGrade: expect.any(String),
-    });
+  it("requests /api/alerts/:id/batches and returns the unwrapped list", async () => {
+    const batch: AlertBatch = {
+      id: "1",
+      countryCode: "BR",
+      batchRef: "BR-2026-0001",
+      farmName: "Fazenda Cerrado",
+      qualityGrade: "A",
+      enteredAt: "2026-01-01T00:00:00Z",
+    };
+    const fetchMock = vi.spyOn(global, "fetch").mockResolvedValueOnce(jsonResponse(200, [batch]));
+
+    const result = await getAlertBatches("1", "test-token");
+
+    const url = lastUrl(fetchMock);
+    expect(url.pathname).toBe("/api/alerts/1/batches");
+    expect(result).toEqual([batch]);
   });
 
-  it("is deterministic for the same alert id", async () => {
-    const { alerts } = await getAlerts({ pageSize: 100 });
-    const first = await getAlertBatches(alerts[0].id);
-    const second = await getAlertBatches(alerts[0].id);
+  it("propagates an ApiError when the alert doesn't exist", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValueOnce(jsonResponse(404, null));
 
-    expect(second).toEqual(first);
+    await expect(getAlertBatches("unknown")).rejects.toThrow();
   });
 });

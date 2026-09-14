@@ -25,7 +25,7 @@ class MeasurementAggregate(BaseModel):
     Serialised in camelCase because the consumer is the .NET head office, which
     deserialises with `PropertyNameCaseInsensitive`. That option tolerates a
     different case, NOT a different name: `avg_temp` would not bind to
-    `AvgTemp` — it would land as `0` without raising. See `Api/CLAUDE.md`.
+    `AvgTemp` — it would land as `0` without raising. See `Documentation/api-pays-contrats.md`.
     """
 
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)

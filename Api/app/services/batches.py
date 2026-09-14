@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import Batch, Farm, Warehouse
 from app.schemas.batch import BatchCreate
 
-# A batch arriving from a reception file enters storage. `Api/CLAUDE.md` records
+# A batch arriving from a reception file enters storage. `Documentation/api-pays-contrats.md` records
 # the rule, and head office writes the same thing on its side
 # (`BatchStatus.Stored` in `OrderService`).
 NEW_BATCH_STATUS = "stored"

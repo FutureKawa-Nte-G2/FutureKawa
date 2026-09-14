@@ -48,7 +48,7 @@ class BatchCreate(BaseModel):
 
         Odoo's `quality_grade` is a Selection of `a`/`b`/`c` while our shared
         vocabulary is `A`/`B`/`C`. Converting case at the boundary is the rule
-        already recorded in `Api/CLAUDE.md` for `batch_status`; the same applies
+        already recorded in `Documentation/api-pays-contrats.md` for `batch_status`; the same applies
         here rather than teaching the database two spellings of one grade.
 
         An empty string is treated as no grade: it is what a file exports when

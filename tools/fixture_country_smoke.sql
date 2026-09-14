@@ -18,9 +18,10 @@ INSERT INTO countries (country_id, country_name, country_code,
 VALUES ('11111111-1111-1111-1111-111111111111', 'Brésil', 'BR', 20, 3, 55, 10)
 ON CONFLICT DO NOTHING;
 
+-- Must match head office's DevelopmentSeeder, or pushed alerts get a 404.
 INSERT INTO warehouses (warehouse_id, country_id, warehouse_name, warehouse_ref)
 VALUES ('22222222-2222-2222-2222-222222222222',
-        '11111111-1111-1111-1111-111111111111', 'Entrepôt Santos', 'WH-BR-001')
+        '11111111-1111-1111-1111-111111111111', 'Entrepôt Santos', 'WH-BR-SANTOS')
 ON CONFLICT DO NOTHING;
 
 INSERT INTO farms (farm_id, country_id, farm_name, farm_ref)
@@ -32,9 +33,9 @@ ON CONFLICT DO NOTHING;
 INSERT INTO batches (batch_id, warehouse_id, farm_id, batch_ref, stored_at, batch_status, is_compliant)
 VALUES
   ('44444444-0000-0000-0000-000000000001', '22222222-2222-2222-2222-222222222222',
-   '33333333-3333-3333-3333-333333333333', 'BR-2026-0001', CURRENT_DATE - 30, 'in_stock', true),
+   '33333333-3333-3333-3333-333333333333', 'BR-2026-0001', CURRENT_DATE - 30, 'stored', true),
   ('44444444-0000-0000-0000-000000000002', '22222222-2222-2222-2222-222222222222',
-   '33333333-3333-3333-3333-333333333333', 'BR-2026-0002', CURRENT_DATE - 20, 'in_stock', true)
+   '33333333-3333-3333-3333-333333333333', 'BR-2026-0002', CURRENT_DATE - 20, 'stored', true)
 ON CONFLICT DO NOTHING;
 
 -- Le `code` est le dernier segment du topic MQTT : c'est lui qui relie le

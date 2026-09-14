@@ -1,8 +1,7 @@
-"""GET /api/notifications et PATCH /api/notifications/{id}/read.
+"""GET /api/notifications and PATCH /api/notifications/{id}/read.
 
-Ce que ces tests verrouillent : une notification appartient à un entrepôt, et
-l'entrepôt fait partie de la recherche — pas d'une vérification faite après
-coup. C'est ce qui empêche la cloche d'un entrepôt d'afficher celles d'un autre.
+The warehouse is part of the lookup, not a check made afterwards: that is what
+keeps one warehouse's bell from showing another's notifications.
 """
 
 import uuid
@@ -101,7 +100,6 @@ async def test_should_list_a_warehouse_notifications_newest_first(session, clien
 
 
 async def test_should_never_show_another_warehouse_notifications(session, client):
-    """Le test qui compte : la cloche d'un entrepôt ne voit que les siennes."""
     await _add_other_warehouse(session)
     session.add_all(
         [
@@ -133,7 +131,6 @@ async def test_should_filter_on_unread_when_asked(session, client):
 
 
 async def test_should_count_every_unread_even_when_the_page_is_limited(session, client):
-    """Le badge annonce ce qui attend, pas ce que la page a renvoyé."""
     session.add_all([_batch_notification(uuid.uuid4(), _at(day)) for day in range(1, 6)])
     await session.commit()
 
@@ -175,7 +172,6 @@ async def test_should_compose_the_message_from_the_order_reference(session, clie
 
 
 async def test_should_answer_404_for_an_unknown_warehouse_not_an_empty_list(client):
-    """Une référence inconnue et un entrepôt calme ne se ressemblent pas."""
     response = await client.get(URL, params={"warehouse_ref": "NEXISTE-PAS"})
 
     assert response.status_code == 404
@@ -193,7 +189,7 @@ async def test_should_require_the_warehouse_reference(client):
     assert (await client.get(URL)).status_code == 422
 
 
-# --- accusé de lecture ------------------------------------------------------
+# --- read receipt ----------------------------------------------------------
 
 
 async def test_should_stamp_a_notification_as_read(session, client, auth_headers):
@@ -219,7 +215,7 @@ async def test_should_stamp_a_notification_as_read(session, client, auth_headers
 async def test_should_not_move_the_timestamp_of_an_already_read_notification(
     session, client, auth_headers
 ):
-    """La cloche déclenche ça à chaque clic ; la question est « vue quand ? »."""
+    """The bell calls this on every click; `readAt` must keep the first view."""
     notification_id = uuid.uuid4()
     first_seen = _at(10, 18)
     session.add(_batch_notification(notification_id, _at(10), read_at=first_seen))
@@ -238,7 +234,7 @@ async def test_should_not_move_the_timestamp_of_an_already_read_notification(
 async def test_should_answer_404_when_the_notification_belongs_to_another_warehouse(
     session, client, auth_headers
 ):
-    """404 et non 403 : la route ne confirme pas l'existence d'un id."""
+    """404, not 403: the route never confirms an id exists."""
     await _add_other_warehouse(session)
     notification_id = uuid.uuid4()
     session.add(_batch_notification(notification_id, _at(10), warehouse_id=OTHER_WAREHOUSE_ID))
@@ -253,7 +249,7 @@ async def test_should_answer_404_when_the_notification_belongs_to_another_wareho
     assert response.status_code == 404
     assert response.json()["detail"]["code"] == "notification_not_found"
 
-    # Et elle reste non lue pour son véritable destinataire.
+    # Still unread for its actual recipient.
     stored = await session.scalar(
         select(Notification).where(Notification.notification_id == notification_id)
     )
@@ -271,7 +267,6 @@ async def test_should_answer_404_for_an_unknown_notification(client, auth_header
 
 
 async def test_should_refuse_to_mark_read_without_the_api_key(session, client):
-    """Cette route écrit : elle ne se replie jamais sur un accès ouvert."""
     notification_id = uuid.uuid4()
     session.add(_batch_notification(notification_id, _at(10)))
     await session.commit()
@@ -284,7 +279,7 @@ async def test_should_refuse_to_mark_read_without_the_api_key(session, client):
 
 
 async def test_should_leave_the_listing_open_to_the_relay(session, client):
-    """La lecture reste ouverte, comme GET /api/measurements."""
+    """Reading stays open, like GET /api/measurements."""
     session.add(_batch_notification(uuid.uuid4(), _at(10)))
     await session.commit()
 

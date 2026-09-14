@@ -352,4 +352,166 @@ public class AlertsControllerIntegrationTests : IClassFixture<CustomWebApplicati
         Assert.Equal(AlertStatus.Resolved, resolved.Status);
         Assert.NotNull(resolved.ResolvedAt);
     }
+
+    [Fact]
+    public async Task GetAll_Should_Return401_When_NoJwt()
+    {
+        // Act
+        var response = await _client.GetAsync("/api/alerts");
+
+        // Assert
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(0, 10)]
+    [InlineData(1, 0)]
+    [InlineData(1, 101)]
+    public async Task GetAll_Should_Return400_WithInvalidPagination(int page, int pageSize)
+    {
+        // Arrange
+        var token = await GetAccessTokenAsync();
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        // Act
+        var response = await _client.GetAsync($"/api/alerts?page={page}&pageSize={pageSize}");
+
+        // Assert
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetAll_Should_Return400_WithInvalidStatus()
+    {
+        // Arrange
+        var token = await GetAccessTokenAsync();
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        // Act
+        var response = await _client.GetAsync("/api/alerts?status=not_a_status");
+
+        // Assert
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetAll_Should_Return200_WithValidAuth()
+    {
+        // Arrange
+        var token = await GetAccessTokenAsync();
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        // Act
+        var response = await _client.GetAsync("/api/alerts?page=1&pageSize=10");
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<ApiResponse<AlertListResponseDto>>();
+        Assert.NotNull(body);
+        Assert.True(body.Success);
+        Assert.NotNull(body.Data);
+    }
+
+    [Fact]
+    public async Task GetAll_Should_Return200_And_FilterByWarehouseAndStatus()
+    {
+        // Arrange: fresh warehouse (isolated from other tests' data) with one active
+        // and one resolved alert, so the status filter is exercised against known data.
+        await SeedTestDataAsync();
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var country = db.Countries.First(c => c.Code == "BR");
+        var warehouse = new Warehouse
+        {
+            Id = Guid.NewGuid(),
+            CountryId = country.Id,
+            Name = $"WH-LIST-{Guid.NewGuid().ToString()[..8]}",
+            Reference = $"WH-LIST-{Guid.NewGuid().ToString()[..8]}"
+        };
+        db.Warehouses.Add(warehouse);
+        var activeAlert = new Alert
+        {
+            Id = Guid.NewGuid(),
+            WarehouseId = warehouse.Id,
+            Type = AlertType.Temperature,
+            Status = AlertStatus.Active,
+            CreatedAt = DateTime.UtcNow
+        };
+        var resolvedAlert = new Alert
+        {
+            Id = Guid.NewGuid(),
+            WarehouseId = warehouse.Id,
+            Type = AlertType.Humidity,
+            Status = AlertStatus.Resolved,
+            CreatedAt = DateTime.UtcNow.AddDays(-1),
+            ResolvedAt = DateTime.UtcNow
+        };
+        db.Alerts.AddRange(activeAlert, resolvedAlert);
+        await db.SaveChangesAsync();
+
+        var token = await GetAccessTokenAsync();
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        // Act
+        var response = await _client.GetAsync($"/api/alerts?warehouseId={warehouse.Id}&status=active");
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<ApiResponse<AlertListResponseDto>>();
+        Assert.NotNull(body);
+        Assert.True(body.Success);
+        var returned = Assert.Single(body.Data!.Alerts, a => a.Id == activeAlert.Id);
+        Assert.Equal("active", returned.Status);
+        Assert.DoesNotContain(body.Data.Alerts, a => a.Id == resolvedAlert.Id);
+    }
+
+    [Fact]
+    public async Task GetAll_Should_ReturnMostRecentFirst()
+    {
+        // Arrange: fresh warehouse with two alerts created at different times, so the
+        // sort order is exercised against known data.
+        await SeedTestDataAsync();
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var country = db.Countries.First(c => c.Code == "BR");
+        var warehouse = new Warehouse
+        {
+            Id = Guid.NewGuid(),
+            CountryId = country.Id,
+            Name = $"WH-SORT-{Guid.NewGuid().ToString()[..8]}",
+            Reference = $"WH-SORT-{Guid.NewGuid().ToString()[..8]}"
+        };
+        db.Warehouses.Add(warehouse);
+        var older = new Alert
+        {
+            Id = Guid.NewGuid(),
+            WarehouseId = warehouse.Id,
+            Type = AlertType.Temperature,
+            Status = AlertStatus.Active,
+            CreatedAt = DateTime.UtcNow.AddDays(-3)
+        };
+        var newer = new Alert
+        {
+            Id = Guid.NewGuid(),
+            WarehouseId = warehouse.Id,
+            Type = AlertType.Humidity,
+            Status = AlertStatus.Active,
+            CreatedAt = DateTime.UtcNow
+        };
+        db.Alerts.AddRange(older, newer);
+        await db.SaveChangesAsync();
+
+        var token = await GetAccessTokenAsync();
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        // Act
+        var response = await _client.GetAsync($"/api/alerts?warehouseId={warehouse.Id}");
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<ApiResponse<AlertListResponseDto>>();
+        Assert.NotNull(body);
+        var ids = body!.Data!.Alerts.Select(a => a.Id).ToList();
+        Assert.Equal(new[] { newer.Id, older.Id }, ids);
+    }
 }

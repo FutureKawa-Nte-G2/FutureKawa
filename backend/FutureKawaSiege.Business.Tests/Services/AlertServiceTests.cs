@@ -29,6 +29,16 @@ public class AlertServiceTests
         Country = new Country { Id = Guid.NewGuid(), Code = countryCode, Name = countryCode }
     };
 
+    private static Alert MakeAlert(Warehouse warehouse, AlertType type, AlertStatus status, DateTime createdAt) => new()
+    {
+        Id = Guid.NewGuid(),
+        WarehouseId = warehouse.Id,
+        Warehouse = warehouse,
+        Type = type,
+        Status = status,
+        CreatedAt = createdAt
+    };
+
     [Fact]
     public async Task ReceiveAlertAsync_Should_CreateAlert_When_ValidRequest()
     {
@@ -411,5 +421,108 @@ public class AlertServiceTests
         await _alertRepository.DidNotReceive().UpdateAsync(Arg.Any<Alert>(), Arg.Any<CancellationToken>());
         await _localAlertPushClient.DidNotReceive().PushResolutionAsync(
             Arg.Any<string>(), Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task GetAlertsAsync_Should_ReturnPaginatedResults()
+    {
+        // Arrange
+        var warehouse = MakeWarehouse(Guid.NewGuid(), "WH-BR-01", "BR");
+        var alerts = new List<Alert>
+        {
+            MakeAlert(warehouse, AlertType.Temperature, AlertStatus.Active, DateTime.UtcNow.AddHours(-1)),
+            MakeAlert(warehouse, AlertType.Humidity, AlertStatus.Resolved, DateTime.UtcNow.AddDays(-2))
+        };
+
+        _alertRepository.GetPagedAsync(null, null, null, 1, 10, Arg.Any<CancellationToken>())
+            .Returns((alerts, 2));
+
+        // Act
+        var result = await _service.GetAlertsAsync(null, null, null, 1, 10);
+
+        // Assert
+        Assert.Equal(2, result.TotalCount);
+        Assert.Equal(1, result.Page);
+        Assert.Equal(10, result.PageSize);
+        Assert.Equal(1, result.TotalPages);
+        Assert.Equal(2, result.Alerts.Count());
+    }
+
+    [Fact]
+    public async Task GetAlertsAsync_Should_FilterByCountryCode()
+    {
+        // Arrange
+        var countryCode = "BR";
+
+        _alertRepository.GetPagedAsync(countryCode, null, null, 1, 10, Arg.Any<CancellationToken>())
+            .Returns((new List<Alert>(), 0));
+
+        // Act
+        await _service.GetAlertsAsync(countryCode, null, null, 1, 10);
+
+        // Assert
+        await _alertRepository.Received(1).GetPagedAsync(countryCode, null, null, 1, 10, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task GetAlertsAsync_Should_FilterByWarehouseId()
+    {
+        // Arrange
+        var warehouseId = Guid.NewGuid();
+
+        _alertRepository.GetPagedAsync(null, warehouseId, null, 1, 10, Arg.Any<CancellationToken>())
+            .Returns((new List<Alert>(), 0));
+
+        // Act
+        await _service.GetAlertsAsync(null, warehouseId, null, 1, 10);
+
+        // Assert
+        await _alertRepository.Received(1).GetPagedAsync(null, warehouseId, null, 1, 10, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task GetAlertsAsync_Should_FilterByStatus()
+    {
+        // Arrange
+        _alertRepository.GetPagedAsync(null, null, AlertStatus.Active, 1, 10, Arg.Any<CancellationToken>())
+            .Returns((new List<Alert>(), 0));
+
+        // Act
+        await _service.GetAlertsAsync(null, null, AlertStatus.Active, 1, 10);
+
+        // Assert
+        await _alertRepository.Received(1).GetPagedAsync(null, null, AlertStatus.Active, 1, 10, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task GetAlertsAsync_Should_MapFieldsCorrectly()
+    {
+        // Arrange
+        var warehouse = MakeWarehouse(Guid.NewGuid(), "WH-BR-01", "BR");
+        warehouse.Name = "Santos";
+        warehouse.Country.Name = "Brésil";
+        var createdAt = DateTime.UtcNow.AddHours(-3);
+        var measuredAt = DateTime.UtcNow.AddHours(-4);
+        var alert = MakeAlert(warehouse, AlertType.Humidity, AlertStatus.Active, createdAt);
+        alert.MeasuredAt = measuredAt;
+
+        _alertRepository.GetPagedAsync(null, null, null, 1, 10, Arg.Any<CancellationToken>())
+            .Returns(([alert], 1));
+
+        // Act
+        var result = await _service.GetAlertsAsync(null, null, null, 1, 10);
+        var dto = result.Alerts.Single();
+
+        // Assert
+        Assert.Equal(alert.Id, dto.Id);
+        Assert.Equal(warehouse.Id, dto.WarehouseId);
+        Assert.Equal("Santos", dto.WarehouseName);
+        Assert.Equal("BR", dto.CountryCode);
+        Assert.Equal("Brésil", dto.CountryName);
+        Assert.Equal("humidity", dto.Type);
+        Assert.Equal("active", dto.Status);
+        Assert.Equal(createdAt, dto.CreatedAt);
+        Assert.Null(dto.ResolvedAt);
+        Assert.Equal(measuredAt, dto.MeasuredAt);
     }
 }

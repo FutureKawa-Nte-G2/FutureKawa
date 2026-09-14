@@ -1,5 +1,6 @@
 using FutureKawaSiege.Business.Services.Abstraction;
 using FutureKawaSiege.Commons.Models.API.Requests;
+using FutureKawaSiege.Commons.Models.API.Responses;
 using FutureKawaSiege.Data.Entities;
 using FutureKawaSiege.Data.Repositories;
 using Microsoft.Extensions.Logging;
@@ -118,5 +119,52 @@ public class AlertService : IAlertService
         }
 
         return AlertResolutionResult.Success;
+    }
+
+    /// <inheritdoc/>
+    public async Task<AlertListResponseDto> GetAlertsAsync(
+        string? countryCode,
+        Guid? warehouseId,
+        AlertStatus? status,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default)
+    {
+        var (items, totalCount) = await _alertRepository.GetPagedAsync(
+            countryCode, warehouseId, status, page, pageSize, cancellationToken);
+
+        var alerts = items.Select(MapToDto);
+        var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
+
+        return new AlertListResponseDto
+        {
+            Alerts = alerts,
+            Page = page,
+            PageSize = pageSize,
+            TotalCount = totalCount,
+            TotalPages = totalPages
+        };
+    }
+
+    /// <summary>
+    /// Maps an alert to its DTO, exposing Type/Status as lowercase strings on the
+    /// wire (this project's convention for backend enums, see BatchStatus/Batch.ComputeStatus)
+    /// even though the entity enum members are PascalCase.
+    /// </summary>
+    private static AlertListItemDto MapToDto(Alert alert)
+    {
+        return new AlertListItemDto
+        {
+            Id = alert.Id,
+            WarehouseId = alert.WarehouseId,
+            WarehouseName = alert.Warehouse.Name,
+            CountryCode = alert.Warehouse.Country.Code,
+            CountryName = alert.Warehouse.Country.Name,
+            Type = alert.Type.ToString().ToLowerInvariant(),
+            Status = alert.Status.ToString().ToLowerInvariant(),
+            CreatedAt = alert.CreatedAt,
+            ResolvedAt = alert.ResolvedAt,
+            MeasuredAt = alert.MeasuredAt
+        };
     }
 }

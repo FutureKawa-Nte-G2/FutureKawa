@@ -1,4 +1,6 @@
 using FutureKawaSiege.Commons.Models.API.Requests;
+using FutureKawaSiege.Commons.Models.API.Responses;
+using FutureKawaSiege.Data.Entities;
 
 namespace FutureKawaSiege.Business.Services.Abstraction;
 
@@ -48,4 +50,16 @@ public interface IAlertService
     /// resolving an already-resolved alert succeeds without changing it.
     /// </summary>
     Task<AlertResolutionResult> ResolveAlertAsync(Guid alertId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Returns a paginated list of alerts, optionally filtered by country code,
+    /// warehouse ID and status, most recent first.
+    /// </summary>
+    Task<AlertListResponseDto> GetAlertsAsync(
+        string? countryCode,
+        Guid? warehouseId,
+        AlertStatus? status,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default);
 }

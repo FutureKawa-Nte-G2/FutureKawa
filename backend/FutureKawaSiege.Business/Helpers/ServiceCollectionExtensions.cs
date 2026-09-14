@@ -34,6 +34,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IBatchService, BatchService>();
         services.AddScoped<IAlertService, AlertService>();
         services.AddHttpClient<ILocalAlertPushClient, LocalAlertPushClient>();
+        services.AddScoped<IAlertEmailService, AlertEmailService>();
 
         // Country and warehouse services
         services.AddScoped<ICountryService, CountryService>();

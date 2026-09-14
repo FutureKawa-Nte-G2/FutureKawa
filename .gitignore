@@ -43,8 +43,8 @@ start.sh
 #
 # Ceux de backend/ et frontend/, déjà versionnés, le restent : une règle
 # .gitignore ne s'applique pas à un fichier suivi, et les retirer de l'index les
-# supprimerait du disque des coéquipiers au pull suivant. Celui d'Api/ a été
-# retiré (#80), après que son contenu d'équipe a rejoint
-# Documentation/api-pays-contrats.md. Cette règle vaut pour tous les suivants.
+# supprimerait du disque des coéquipiers au pull suivant. Cette règle vaut donc
+# pour les prochains.
+# Api/ was untracked in #80, once its team content moved to Documentation/.
 AGENTS.md
 CLAUDE.md

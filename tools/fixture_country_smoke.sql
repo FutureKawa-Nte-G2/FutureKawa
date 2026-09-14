@@ -18,9 +18,7 @@ INSERT INTO countries (country_id, country_name, country_code,
 VALUES ('11111111-1111-1111-1111-111111111111', 'Brésil', 'BR', 20, 3, 55, 10)
 ON CONFLICT DO NOTHING;
 
--- `warehouse_ref` est la clé de rapprochement avec le siège : elle doit être
--- celle du DevelopmentSeeder (WH-BR-SANTOS), sinon POST /api/alerts répond 404
--- et l'alerte n'est jamais reçue.
+-- Must match head office's DevelopmentSeeder, or pushed alerts get a 404.
 INSERT INTO warehouses (warehouse_id, country_id, warehouse_name, warehouse_ref)
 VALUES ('22222222-2222-2222-2222-222222222222',
         '11111111-1111-1111-1111-111111111111', 'Entrepôt Santos', 'WH-BR-SANTOS')

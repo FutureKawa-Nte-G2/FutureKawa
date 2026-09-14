@@ -1,26 +1,7 @@
-"""Pushing condition alerts to head office.
+"""Pushes condition alerts to head office (`POST /api/alerts`).
 
-`quality.py` opens an alert in the country database; head office used to learn
-about it only if it came asking. It now receives each alert as soon as it is
-committed, on `POST /api/alerts`
-(`backend/FutureKawaSiege.API/Controllers/AlertsController.cs`).
-
-The contract is head office's, not ours — `CreateAlertRequest`:
-
-  * `warehouseReference`: our `warehouses.warehouse_ref`, never an internal id;
-  * `type`: `temperature` or `humidity`, the vocabulary head office and the
-    frontend display, not our room-level `condition`;
-  * `measuredAt`: when the triggering reading was taken, not when the alert was
-    written;
-  * `sourceAlertId`: our `alert_id`, which head office keeps to push the
-    resolution back to `PATCH /api/alerts/{id}/resolve`.
-
-Authentication is the country key head office holds under
-`LocalApi:Countries:{code}:ApiKey` — the same secret it sends us on the way
-back, so this API reads it from `LOCAL_API_KEY` rather than a second variable.
-
-Retries live in memory. A push still pending when the process stops is lost,
-but never silently: every abandoned push ends on an error log naming the alert.
+The payload follows head office's `CreateAlertRequest`: see
+`Documentation/api-pays-contrats.md`.
 """
 
 import asyncio
@@ -40,15 +21,15 @@ logger = logging.getLogger(__name__)
 
 HEAD_OFFICE_ALERTS_URL_ENV_VAR = "HEAD_OFFICE_ALERTS_URL"
 
+# About 30 s in all: enough to ride out a head office restart without pinning
+# a task for long.
 MAX_ATTEMPTS = 5
-# Doubled after each failure: 2, 4, 8 then 16 seconds, about half a minute in
-# all — enough to ride out a head office restart without pinning a task for long.
 BASE_DELAY_SECONDS = 2.0
 REQUEST_TIMEOUT_SECONDS = 5.0
-# A `Retry-After` is honoured up to this: an hour-long answer would otherwise
-# park the task for an hour.
+# So a long Retry-After does not park the task for an hour.
 MAX_RETRY_AFTER_SECONDS = 60.0
 
+# Head office and frontend vocabulary, unlike our room-level `condition`.
 Metric = Literal["temperature", "humidity"]
 
 Sleep = Callable[[float], Awaitable[object]]
@@ -56,17 +37,14 @@ Sleep = Callable[[float], Awaitable[object]]
 
 @dataclass(frozen=True)
 class AlertPush:
-    """One alert, as head office is to receive it."""
-
     source_alert_id: uuid.UUID
     warehouse_ref: str
     metric: Metric
     measured_at: datetime
 
     def to_payload(self) -> dict[str, str]:
-        # Stored as naive UTC (see `_as_naive_utc`): stated explicitly on the
-        # wire, so head office never reads it as its own local time.
         measured_at = self.measured_at
+        # Stored as naive UTC: make it explicit so head office never reads local time.
         if measured_at.tzinfo is None:
             measured_at = measured_at.replace(tzinfo=UTC)
         return {
@@ -78,24 +56,18 @@ class AlertPush:
 
 
 def _is_retryable(status_code: int) -> bool:
-    """Worth another try: head office overloaded or down, not refusing us.
-
-    A `400`, `401` or `404` will answer the same thing next time — a malformed
-    payload, a key it does not know, a warehouse it does not have. Retrying
-    those only spends its rate limit.
-    """
+    # A 400, 401 or 404 would get the same answer again and only spend the rate limit.
     return status_code == httpx.codes.TOO_MANY_REQUESTS or status_code >= 500
 
 
 def _retry_after_seconds(response: httpx.Response) -> float | None:
-    """The delay a `429` asks for, when given in seconds."""
     value = response.headers.get("Retry-After")
     if value is None:
         return None
     try:
         seconds = float(value)
     except ValueError:
-        # The HTTP-date form: rare enough to fall back on our own backoff.
+        # HTTP-date form: rare enough to fall back on our own backoff.
         return None
     return min(max(seconds, 0.0), MAX_RETRY_AFTER_SECONDS)
 
@@ -103,13 +75,10 @@ def _retry_after_seconds(response: httpx.Response) -> float | None:
 async def push_alert(
     client: httpx.AsyncClient, push: AlertPush, *, sleep: Sleep = asyncio.sleep
 ) -> bool:
-    """Send one alert to head office, retrying while it is worth it.
+    """Never raises on a head office failure: it runs beside a consumer that must keep going.
 
-    Returns whether head office accepted it. Never raises on a head office
-    failure: the caller runs this beside a consumer that must keep going.
-
-    The API key goes in a header and is never logged — neither here nor by
-    httpx, whose request log carries the method, URL and status only.
+    Retries are in memory, so a push pending at shutdown is lost; every
+    abandoned push is logged with its alert id so the loss is never silent.
     """
     url = os.environ.get(HEAD_OFFICE_ALERTS_URL_ENV_VAR)
     api_key = os.environ.get(API_KEY_ENV_VAR)

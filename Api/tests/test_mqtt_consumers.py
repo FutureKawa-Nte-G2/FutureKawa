@@ -170,7 +170,6 @@ async def test_should_flip_the_batch_and_raise_alert_and_notification_together(s
 
 
 async def test_should_date_the_alert_with_the_reading_not_with_the_evaluation(session):
-    """Un relevé bufferisé hors ligne arrive tard : c'est la mesure qui date la dérive."""
     await _assign(session)
     processed_at = _at(12, hour=18)
 
@@ -192,7 +191,6 @@ async def test_should_describe_the_alert_to_push_to_head_office(session):
         source_alert_id=alert.alert_id,
         warehouse_ref=WAREHOUSE_REF,
         metric="temperature",
-        # Le relevé, pas le traitement : c'est ce que le siège doit recevoir.
         measured_at=_at(10),
     )
 
@@ -214,15 +212,13 @@ async def test_should_name_the_metric_when_only_one_is_out(session):
 
 
 async def test_should_read_the_previous_reading_when_both_metrics_are_out(session):
-    """Les deux débordent : le relevé écrit juste avant départage par interpolation."""
     await _assign(session)
     trigger_at = _at(10)
     await persist_reading(
         session, _timed_reading(trigger_at - timedelta(minutes=5), "24.80", "52.00")
     )
 
-    # Seul, ce relevé désignerait l'humidité (2 tolérances contre 1,2) ; le
-    # précédent montre que la température a franchi sa borne bien avant.
+    # Alone, this reading would point to humidity (larger deviation).
     result = await evaluate_reading(session, _timed_reading(trigger_at, "26.00", "65.00"))
 
     assert result.alert_push.metric == "temperature"
@@ -287,12 +283,10 @@ async def test_should_stay_independent_of_whether_the_reading_was_stored(session
     assert await session.scalar(select(func.count()).select_from(Measurement)) == 0
 
 
-# --- envoi au siège ---------------------------------------------------------
+# --- push to head office ---------------------------------------------------
 
 
 class _RecordingPush:
-    """Remplace `push_alert` : enregistre ce qui aurait été envoyé."""
-
     def __init__(self) -> None:
         self.pushed: list[AlertPush] = []
 
@@ -310,7 +304,6 @@ async def test_should_push_a_new_alert_without_blocking_the_consumer(session, mo
 
     evaluation = await handler(session, _reading("31.00", "55.00"))
 
-    # Le handler a rendu la main avant l'envoi, qui tourne dans sa tâche.
     assert len(pending) == 1
     await asyncio.gather(*pending)
     assert recorder.pushed == [evaluation.alert_push]
@@ -330,7 +323,6 @@ async def test_should_push_nothing_when_no_alert_was_opened(session, monkeypatch
 
 
 async def test_should_log_an_unexpected_push_failure(session, monkeypatch, caplog):
-    """Une exception imprévue dans la tâche ne doit pas disparaître en silence."""
     await _assign(session)
 
     async def broken_push(client, push):
@@ -344,4 +336,4 @@ async def test_should_log_an_unexpected_push_failure(session, monkeypatch, caplo
     await asyncio.gather(*pending, return_exceptions=True)
     await asyncio.sleep(0)
 
-    assert "échec inattendu de l'envoi au siège" in caplog.text
+    assert "Unexpected failure while pushing an alert to head office" in caplog.text

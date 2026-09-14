@@ -138,11 +138,8 @@ services:
       # que la cible odoo-webhook-native du Makefile. À remplacer par le nom du
       # service le jour où l'API pays est conteneurisée (#59).
       MeasurementSync__LocalApiUrl: ${WAREHOUSE_API_URL:-http://host.docker.internal:8000/api/measurements}
-      # Clé du Brésil pour POST /api/alerts. Sans elle le middleware, fail-closed,
-      # rejette tout envoi d'alerte de l'API pays. C'est la même valeur que
-      # LOCAL_API_KEY côté pays : une clé par pays, valable dans les deux sens.
+      # Without a country key, the fail-closed middleware rejects every pushed alert.
       LocalApi__Countries__BR__ApiKey: ${LOCAL_API_KEY:-change-me}
-      # Où renvoyer la résolution d'une alerte (PATCH /api/alerts/{id}/resolve).
       LocalApi__Countries__BR__BaseUrl: http://country-api:8000
     ports:
       - "127.0.0.1:${SIEGE_API_PORT:-55648}:8080"
@@ -219,8 +216,7 @@ services:
       <<: *country-env
       MQTT_BROKER_HOST: mosquitto
       MQTT_BROKER_PORT: "1883"
-      # Le consumer d'évaluation y pousse chaque alerte. Réseau Docker : le
-      # port interne du siège (8080), pas celui publié sur l'hôte.
+      # Internal port: traffic stays on the Docker network.
       HEAD_OFFICE_ALERTS_URL: http://siege-api:8080/api/alerts
     depends_on:
       country-migrate:

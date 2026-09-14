@@ -1,9 +1,4 @@
-"""Envoi des alertes au siège (#80).
-
-Aucun siège n'est monté : `httpx.MockTransport` joue ses réponses, et un faux
-`sleep` enregistre les délais au lieu de les attendre. Le contrat vérifié est
-celui de `CreateAlertRequest` côté siège.
-"""
+"""Pushing alerts to head office (#80)."""
 
 import json
 import logging
@@ -55,8 +50,6 @@ class FakeSleep:
 
 
 class HeadOffice:
-    """Rejoue une réponse par requête reçue, et garde les requêtes."""
-
     def __init__(self, *responses: httpx.Response | Exception) -> None:
         self._responses = list(responses)
         self.requests: list[httpx.Request] = []
@@ -78,7 +71,7 @@ async def _push_with(
         return await push_alert(client, push, sleep=sleep)
 
 
-# --- le contrat ------------------------------------------------------------
+# --- contract --------------------------------------------------------------
 
 
 async def test_should_send_the_head_office_contract(push):
@@ -111,7 +104,7 @@ async def test_should_convert_an_aware_timestamp_to_utc():
     assert push.to_payload()["measuredAt"] == "2026-08-10T12:00:00Z"
 
 
-# --- nouvelles tentatives --------------------------------------------------
+# --- retries ---------------------------------------------------------------
 
 
 async def test_should_retry_a_server_error(push):
@@ -167,17 +160,15 @@ async def test_should_give_up_after_the_last_attempt_and_say_so(push, caplog):
     assert delivered is False
     assert len(head_office.requests) == MAX_ATTEMPTS
     assert sleep.delays == [2.0, 4.0, 8.0, 16.0]
-    # Pas de perte silencieuse : l'abandon nomme l'alerte.
     assert str(ALERT_ID) in caplog.text
     assert "not delivered" in caplog.text
 
 
-# --- refus définitifs ------------------------------------------------------
+# --- refusals --------------------------------------------------------------
 
 
 @pytest.mark.parametrize("status_code", [400, 401, 404])
 async def test_should_not_retry_a_refusal(push, caplog, status_code):
-    """Clé inconnue, entrepôt absent, payload faux : la prochaine fois aussi."""
     head_office = HeadOffice(httpx.Response(status_code))
     sleep = FakeSleep()
 
@@ -213,5 +204,5 @@ async def test_should_never_log_the_api_key(push, caplog):
     with caplog.at_level(logging.DEBUG):
         await _push_with(head_office, push, FakeSleep())
 
-    assert caplog.records, "le scénario doit produire des logs pour que le test ait un sens"
+    assert caplog.records, "the scenario must log something for this check to mean anything"
     assert API_KEY not in caplog.text

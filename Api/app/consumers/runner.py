@@ -41,21 +41,16 @@ Handler = Callable[[object, Reading], Awaitable[object]]
 
 
 def _evaluate_and_push(client: httpx.AsyncClient, pending: set[asyncio.Task]) -> Handler:
-    """Le handler du consumer d'évaluation : évaluer, puis pousser au siège.
-
-    L'envoi part dans sa propre tâche. L'attendre ici bloquerait la boucle :
-    les messages sont traités un par un, et un siège en panne, avec ses
-    nouvelles tentatives, suspendrait la surveillance de toutes les salles.
-
-    `pending` garde une référence sur chaque tâche en cours : asyncio n'en
-    garde qu'une faible, et une tâche que plus rien ne référence peut être
-    ramassée avant d'avoir fini.
+    """Pushes in a separate task: messages are handled one at a time, so
+    awaiting a failing head office would stall monitoring for every room.
     """
 
     async def handler(session, reading: Reading) -> Evaluation:
         evaluation = await evaluate_reading(session, reading)
         if evaluation.alert_push is not None:
             task = asyncio.create_task(push_alert(client, evaluation.alert_push))
+            # asyncio only keeps a weak reference: an unreferenced task may be
+            # garbage collected before it finishes.
             pending.add(task)
             task.add_done_callback(pending.discard)
             task.add_done_callback(_log_unexpected_push_failure)
@@ -65,16 +60,14 @@ def _evaluate_and_push(client: httpx.AsyncClient, pending: set[asyncio.Task]) ->
 
 
 def _log_unexpected_push_failure(task: asyncio.Task) -> None:
-    """`push_alert` ne lève pas sur une panne du siège ; ceci couvre le reste.
-
-    Sans ce rappel, une exception imprévue dans la tâche ne serait signalée
-    qu'au ramassage de celle-ci, au mieux — une alerte perdue en silence.
+    """Otherwise an unexpected exception would surface only at garbage
+    collection, if ever: an alert lost silently.
     """
     if task.cancelled():
         return
     exc = task.exception()
     if exc is not None:
-        logger.error("évaluation : échec inattendu de l'envoi au siège", exc_info=exc)
+        logger.error("Unexpected failure while pushing an alert to head office", exc_info=exc)
 
 
 async def _consume(name: str, client_id: str, handler: Handler) -> None:
@@ -131,8 +124,7 @@ async def main() -> None:
         level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s"
     )
     pending_pushes: set[asyncio.Task] = set()
-    # Un seul client pour tous les envois : il garde ses connexions ouvertes
-    # d'une alerte à l'autre.
+    # Shared so connections are reused from one alert to the next.
     async with httpx.AsyncClient() as client:
         await asyncio.gather(
             _consume("persistance", "futurekawa-ingestion", persist_reading),

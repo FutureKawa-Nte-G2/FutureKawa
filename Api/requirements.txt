@@ -15,7 +15,5 @@ alembic==1.19.1
 # asyncio (SQLAlchemy async, asyncpg) : un client bloquant imposerait un thread
 # et un pont entre les deux mondes pour chaque message reçu.
 aiomqtt==2.4.0
-# Client HTTP sortant : le consumer d'évaluation pousse chaque alerte au siège.
-# Asynchrone pour la même raison qu'aiomqtt. La suite de tests s'en sert aussi
-# (ASGITransport, MockTransport), d'où son absence de requirements-dev.txt.
+# Runtime, not dev-only: the evaluation consumer pushes alerts to head office.
 httpx==0.28.1

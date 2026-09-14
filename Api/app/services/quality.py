@@ -30,8 +30,7 @@ from app.models import (
 from app.services.head_office import AlertPush, Metric
 from app.services.ingestion import Reading, _as_naive_utc, _released_after
 
-# Au-delà, le relevé précédent est trop ancien pour qu'une évolution linéaire
-# entre les deux reste crédible : coupure, capteur hors ligne, relevé perdu.
+# Beyond this, a linear drift between two readings is no longer credible.
 MAX_INTERPOLATION_GAP = timedelta(minutes=15)
 
 
@@ -51,19 +50,13 @@ class Band:
         return abs(value - self.nominal) <= self.tolerance
 
     def deviation_ratio(self, value: Decimal) -> Decimal:
-        """De combien de tolérances la valeur s'écarte du nominal.
-
-        Ramène des °C et des % sur une même échelle : 3 °C et 3 % ne se
-        comparent pas, « 1,2 tolérance » et « 2 tolérances » si.
-        """
+        """Deviation in tolerances, so °C and % can be compared."""
         deviation = abs(value - self.nominal)
         if self.tolerance == 0:
-            # Bande réduite au nominal : tout écart est infiniment hors bande.
             return Decimal("Infinity") if deviation else Decimal(0)
         return deviation / self.tolerance
 
     def limit_crossed(self, value: Decimal) -> Decimal:
-        """La borne franchie par une valeur hors bande, basse ou haute."""
         if value > self.nominal:
             return self.nominal + self.tolerance
         return self.nominal - self.tolerance
@@ -71,8 +64,6 @@ class Band:
 
 @dataclass(frozen=True)
 class Sample:
-    """Les deux grandeurs d'un relevé et le moment où il a été pris."""
-
     measured_at: datetime
     temperature: Decimal
     humidity: Decimal
@@ -88,9 +79,7 @@ class Evaluation:
     notification_created: bool = False
     # Vrai la première fois que le lot bascule, faux les fois suivantes.
     compliance_flipped: bool = False
-    # Ce qu'il faut pousser au siège, renseigné seulement quand une alerte a
-    # été ouverte et commitée. L'envoi est laissé à l'appelant : ce module
-    # décide, il ne fait pas de réseau.
+    # Sent by the caller: this module stays free of network calls.
     alert_push: AlertPush | None = None
 
 
@@ -114,7 +103,6 @@ def is_within_band(
 
 
 def _out_of_band(sample: Sample, country: Country) -> tuple[bool, bool]:
-    """(température hors bande, humidité hors bande)."""
     temp_band, humidity_band = _bands(country)
     return (
         not temp_band.contains(sample.temperature),
@@ -125,20 +113,11 @@ def _out_of_band(sample: Sample, country: Country) -> tuple[bool, bool]:
 def select_breached_metric(
     current: Sample, previous: Sample | None, country: Country
 ) -> Metric | None:
-    """La grandeur qui a franchi son seuil en premier.
+    """The metric that crossed its limit first.
 
-    Le siège attend `temperature` ou `humidity`, une seule. Quand une seule
-    grandeur sort de sa bande, c'est elle. Quand les deux sortent sur le même
-    relevé, les deux seuils ont été franchis entre ce relevé et le précédent,
-    et c'est le précédent qui départage :
-
-      * s'il avait déjà une seule grandeur hors bande, elle a dérivé avant ;
-      * s'il avait les deux dans la bande, on interpole linéairement l'instant
-        de franchissement de chacune, et la plus précoce l'emporte ;
-      * sinon — pas de relevé précédent, trop ancien, déjà les deux hors bande,
-        ou instants égaux — la grandeur la plus hors bande l'emporte.
-
-    Fonction pure : le relevé précédent est lu par l'appelant.
+    Head office expects a single metric, while a condition alert covers the
+    whole room. When both are out on the same reading, only the previous
+    reading can tell which one drifted first.
     """
     temp_band, humidity_band = _bands(country)
     temp_out, humidity_out = _out_of_band(current, country)
@@ -157,8 +136,7 @@ def select_breached_metric(
     if previous_temp_out and previous_humidity_out:
         return _largest_deviation(current, temp_band, humidity_band)
 
-    # Les deux intervalles sont le même, entre `previous` et `current` :
-    # comparer les fractions revient à comparer les instants de franchissement.
+    # Same interval for both metrics, so comparing fractions compares instants.
     temp_fraction = _crossing_fraction(temp_band, previous.temperature, current.temperature)
     humidity_fraction = _crossing_fraction(
         humidity_band, previous.humidity, current.humidity
@@ -171,32 +149,21 @@ def select_breached_metric(
 
 
 def _crossing_fraction(band: Band, previous: Decimal, current: Decimal) -> Decimal:
-    """Où, entre les deux relevés, la valeur a atteint sa borne (0 à 1).
-
-    `previous` est dans la bande et `current` dehors : les deux diffèrent
-    forcément, la division est sûre.
-    """
+    # Never divides by zero: `previous` is in band and `current` is not.
     return (band.limit_crossed(current) - previous) / (current - previous)
 
 
 def _largest_deviation(sample: Sample, temp_band: Band, humidity_band: Band) -> Metric:
     temp_ratio = temp_band.deviation_ratio(sample.temperature)
     humidity_ratio = humidity_band.deviation_ratio(sample.humidity)
-    # Égalité exacte : `temperature`, pour que le résultat soit déterministe,
-    # pas parce qu'une règle métier la ferait passer avant.
+    # Ties go to temperature for determinism only, not a business priority.
     return "humidity" if humidity_ratio > temp_ratio else "temperature"
 
 
 async def _previous_sample(
     session: AsyncSession, sensor_code: str, measured_at: datetime
 ) -> Sample | None:
-    """Le dernier relevé écrit pour ce capteur avant `measured_at`.
-
-    Borné à `MAX_INTERPOLATION_GAP` : au-delà, il ne servirait à rien, et la
-    borne évite de balayer l'historique de l'hypertable. Il peut manquer — le
-    consumer d'écriture est indépendant, et un relevé pris avant l'assignation
-    n'a jamais été conservé.
-    """
+    """May be missing: the ingestion consumer runs independently of this one."""
     row = (
         await session.execute(
             select(Measurement.meas_date, Measurement.meas_temp, Measurement.meas_humidity)
@@ -279,10 +246,8 @@ async def evaluate_reading(
     current = Sample(measured_at, reading.temperature, reading.humidity)
     previous = None
     if all(_out_of_band(current, country)):
-        # Lu seulement quand les deux grandeurs débordent : c'est le seul cas
-        # où le relevé déclencheur ne suffit pas à dire laquelle a dérivé.
+        # Only case where the triggering reading alone cannot decide.
         previous = await _previous_sample(session, reading.sensor_code, measured_at)
-    # Jamais `None` ici : le relevé est hors bande, sinon on serait déjà sorti.
     breached_metric = select_breached_metric(current, previous, country)
 
     batch.is_compliant = False
@@ -298,10 +263,7 @@ async def evaluate_reading(
         alert_type="condition",
         alert_status="active",
         created_at=reference_now,
-        # L'horodatage du relevé, pas `reference_now` : un capteur qui
-        # bufferise hors ligne ou un consumer qui rattrape une coupure du broker
-        # écrit l'alerte bien après la mesure, et c'est la mesure qui date la
-        # dérive.
+        # Not `reference_now`: a buffered or late reading must still date the drift.
         measured_at=measured_at,
     )
     session.add(alert)
@@ -333,8 +295,7 @@ async def evaluate_reading(
         alert_created=True,
         notification_created=True,
         compliance_flipped=True,
-        # Construit après le commit seulement : une alerte que la base a refusée
-        # ne doit jamais atteindre le siège.
+        # Only after commit: a rejected alert must never reach head office.
         alert_push=AlertPush(
             source_alert_id=alert_id,
             warehouse_ref=warehouse_ref,

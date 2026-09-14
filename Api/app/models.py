@@ -322,6 +322,14 @@ class Alert(Base):
     resolved_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # When the triggering reading was taken, not when the alert was written.
+    # The two usually coincide, and part ways exactly when it matters: a sensor
+    # buffering offline, a consumer catching up after a broker outage. Nullable
+    # because alerts raised before this column existed have no reading to point
+    # back to.
+    measured_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     __table_args__ = (
         # "One active condition alert per warehouse" is a data rule, not a code

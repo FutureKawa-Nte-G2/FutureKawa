@@ -139,6 +139,11 @@ async def evaluate_reading(
         alert_type="condition",
         alert_status="active",
         created_at=reference_now,
+        # L'horodatage du relevé, pas `reference_now` : un capteur qui
+        # bufferise hors ligne ou un consumer qui rattrape une coupure du broker
+        # écrit l'alerte bien après la mesure, et c'est la mesure qui date la
+        # dérive.
+        measured_at=measured_at,
     )
     session.add(alert)
 

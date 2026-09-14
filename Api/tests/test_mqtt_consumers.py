@@ -156,6 +156,18 @@ async def test_should_flip_the_batch_and_raise_alert_and_notification_together(s
     assert notification.warehouse_id == WAREHOUSE_ID
 
 
+async def test_should_date_the_alert_with_the_reading_not_with_the_evaluation(session):
+    """Un relevé bufferisé hors ligne arrive tard : c'est la mesure qui date la dérive."""
+    await _assign(session)
+    processed_at = _at(12, hour=18)
+
+    await evaluate_reading(session, _reading("31.00", "55.00", day=10), now=processed_at)
+
+    alert = await session.scalar(select(Alert))
+    assert alert.measured_at == _at(10)
+    assert alert.created_at == processed_at
+
+
 async def test_should_not_raise_a_second_alert_for_an_already_flagged_batch(session):
     """Anti-spam : sans ça, 288 notifications par jour pour un seul incident."""
     await _assign(session)

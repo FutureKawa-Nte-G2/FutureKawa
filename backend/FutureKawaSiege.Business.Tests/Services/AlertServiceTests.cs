@@ -12,13 +12,14 @@ public class AlertServiceTests
 {
     private readonly IAlertRepository _alertRepository = Substitute.For<IAlertRepository>();
     private readonly IWarehouseRepository _warehouseRepository = Substitute.For<IWarehouseRepository>();
+    private readonly IBatchRepository _batchRepository = Substitute.For<IBatchRepository>();
     private readonly ILocalAlertPushClient _localAlertPushClient = Substitute.For<ILocalAlertPushClient>();
     private readonly ILogger<AlertService> _logger = Substitute.For<ILogger<AlertService>>();
     private readonly AlertService _service;
 
     public AlertServiceTests()
     {
-        _service = new AlertService(_alertRepository, _warehouseRepository, _localAlertPushClient, _logger);
+        _service = new AlertService(_alertRepository, _warehouseRepository, _batchRepository, _localAlertPushClient, _logger);
     }
 
     private static Warehouse MakeWarehouse(Guid id, string reference, string countryCode) => new()
@@ -524,5 +525,82 @@ public class AlertServiceTests
         Assert.Equal(createdAt, dto.CreatedAt);
         Assert.Null(dto.ResolvedAt);
         Assert.Equal(measuredAt, dto.MeasuredAt);
+    }
+
+    [Fact]
+    public async Task GetAlertBatchesAsync_Should_ReturnNull_When_AlertNotFound()
+    {
+        // Arrange
+        _alertRepository.GetByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns((Alert?)null);
+
+        // Act
+        var result = await _service.GetAlertBatchesAsync(Guid.NewGuid());
+
+        // Assert
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task GetAlertBatchesAsync_Should_QueryBatchRepository_WithAlertWarehouseAndPeriod()
+    {
+        // Arrange
+        var warehouse = MakeWarehouse(Guid.NewGuid(), "WH-BR-01", "BR");
+        var alert = MakeAlert(warehouse, AlertType.Temperature, AlertStatus.Active, DateTime.UtcNow.AddDays(-2));
+
+        _alertRepository.GetByIdAsync(alert.Id, Arg.Any<CancellationToken>())
+            .Returns(alert);
+        _batchRepository.GetOverlappingWarehousePeriodAsync(
+                warehouse.Id, alert.CreatedAt, alert.ResolvedAt, Arg.Any<CancellationToken>())
+            .Returns(new List<Batch>());
+
+        // Act
+        await _service.GetAlertBatchesAsync(alert.Id);
+
+        // Assert
+        await _batchRepository.Received(1).GetOverlappingWarehousePeriodAsync(
+            warehouse.Id, alert.CreatedAt, alert.ResolvedAt, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task GetAlertBatchesAsync_Should_ReturnMappedBatches_When_AlertExists()
+    {
+        // Arrange
+        var warehouse = MakeWarehouse(Guid.NewGuid(), "WH-BR-01", "BR");
+        var alert = MakeAlert(warehouse, AlertType.Temperature, AlertStatus.Active, DateTime.UtcNow.AddDays(-2));
+        var farm = new Farm { Id = Guid.NewGuid(), Name = "Fazenda Boa Vista" };
+        var storedAt = DateTime.UtcNow.AddDays(-5);
+        var batch = new Batch
+        {
+            Id = Guid.NewGuid(),
+            WarehouseId = warehouse.Id,
+            Warehouse = warehouse,
+            FarmId = farm.Id,
+            Farm = farm,
+            Reference = "BATCH-BR-001",
+            StoredAt = storedAt,
+            ShippedAt = null,
+            QualityGrade = BatchQualityGrade.A,
+            Status = BatchStatus.Stored
+        };
+
+        _alertRepository.GetByIdAsync(alert.Id, Arg.Any<CancellationToken>())
+            .Returns(alert);
+        _batchRepository.GetOverlappingWarehousePeriodAsync(
+                warehouse.Id, alert.CreatedAt, alert.ResolvedAt, Arg.Any<CancellationToken>())
+            .Returns(new List<Batch> { batch });
+
+        // Act
+        var result = await _service.GetAlertBatchesAsync(alert.Id);
+
+        // Assert
+        Assert.NotNull(result);
+        var dto = Assert.Single(result!);
+        Assert.Equal(batch.Id, dto.Id);
+        Assert.Equal("BR", dto.CountryCode);
+        Assert.Equal("BATCH-BR-001", dto.BatchRef);
+        Assert.Equal("Fazenda Boa Vista", dto.FarmName);
+        Assert.Equal("A", dto.QualityGrade);
+        Assert.Equal(storedAt, dto.EnteredAt);
     }
 }

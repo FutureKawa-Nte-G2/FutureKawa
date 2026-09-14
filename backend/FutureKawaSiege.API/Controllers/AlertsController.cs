@@ -123,4 +123,26 @@ public class AlertsController : ControllerBase
 
         return Ok(ApiResponse<AlertListResponseDto>.Ok(result));
     }
+
+    /// <summary>
+    /// Returns the batches affected by an alert. Computed via a date-overlap query
+    /// (the alert's warehouse and active period against each batch's storage
+    /// period) rather than a stored relationship — Alert carries no BatchId by
+    /// design (#85, see backlog-batches-alertes-pr.md).
+    /// </summary>
+    [HttpGet("{id:guid}/batches")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<IEnumerable<AlertBatchDto>>>> GetBatches(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var batches = await _alertService.GetAlertBatchesAsync(id, cancellationToken);
+
+        if (batches is null)
+        {
+            return NotFound(ApiResponse<IEnumerable<AlertBatchDto>>.Fail($"Alert '{id}' not found."));
+        }
+
+        return Ok(ApiResponse<IEnumerable<AlertBatchDto>>.Ok(batches));
+    }
 }

@@ -53,7 +53,7 @@ public interface IAlertService
 
     /// <summary>
     /// Returns a paginated list of alerts, optionally filtered by country code,
-    /// warehouse ID and status, most recent first.
+    /// warehouse ID and status, most recent first (#85).
     /// </summary>
     Task<AlertListResponseDto> GetAlertsAsync(
         string? countryCode,
@@ -62,4 +62,13 @@ public interface IAlertService
         int page,
         int pageSize,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Returns the batches affected by an alert — its warehouse's batches whose
+    /// storage period overlaps the alert's active period — or null if the alert
+    /// does not exist (#85). See <see cref="AlertBatchDto"/> for why this is a
+    /// computed query rather than a stored relationship.
+    /// </summary>
+    Task<IEnumerable<AlertBatchDto>?> GetAlertBatchesAsync(
+        Guid alertId, CancellationToken cancellationToken = default);
 }

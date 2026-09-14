@@ -49,7 +49,7 @@ public class MeasurementSyncService : IMeasurementSyncService
         {
             try
             {
-                var dto = await _localApiService.FetchMeasurementsAsync(warehouse.Id, cancellationToken);
+                var dto = await _localApiService.FetchMeasurementsAsync(warehouse.Id, warehouse.Reference, cancellationToken);
 
                 if (dto is null)
                 {

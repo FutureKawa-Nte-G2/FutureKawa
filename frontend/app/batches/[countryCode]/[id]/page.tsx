@@ -62,7 +62,13 @@ function BatchDetailContent() {
     <main className="flex-1 p-8">
       <button
         type="button"
-        onClick={() => router.push("/fifo")}
+        // This page is only ever reached from a batch row on the FIFO page
+        // (see BatchRow.tsx), so the previous history entry is always
+        // /fifo?... with whatever country/warehouse/quality filter the user
+        // had selected. router.back() returns there directly, instead of
+        // router.push("/fifo") which dropped the filter by navigating to
+        // the bare, param-less URL.
+        onClick={() => router.back()}
         className="mb-4 text-sm text-input-text hover:text-foreground"
       >
         ← Retour au FIFO

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getCountries, getWarehouses } from "@/lib/api/batches";
 import type { Country, Warehouse } from "@/lib/api/types";
 import { Select } from "@/components/ui/Select";
@@ -28,18 +28,35 @@ const QUALITY_GRADE_OPTIONS = [
 
 interface LocationFilterProps {
   onSelectionChange: (selection: LocationSelection) => void;
+  // Lets a parent restore a previously-made selection (e.g. persisted in the
+  // URL) once the reference data needed to resolve it into full Country/
+  // Warehouse objects has loaded. Only read on mount — later changes to
+  // these props are ignored, matching how React initial state works.
+  initialCountryCode?: string | null;
+  initialWarehouseId?: string | null;
+  initialQualityGrade?: string | null;
 }
 
-export function LocationFilter({ onSelectionChange }: LocationFilterProps) {
+export function LocationFilter({
+  onSelectionChange,
+  initialCountryCode = null,
+  initialWarehouseId = null,
+  initialQualityGrade = null,
+}: LocationFilterProps) {
   const [countries, setCountries] = useState<Country[]>([]);
+  const [countriesLoaded, setCountriesLoaded] = useState(false);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
-  const [countryCode, setCountryCode] = useState<string | null>(null);
-  const [warehouseId, setWarehouseId] = useState<string | null>(null);
-  const [qualityGrade, setQualityGrade] = useState<string | null>(null);
+  const [warehousesLoaded, setWarehousesLoaded] = useState(false);
+  const [countryCode, setCountryCode] = useState<string | null>(initialCountryCode);
+  const [warehouseId, setWarehouseId] = useState<string | null>(initialWarehouseId);
+  const [qualityGrade, setQualityGrade] = useState<string | null>(initialQualityGrade);
   const { accessToken } = useAuth();
 
   useEffect(() => {
-    getCountries(accessToken).then(setCountries);
+    getCountries(accessToken).then((result) => {
+      setCountries(result);
+      setCountriesLoaded(true);
+    });
   }, [accessToken]);
 
   // Fetch warehouses only when a country is actually selected.
@@ -47,8 +64,46 @@ export function LocationFilter({ onSelectionChange }: LocationFilterProps) {
   // in handleCountryChange (a user event), not here.
   useEffect(() => {
     if (!countryCode) return;
-    getWarehouses(countryCode, accessToken).then(setWarehouses);
+    setWarehousesLoaded(false);
+    getWarehouses(countryCode, accessToken).then((result) => {
+      setWarehouses(result);
+      setWarehousesLoaded(true);
+    });
   }, [countryCode, accessToken]);
+
+  // Restores a selection carried in via initialCountryCode/initialWarehouseId
+  // (the FIFO page seeds these from the URL, so a filter picked before
+  // navigating to a batch's measurement detail is still there when the user
+  // comes back — see issue "conserver les filtres FIFO"). The parent only
+  // knows Country/Warehouse *objects*, not bare codes, so this waits for the
+  // matching reference data to load before notifying it once. Runs at most
+  // once: hasNotifiedRestore guards against re-firing (and re-triggering a
+  // batch refetch) on every later countries/warehouses reload.
+  const hasNotifiedRestore = useRef(false);
+  useEffect(() => {
+    if (hasNotifiedRestore.current) return;
+    if (!countryCode) {
+      hasNotifiedRestore.current = true;
+      return;
+    }
+    if (!countriesLoaded) return;
+    const country = countries.find((c) => c.code === countryCode) ?? null;
+    if (!country) {
+      // Unknown/stale country code — nothing to restore.
+      hasNotifiedRestore.current = true;
+      return;
+    }
+    if (!warehouseId) {
+      hasNotifiedRestore.current = true;
+      onSelectionChange({ country, warehouse: null, qualityGrade });
+      return;
+    }
+    if (!warehousesLoaded) return;
+    const warehouse = warehouses.find((w) => w.id === warehouseId) ?? null;
+    hasNotifiedRestore.current = true;
+    if (!warehouse) setWarehouseId(null); // stale/unknown warehouse id
+    onSelectionChange({ country, warehouse, qualityGrade });
+  }, [countriesLoaded, countries, warehousesLoaded, warehouses, countryCode, warehouseId, qualityGrade, onSelectionChange]);
 
   function handleCountryChange(next: string) {
     if (next === ALL_COUNTRIES) {

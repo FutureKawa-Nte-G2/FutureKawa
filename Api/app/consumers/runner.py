@@ -1,15 +1,9 @@
-"""Les deux consumers abonnés au broker.
+"""The two MQTT consumers.
 
-L'US #32 les veut indépendants : un échec de l'un ne doit pas empêcher l'autre
-de fonctionner. Ils tournent donc chacun dans leur tâche, avec leur propre
-connexion MQTT et leur propre session de base. Le broker délivre le message aux
-deux abonnements ; aucun ne dépend du travail de l'autre.
+Each runs with its own connection and session so that one failing never stops
+the other (US #32). No business rule lives here, so services test without a broker.
 
     ./venv/bin/python -m app.consumers.runner
-
-Ce module ne contient aucune règle métier : il décode, appelle un service, et
-tient la boucle debout. Ce qui décide de quoi que ce soit vit dans
-`app/services/ingestion.py` et `app/services/quality.py`, testables sans broker.
 """
 
 import asyncio
@@ -31,9 +25,7 @@ logger = logging.getLogger(__name__)
 BROKER_HOST_ENV_VAR = "MQTT_BROKER_HOST"
 BROKER_PORT_ENV_VAR = "MQTT_BROKER_PORT"
 
-# Redémarrage après une coupure du broker. Assez court pour qu'une salle ne
-# reste pas longtemps sans surveillance, assez long pour ne pas marteler un
-# broker qui redémarre.
+# Short enough not to leave rooms unmonitored, long enough not to hammer a restarting broker.
 RECONNECT_DELAY_SECONDS = 5
 
 
@@ -71,12 +63,8 @@ def _log_unexpected_push_failure(task: asyncio.Task) -> None:
 
 
 async def _consume(name: str, client_id: str, handler: Handler) -> None:
-    """Boucle d'un consumer : une connexion, un abonnement, un traitement.
-
-    Toute exception levée en traitant un message est journalisée puis avalée.
-    Un relevé malformé, un lot supprimé entre-temps, une contrainte violée : ce
-    sont des incidents d'un message, pas du consumer. Les laisser remonter
-    arrêterait la surveillance de toute la salle pour une ligne fautive.
+    """Exceptions from one message are logged and swallowed: letting them
+    propagate would stop monitoring every room over a single bad reading.
     """
     host = os.environ.get(BROKER_HOST_ENV_VAR, "localhost")
     port = int(os.environ.get(BROKER_PORT_ENV_VAR, "1883"))
@@ -86,25 +74,25 @@ async def _consume(name: str, client_id: str, handler: Handler) -> None:
         try:
             async with aiomqtt.Client(hostname=host, port=port, identifier=client_id) as client:
                 await client.subscribe(TOPIC_FILTER)
-                logger.info("%s abonné à %s sur %s:%s", name, TOPIC_FILTER, host, port)
+                logger.info("%s subscribed to %s on %s:%s", name, TOPIC_FILTER, host, port)
 
                 async for message in client.messages:
                     topic = str(message.topic)
                     try:
                         reading = decode(topic, bytes(message.payload))
                     except MalformedPayloadError as exc:
-                        logger.warning("%s : message écarté sur %s — %s", name, topic, exc)
+                        logger.warning("%s: message dropped on %s: %s", name, topic, exc)
                         continue
 
                     try:
                         async with sessionmaker() as session:
                             await handler(session, reading)
                     except Exception:
-                        logger.exception("%s : échec du traitement de %s", name, topic)
+                        logger.exception("%s: failed to process %s", name, topic)
 
         except aiomqtt.MqttError as exc:
             logger.warning(
-                "%s : broker injoignable (%s), nouvelle tentative dans %ss",
+                "%s: broker unreachable (%s), retrying in %ss",
                 name,
                 exc,
                 RECONNECT_DELAY_SECONDS,
@@ -113,12 +101,9 @@ async def _consume(name: str, client_id: str, handler: Handler) -> None:
 
 
 async def main() -> None:
-    """Lance les deux consumers en parallèle.
-
-    `gather` sans `return_exceptions` suffit : chaque boucle rattrape déjà ses
-    propres pannes et ne rend jamais la main. Si l'une s'arrête malgré tout,
-    c'est que quelque chose d'irrattrapable est arrivé, et le processus doit
-    tomber pour être relevé plutôt que tourner à moitié.
+    """No `return_exceptions`: each loop already survives its own failures, so
+    one ending means something unrecoverable, and the process should restart
+    rather than run half-way.
     """
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s"
@@ -127,9 +112,9 @@ async def main() -> None:
     # Shared so connections are reused from one alert to the next.
     async with httpx.AsyncClient() as client:
         await asyncio.gather(
-            _consume("persistance", "futurekawa-ingestion", persist_reading),
+            _consume("ingestion", "futurekawa-ingestion", persist_reading),
             _consume(
-                "évaluation",
+                "evaluation",
                 "futurekawa-quality",
                 _evaluate_and_push(client, pending_pushes),
             ),

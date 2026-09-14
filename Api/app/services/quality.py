@@ -1,11 +1,7 @@
-"""Consumer 2 — évaluation des seuils.
+"""Consumer 2: threshold evaluation.
 
-Indépendant du consumer d'écriture : les deux sont abonnés au même topic et un
-échec de l'un ne doit pas priver l'autre de son message. Un relevé peut donc
-déclencher une alerte sans avoir été conservé, et inversement — c'est voulu.
-
-La chaîne de résolution est celle de l'US #30 : capteur → assignation active →
-lot → entrepôt → pays, qui porte les seuils.
+Independent from the ingestion consumer, so a reading may raise an alert
+without being stored, and the other way round. That is intended.
 """
 
 import uuid
@@ -36,12 +32,7 @@ MAX_INTERPOLATION_GAP = timedelta(minutes=15)
 
 @dataclass(frozen=True)
 class Band:
-    """La plage tolérée pour une grandeur.
-
-    Une bande, pas un plafond : un relevé sort de la plage aussi bien par le
-    bas que par le haut. Un entrepôt trop froid abîme le café autant qu'un
-    entrepôt trop chaud.
-    """
+    """A band, not a ceiling: too cold damages coffee as much as too hot."""
 
     nominal: Decimal
     tolerance: Decimal
@@ -71,13 +62,10 @@ class Sample:
 
 @dataclass(frozen=True)
 class Evaluation:
-    """Ce que l'évaluation d'un relevé a produit."""
-
     batch_id: uuid.UUID | None = None
     within_band: bool = True
     alert_created: bool = False
     notification_created: bool = False
-    # Vrai la première fois que le lot bascule, faux les fois suivantes.
     compliance_flipped: bool = False
     # Sent by the caller: this module stays free of network calls.
     alert_push: AlertPush | None = None
@@ -93,11 +81,6 @@ def _bands(country: Country) -> tuple[Band, Band]:
 def is_within_band(
     temperature: Decimal, humidity: Decimal, country: Country
 ) -> bool:
-    """Le relevé tient-il dans les deux bandes du pays.
-
-    Fonction pure, sans base : c'est la règle métier de l'US #30, et elle se
-    teste sans monter quoi que ce soit.
-    """
     temp_band, humidity_band = _bands(country)
     return temp_band.contains(temperature) and humidity_band.contains(humidity)
 
@@ -189,18 +172,11 @@ async def _previous_sample(
 async def evaluate_reading(
     session: AsyncSession, reading: Reading, now: datetime | None = None
 ) -> Evaluation:
-    """Compare un relevé aux seuils de son pays et réagit s'il en sort.
+    """Flags the batch, opens the alert and the notification in one transaction:
+    an alert without a notification would go unseen, and the reverse untraced.
 
-    Quand un lot conforme reçoit un relevé hors bande, trois écritures ont lieu
-    dans la même transaction : `is_compliant` passe à faux, une `ALERT`
-    `condition` est ouverte, et une `NOTIFICATION` `batch_non_compliant` est
-    créée. Les trois ensemble ou aucune — une alerte sans notification serait
-    invisible, une notification sans alerte serait sans trace.
-
-    Anti-spam : un lot déjà non conforme ne rouvre pas d'alerte aux relevés
-    suivants. Un entrepôt en panne de climatisation publie un relevé toutes les
-    cinq minutes ; sans cette garde, la cloche recevrait 288 notifications par
-    jour pour un seul incident.
+    A batch already non-compliant opens nothing more, or a broken air
+    conditioner would notify every five minutes.
     """
     reference_now = _as_naive_utc(now or datetime.now(UTC))
     measured_at = _as_naive_utc(reading.measured_at)
@@ -222,25 +198,19 @@ async def evaluate_reading(
     ).first()
 
     if row is None:
-        # Capteur inconnu, inactif, ou au repos : rien à évaluer.
         return Evaluation()
 
     batch, country, warehouse_ref = row
-    # Lu avant toute écriture : un `rollback` expire l'instance, et relire
-    # `batch.batch_id` après coup déclencherait un rechargement synchrone —
-    # interdit hors greenlet, donc une MissingGreenlet en pleine reprise
-    # d'erreur. La reprise doit tenir sans retoucher à l'objet expiré.
+    # Read before writing: after a rollback, touching the expired instance
+    # triggers a sync reload and a MissingGreenlet.
     batch_id = batch.batch_id
     warehouse_id = batch.warehouse_id
 
     if is_within_band(reading.temperature, reading.humidity, country):
-        # Le retour dans la bande ne rétablit pas `is_compliant` : un lot qui a
-        # passé une nuit hors plage reste suspect tant qu'un humain n'a pas
-        # tranché. La levée est une décision, pas une conséquence mécanique.
+        # Back in band does not restore `is_compliant`: lifting it is a human decision.
         return Evaluation(batch_id=batch_id, within_band=True)
 
     if not batch.is_compliant:
-        # Déjà signalé. On ne rouvre rien.
         return Evaluation(batch_id=batch_id, within_band=False)
 
     current = Sample(measured_at, reading.temperature, reading.humidity)
@@ -256,9 +226,7 @@ async def evaluate_reading(
     alert = Alert(
         alert_id=alert_id,
         warehouse_id=warehouse_id,
-        # `condition` concerne la salle, pas le lot : le modèle réserve
-        # `batch_id` aux alertes d'expiration. Le lien vers le lot est porté par
-        # la notification, qui est ce que le frontend ouvre au clic.
+        # A condition alert concerns the room; the notification carries the batch.
         batch_id=None,
         alert_type="condition",
         alert_status="active",
@@ -281,11 +249,9 @@ async def evaluate_reading(
     try:
         await session.commit()
     except IntegrityError:
-        # Une alerte `condition` active existe déjà pour cette salle — l'index
-        # unique partiel de `alerts` l'impose, et deux relevés évalués en même
-        # temps passent tous deux la lecture qui précède. La salle est déjà
-        # signalée ; on garde la bascule du lot et sa notification, qui eux sont
-        # propres à ce lot.
+        # Concurrent readings both passed the read above, and the partial unique
+        # index allows one active condition alert per room. The room is already
+        # flagged; the batch flag and its notification still apply.
         await session.rollback()
         return await _flag_batch_only(session, batch_id, reference_now)
 
@@ -308,7 +274,6 @@ async def evaluate_reading(
 async def _flag_batch_only(
     session: AsyncSession, batch_id: uuid.UUID, moment: datetime
 ) -> Evaluation:
-    """Bascule le lot et le notifie, sans rouvrir d'alerte de salle."""
     batch = await session.get(Batch, batch_id)
     if batch is None or not batch.is_compliant:
         return Evaluation(batch_id=batch_id, within_band=False)

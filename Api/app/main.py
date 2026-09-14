@@ -42,7 +42,7 @@ def create_app() -> FastAPI:
     """
     app = FastAPI(
         title="FutureKawa — API pays",
-        description="API locale d'un pays : stock, capteurs, alertes.",
+        description="Country API: stock, sensors, alerts.",
         version="0.1.0",
         lifespan=lifespan,
     )

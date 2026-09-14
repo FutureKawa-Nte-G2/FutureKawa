@@ -1,12 +1,6 @@
-"""Les deux consumers abonnés au broker (US #32).
+"""The two MQTT consumers once a message is decoded (US #32).
 
-Ce que font les deux consumers une fois le message décodé. Le décodage et la
-règle de bande, qui ne touchent pas la base, sont dans `test_mqtt_payload.py`.
-
-Aucun broker n'est monté : les services reçoivent un relevé déjà décodé,
-précisément pour être vérifiables sans Mosquitto, qui n'est pas encore
-configuré (#31). Le test d'intégration bout en bout « message MQTT → écriture
-en base » exigé par la DoD reste à faire le jour où le broker existe.
+Decoding and the band rule are in `test_mqtt_payload.py`.
 """
 
 import asyncio
@@ -68,7 +62,7 @@ async def _assign(session, start=None, end=None) -> None:
     await session.commit()
 
 
-# --- consumer 1 : écriture --------------------------------------------------
+# --- consumer 1: ingestion -------------------------------------------------
 
 
 async def test_should_write_a_reading_from_an_assigned_sensor(session):
@@ -81,7 +75,7 @@ async def test_should_write_a_reading_from_an_assigned_sensor(session):
 
 
 async def test_should_ignore_a_reading_from_a_sensor_with_no_assignment(session):
-    """Un capteur au repos publie quand même : ce bruit ne doit pas être stocké."""
+    """An idle sensor still publishes: that noise must not be stored."""
     written = await persist_reading(session, _reading())
 
     assert written is None
@@ -94,7 +88,7 @@ async def test_should_ignore_a_reading_taken_after_the_sensor_was_released(sessi
 
 
 async def test_should_judge_a_late_message_on_when_it_was_taken(session):
-    """Le broker retarde ; le relevé se juge à sa date, pas à sa réception."""
+    """The broker delays: a reading is judged on its date, not its arrival."""
     await _assign(session, start=_at(1), end=_at(5))
 
     assert await persist_reading(session, _reading(day=3)) is not None
@@ -122,7 +116,7 @@ async def test_should_ignore_a_reading_from_a_deactivated_sensor(session):
 
 
 async def test_should_not_duplicate_a_redelivered_message(session):
-    """QoS 1 redélivre : rejouer ne doit pas créer une seconde ligne."""
+    """QoS 1 redelivers."""
     await _assign(session)
     reading = _reading()
 
@@ -133,7 +127,7 @@ async def test_should_not_duplicate_a_redelivered_message(session):
     assert second is None
 
 
-# --- consumer 2 : évaluation ------------------------------------------------
+# --- consumer 2: evaluation ------------------------------------------------
 
 
 async def test_should_leave_a_compliant_batch_alone_when_the_reading_is_in_band(session):
@@ -148,7 +142,6 @@ async def test_should_leave_a_compliant_batch_alone_when_the_reading_is_in_band(
 
 
 async def test_should_flip_the_batch_and_raise_alert_and_notification_together(session):
-    """La DoD : bascule + ALERT + NOTIFICATION en une seule fois."""
     await _assign(session)
 
     result = await evaluate_reading(session, _reading("31.00", "55.00"))
@@ -237,7 +230,7 @@ async def test_should_ignore_a_previous_reading_outside_the_interpolation_window
 
 
 async def test_should_not_raise_a_second_alert_for_an_already_flagged_batch(session):
-    """Anti-spam : sans ça, 288 notifications par jour pour un seul incident."""
+    """Otherwise 288 notifications a day for a single incident."""
     await _assign(session)
 
     await evaluate_reading(session, _reading("31.00", "55.00", day=10))
@@ -253,7 +246,7 @@ async def test_should_not_raise_a_second_alert_for_an_already_flagged_batch(sess
 
 
 async def test_should_not_restore_compliance_when_the_reading_comes_back_in_band(session):
-    """La levée est une décision humaine, pas une conséquence mécanique."""
+    """Lifting the flag is a human decision."""
     await _assign(session)
     await evaluate_reading(session, _reading("31.00", "55.00", day=10))
 
@@ -271,13 +264,11 @@ async def test_should_evaluate_nothing_for_a_sensor_with_no_assignment(session):
 
 
 async def test_should_stay_independent_of_whether_the_reading_was_stored(session):
-    """Les deux consumers sont indépendants : l'un peut agir sans l'autre."""
     await _assign(session)
 
     result = await evaluate_reading(session, _reading("31.00", "55.00"))
 
     assert result.alert_created is True
-    # Aucune mesure écrite : personne n'a appelé le consumer de persistance.
     from app.models import Measurement
 
     assert await session.scalar(select(func.count()).select_from(Measurement)) == 0

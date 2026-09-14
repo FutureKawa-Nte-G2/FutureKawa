@@ -1,11 +1,8 @@
-"""GET /api/alerts et PATCH /api/alerts/{id}/resolve.
+"""GET /api/alerts and PATCH /api/alerts/{id}/resolve.
 
-Ce que ces tests verrouillent, au-delà des deux routes : `alerts` n'autorise
-qu'une seule alerte `condition` active par entrepôt. Tant que rien ne résolvait,
-la première dérive condamnait la salle — toute alerte suivante tombait dans le
-rattrapage d'IntegrityError de `evaluate_reading` et disparaissait. La section
-« réarmement » est la raison d'être de ces routes ; le reste n'est que la
-plomberie qui l'expose.
+Only one active condition alert is allowed per warehouse, so without
+resolution a room could never raise a second one: the re-arming section is
+what these routes exist for.
 """
 
 import uuid
@@ -37,9 +34,8 @@ URL = "/api/alerts"
 OTHER_WAREHOUSE_ID = uuid.UUID("00000000-0000-0000-0000-0000000000e2")
 OTHER_WAREHOUSE_REF = "BR-ENT-02"
 
-# Un second lot dans le même entrepôt, avec son propre capteur : c'est le
-# scénario réel du réarmement. Un lot déjà non conforme ne redéclenche rien par
-# construction, donc rejouer une dérive sur le même lot ne prouverait rien.
+# A second batch with its own sensor: a batch already non-compliant never
+# raises again, so replaying on the same batch would prove nothing.
 SECOND_BATCH_ID = uuid.UUID("00000000-0000-0000-0000-0000000000b2")
 SECOND_BATCH_REF = "BR-2026-00044"
 SECOND_SENSOR_ID = uuid.UUID("00000000-0000-0000-0000-0000000000a2")
@@ -83,7 +79,6 @@ async def _add_other_warehouse(session) -> None:
 
 
 async def _add_second_batch(session) -> None:
-    """Un second lot équipé, dans le même entrepôt que celui de référence."""
     session.add_all(
         [
             Batch(
@@ -119,7 +114,6 @@ async def _assign(session, sensor_id: uuid.UUID, batch_id: uuid.UUID) -> None:
 
 
 def _out_of_band(sensor_code: str, day: int) -> Reading:
-    """Un relevé franchement hors de la bande du pays (20 °C ± 5)."""
     return Reading(
         sensor_code=sensor_code,
         measured_at=_at(day),
@@ -139,8 +133,7 @@ async def _count_alerts(session, **filters) -> int:
 
 
 async def test_should_list_a_warehouse_alerts_newest_first(session, client):
-    # Des `expiration` : l'index unique partiel n'autorise qu'une `condition`
-    # active par entrepôt, et trois d'un coup ne seraient pas un état atteignable.
+    # Expiration alerts: three active condition alerts would violate the unique index.
     session.add_all(
         [
             _alert(uuid.uuid4(), _at(10), alert_type="expiration"),
@@ -157,7 +150,6 @@ async def test_should_list_a_warehouse_alerts_newest_first(session, client):
 
 
 async def test_should_never_show_another_warehouse_alerts(session, client):
-    """Le test qui compte côté lecture : un entrepôt ne voit que les siennes."""
     await _add_other_warehouse(session)
     session.add_all(
         [
@@ -220,11 +212,7 @@ async def test_should_return_only_resolved_alerts_when_asked(session, client):
 
 
 async def test_should_count_every_active_alert_even_when_the_page_is_limited(session, client):
-    """Le compteur annonce ce qui est ouvert, pas ce que la page a renvoyé.
-
-    Les alertes portent des types différents : l'index unique partiel ne couvre
-    que les `condition` actives, une seule par entrepôt.
-    """
+    # Expiration alerts: only one active condition alert is allowed per warehouse.
     session.add_all(
         [_alert(uuid.uuid4(), _at(day), alert_type="expiration") for day in range(1, 6)]
     )
@@ -260,7 +248,6 @@ async def test_should_compose_the_message_of_an_expiration_from_the_batch_refere
 
 
 async def test_should_answer_404_for_an_unknown_warehouse_not_an_empty_list(client):
-    """Une référence inconnue et un entrepôt sain ne se ressemblent pas."""
     response = await client.get(URL, params={"warehouse_ref": "NEXISTE-PAS"})
 
     assert response.status_code == 404
@@ -286,7 +273,7 @@ async def test_should_reject_an_unknown_status_filter(client):
     assert response.status_code == 422
 
 
-# --- résolution -------------------------------------------------------------
+# --- resolution ------------------------------------------------------------
 
 
 async def test_should_stamp_an_alert_as_resolved(session, client, auth_headers):
@@ -309,7 +296,7 @@ async def test_should_stamp_an_alert_as_resolved(session, client, auth_headers):
 async def test_should_not_move_the_timestamp_of_an_already_resolved_alert(
     session, client, auth_headers
 ):
-    """Idempotent : `resolvedAt` dit quand ça s'est arrêté, pas quand on a recliqué."""
+    """`resolvedAt` records when the issue stopped, not the last click."""
     alert_id = uuid.uuid4()
     session.add(
         _alert(alert_id, _at(10), alert_status="resolved", resolved_at=_at(11))
@@ -334,7 +321,7 @@ async def test_should_not_move_the_timestamp_of_an_already_resolved_alert(
 async def test_should_answer_404_when_the_alert_belongs_to_another_warehouse(
     session, client, auth_headers
 ):
-    """404 et non 403 : la route ne confirme pas l'existence d'un id à un tiers."""
+    """404, not 403: the route never confirms an id exists to an outsider."""
     await _add_other_warehouse(session)
     alert_id = uuid.uuid4()
     session.add(_alert(alert_id, _at(10), warehouse_id=OTHER_WAREHOUSE_ID))
@@ -361,7 +348,6 @@ async def test_should_answer_404_for_an_unknown_alert(client, auth_headers):
 
 
 async def test_should_refuse_to_resolve_without_the_api_key(session, client):
-    """Une route qui écrit ne retombe jamais en accès ouvert."""
     alert_id = uuid.uuid4()
     session.add(_alert(alert_id, _at(10)))
     await session.commit()
@@ -374,15 +360,11 @@ async def test_should_refuse_to_resolve_without_the_api_key(session, client):
     assert await _count_alerts(session, alert_status="active") == 1
 
 
-# --- réarmement : la raison d'être de la branche ----------------------------
+# --- re-arming -------------------------------------------------------------
 
 
 async def test_should_not_open_a_second_room_alert_while_the_first_is_active(session):
-    """Contrôle négatif : l'index unique partiel n'autorise qu'une active.
-
-    Ce comportement est voulu — il évite qu'une salle en panne ouvre une alerte
-    par relevé. Il n'est tenable que parce qu'on peut refermer la première.
-    """
+    """Intended: a broken room must not open one alert per reading."""
     await _assign(session, SENSOR_ID, BATCH_ID)
     await evaluate_reading(session, _out_of_band(SENSOR_CODE, day=10))
 
@@ -398,11 +380,6 @@ async def test_should_not_open_a_second_room_alert_while_the_first_is_active(ses
 async def test_should_open_a_new_room_alert_once_the_first_is_resolved(
     session, client, auth_headers
 ):
-    """🎯 Le test de la branche : résoudre réarme la détection.
-
-    Sans la route de résolution, la deuxième dérive de la salle n'ouvrait rien
-    et personne ne l'apprenait. Ce scénario échouait avant cette branche.
-    """
     await _assign(session, SENSOR_ID, BATCH_ID)
     first = await evaluate_reading(session, _out_of_band(SENSOR_CODE, day=10))
     assert first.alert_created is True
@@ -429,7 +406,7 @@ async def test_should_open_a_new_room_alert_once_the_first_is_resolved(
 async def test_should_leave_the_batch_flag_alone_when_resolving(
     session, client, auth_headers
 ):
-    """Réparer la salle ne blanchit pas le café qui a passé la nuit hors bande."""
+    """Fixing the room does not clear coffee that spent the night out of band."""
     await _assign(session, SENSOR_ID, BATCH_ID)
     await evaluate_reading(session, _out_of_band(SENSOR_CODE, day=10))
 
@@ -448,7 +425,6 @@ async def test_should_leave_the_batch_flag_alone_when_resolving(
 async def test_should_still_require_the_key_after_the_env_var_is_removed(
     session, client, monkeypatch
 ):
-    """La clé configurée est la seule qui passe."""
     alert_id = uuid.uuid4()
     session.add(_alert(alert_id, _at(10)))
     await session.commit()

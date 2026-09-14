@@ -153,6 +153,18 @@ services:
       Email__From__Address: ${ALERT_EMAIL_FROM:-alerts@futurekawa.office}
       Email__From__Name: "FutureKawa Alerts"
       Email__AlertRecipients__0: ${ALERT_EMAIL_RECIPIENT:-test@futurekawa.office}
+      # Notification email à la réception d'une alerte (cf. IAlertEmailService).
+      # Mailtrap Email Testing (sandbox) en dev/POC : rien n'est réellement
+      # délivré, tout est capturé dans l'inbox de test — n'importe quel
+      # destinataire accepté. À remplacer par un vrai relais SMTP en prod.
+      Email__Smtp__Host: ${MAILTRAP_HOST:-sandbox.smtp.mailtrap.io}
+      Email__Smtp__Port: ${MAILTRAP_PORT:-2525}
+      Email__Smtp__EnableSsl: "true"
+      Email__Smtp__Username: ${MAILTRAP_USERNAME:-}
+      Email__Smtp__Password: ${MAILTRAP_PASSWORD:-}
+      Email__From__Address: ${ALERT_EMAIL_FROM:-alerts@futurekawa.office}
+      Email__From__Name: "FutureKawa Alerts"
+      Email__AlertRecipients__0: ${ALERT_EMAIL_RECIPIENT:-test@futurekawa.office}
     ports:
       - "127.0.0.1:${SIEGE_API_PORT:-55648}:8080"
     depends_on:

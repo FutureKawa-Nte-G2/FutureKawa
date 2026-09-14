@@ -199,16 +199,27 @@ Détails complets : [odoo-addons/future_kawa_erp/README.md](odoo-addons/future_k
 
 Le backend utilise les sections suivantes dans `appsettings.json` / `appsettings.Development.json` :
 
-| Section             | Clé                      | Description                                                        |
-| ------------------- | ------------------------ | ------------------------------------------------------------------ |
-| `ConnectionStrings` | `DefaultConnection`      | Chaîne de connexion PostgreSQL applicative                         |
-| `Jwt`               | `Secret`, `Issuer`, etc. | Paramètres d'authentification JWT                                  |
-| `Odoo`              | `Db`, `Username`, etc.   | Connexion JSON-RPC à Odoo et token du webhook                      |
-| `MeasurementSync`   | `LocalApiUrl`            | URL de l'API locale d'un entrepôt                                  |
-|                     | `IntervalMinutes`        | Intervalle entre deux synchronisations (défaut 60 min)             |
-|                     | `UseMockData`            | `true` pour générer des données fictives sans appeler d'API réelle |
-| `LocalApi`          | `Countries:{code}:ApiKey`  | Clé du pays : attendue en `X-Api-Key` sur `POST /api/alerts`, présentée à l'API pays pour la résolution. Même valeur que `LOCAL_API_KEY` côté pays. Sans aucune clé configurée, tout envoi d'alerte est rejeté (`401`) |
-|                     | `Countries:{code}:BaseUrl` | URL de base de l'API pays, où renvoyer la résolution d'une alerte  |
+| Section             | Clé                                                      | Description                                                                                                                                                                                                            |
+| ------------------- | -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ConnectionStrings` | `DefaultConnection`                                      | Chaîne de connexion PostgreSQL applicative                                                                                                                                                                             |
+| `Jwt`               | `Secret`, `Issuer`, etc.                                 | Paramètres d'authentification JWT                                                                                                                                                                                      |
+| `Odoo`              | `Db`, `Username`, etc.                                   | Connexion JSON-RPC à Odoo et token du webhook                                                                                                                                                                          |
+| `MeasurementSync`   | `LocalApiUrl`                                            | URL de l'API locale d'un entrepôt                                                                                                                                                                                      |
+|                     | `IntervalMinutes`                                        | Intervalle entre deux synchronisations (défaut 60 min)                                                                                                                                                                 |
+|                     | `UseMockData`                                            | `true` pour générer des données fictives sans appeler d'API réelle                                                                                                                                                     |
+| `LocalApi`          | `Countries:{code}:ApiKey`                                | Clé du pays : attendue en `X-Api-Key` sur `POST /api/alerts`, présentée à l'API pays pour la résolution. Même valeur que `LOCAL_API_KEY` côté pays. Sans aucune clé configurée, tout envoi d'alerte est rejeté (`401`) |
+|                     | `Countries:{code}:BaseUrl`                               | URL de base de l'API pays, où renvoyer la résolution d'une alerte                                                                                                                                                      |
+| `Email`             | `Smtp:Host`, `Port`, `EnableSsl`, `Username`, `Password` | Relais SMTP utilisé pour les emails d'alerte                                                                                                                                                                           |
+|                     | `From:Address`, `From:Name`                              | Expéditeur affiché sur l'email                                                                                                                                                                                         |
+|                     | `AlertRecipients`                                        | Tableau d'adresses destinataires                                                                                                                                                                                       |
+
+### Email de notification d'alerte
+
+À la réception d'une alerte (`POST /api/alerts`), `AlertEmailService` envoie un email récapitulatif (type d'alerte, pays, entrepôt, heure de mesure/réception) aux adresses listées dans `Email:AlertRecipients`. Si `Email:Smtp:Host` ou `Email:AlertRecipients` ne sont pas configurés, ou si l'envoi échoue, c'est simplement loggé — ça ne bloque jamais la création de l'alerte.
+
+En local/Docker Compose, le relais est [Mailtrap Email Testing](https://mailtrap.io) (sandbox, offre gratuite) : les emails sont capturés dans un inbox de test, jamais réellement délivrés — n'importe quel destinataire est accepté. Créer un compte, ouvrir **Email Testing → ton inbox → onglet SMTP** pour récupérer host/port/username/password, puis renseigner `MAILTRAP_USERNAME` / `MAILTRAP_PASSWORD` dans `.env` (voir `.env.example`).
+
+Voir [Documentation/alertes-email-k8s.md](Documentation/alertes-email-k8s.md) pour ce qu'il faudra ajouter (Secret, ConfigMap, egress réseau) le jour où `siege-api` sera déployé sur le cluster Kubernetes.
 
 ### Configuration de développement pour les mesures
 

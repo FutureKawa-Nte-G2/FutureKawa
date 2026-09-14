@@ -11,17 +11,20 @@ public class AlertService : IAlertService
     private readonly IAlertRepository _alertRepository;
     private readonly IWarehouseRepository _warehouseRepository;
     private readonly ILocalAlertPushClient _localAlertPushClient;
+    private readonly IAlertEmailService _alertEmailService;
     private readonly ILogger<AlertService> _logger;
 
     public AlertService(
         IAlertRepository alertRepository,
         IWarehouseRepository warehouseRepository,
         ILocalAlertPushClient localAlertPushClient,
+        IAlertEmailService alertEmailService,
         ILogger<AlertService> logger)
     {
         _alertRepository = alertRepository;
         _warehouseRepository = warehouseRepository;
         _localAlertPushClient = localAlertPushClient;
+        _alertEmailService = alertEmailService;
         _logger = logger;
     }
 
@@ -83,6 +86,12 @@ public class AlertService : IAlertService
         _logger.LogInformation(
             "Alert created: {AlertId} for warehouse {WarehouseReference}, type {Type}",
             alert.Id, request.WarehouseReference, alertType);
+
+        // Attached only after the save: `warehouse` comes from an AsNoTracking
+        // query, and attaching it before AddAsync makes EF treat the whole
+        // graph (Warehouse + Country) as new rows to insert.
+        alert.Warehouse = warehouse;
+        await _alertEmailService.SendAlertCreatedNotificationAsync(alert, cancellationToken);
 
         return AlertReceptionResult.Success;
     }

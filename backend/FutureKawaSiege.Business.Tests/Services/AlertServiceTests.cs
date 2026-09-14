@@ -13,12 +13,14 @@ public class AlertServiceTests
     private readonly IAlertRepository _alertRepository = Substitute.For<IAlertRepository>();
     private readonly IWarehouseRepository _warehouseRepository = Substitute.For<IWarehouseRepository>();
     private readonly ILocalAlertPushClient _localAlertPushClient = Substitute.For<ILocalAlertPushClient>();
+    private readonly IAlertEmailService _alertEmailService = Substitute.For<IAlertEmailService>();
     private readonly ILogger<AlertService> _logger = Substitute.For<ILogger<AlertService>>();
     private readonly AlertService _service;
 
     public AlertServiceTests()
     {
-        _service = new AlertService(_alertRepository, _warehouseRepository, _localAlertPushClient, _logger);
+        _service = new AlertService(
+            _alertRepository, _warehouseRepository, _localAlertPushClient, _alertEmailService, _logger);
     }
 
     private static Warehouse MakeWarehouse(Guid id, string reference, string countryCode) => new()
@@ -58,6 +60,9 @@ public class AlertServiceTests
                 a.WarehouseId == warehouseId &&
                 a.Type == AlertType.Temperature &&
                 a.Status == AlertStatus.Active),
+            Arg.Any<CancellationToken>());
+        await _alertEmailService.Received(1).SendAlertCreatedNotificationAsync(
+            Arg.Is<Alert>(a => a.WarehouseId == warehouseId && a.Warehouse == warehouse),
             Arg.Any<CancellationToken>());
     }
 
@@ -152,6 +157,8 @@ public class AlertServiceTests
         // Assert
         Assert.Equal(AlertReceptionResult.Success, result); // Idempotent success
         await _alertRepository.DidNotReceive().AddAsync(Arg.Any<Alert>(), Arg.Any<CancellationToken>());
+        await _alertEmailService.DidNotReceive().SendAlertCreatedNotificationAsync(
+            Arg.Any<Alert>(), Arg.Any<CancellationToken>());
     }
 
     [Theory]

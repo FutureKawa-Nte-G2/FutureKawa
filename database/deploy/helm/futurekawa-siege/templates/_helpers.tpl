@@ -78,3 +78,16 @@ backoffLimit avant que la base ne réponde.
         echo "base du siège pas encore prête"; sleep 3;
       done
 {{- end -}}
+
+{{/*
+Fichier odoo.conf, partagé par le Secret et l'annotation de checksum du pod.
+*/}}
+{{- define "futurekawa-siege.odooConf" -}}
+[options]
+addons_path = /mnt/extra-addons
+data_dir = /var/lib/odoo
+admin_passwd = {{ required "odoo.masterPassword est requis" .Values.odoo.masterPassword }}
+list_db = False
+db_name = {{ .Values.odoo.dbName }}
+proxy_mode = True
+{{- end -}}

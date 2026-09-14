@@ -27,3 +27,9 @@ odoo:
   # Built from database/Dockerfile.odoo (module future_kawa_erp included).
   image: futurekawa/odoo:labo
   storage: 2Gi
+
+# No sensor publishes over the network yet and the simulator runs inside the
+# cluster: keep the anonymous broker off the school network.
+mosquitto:
+  service:
+    type: ClusterIP

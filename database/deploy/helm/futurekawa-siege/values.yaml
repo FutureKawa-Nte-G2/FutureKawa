@@ -63,6 +63,9 @@ odoo:
   # Compte admin posé par le Job odoo-init, et utilisé par le siège en JSON-RPC.
   adminLogin: admin@admin.com
   adminPassword: Not24get
+  # Mot de passe maître d'Odoo (opérations sur les bases). Le gestionnaire web
+  # étant désactivé (list_db = False), il ne sert qu'en ligne de commande.
+  masterPassword: change-me-odoo-master
   # Données de démonstration Odoo (et celles du module : 3 cafés, 1 client).
   # Lu uniquement à la création de la base.
   withDemo: false

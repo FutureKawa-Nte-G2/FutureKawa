@@ -207,7 +207,7 @@ async def evaluate_reading(
     warehouse_id = batch.warehouse_id
 
     if is_within_band(reading.temperature, reading.humidity, country):
-        # Back in band does not restore `is_compliant`: lifting it is a human decision.
+        # Back in band does not restore `is_compliant`: resolving the room's alert does.
         return Evaluation(batch_id=batch_id, within_band=True)
 
     if not batch.is_compliant:

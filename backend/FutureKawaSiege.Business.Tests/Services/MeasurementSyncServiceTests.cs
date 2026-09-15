@@ -46,7 +46,7 @@ public class MeasurementSyncServiceTests : IDisposable
         await _context.SaveChangesAsync();
 
         var dto = CreateDto(new DateOnly(2026, 8, 1));
-        _localApiService.FetchMeasurementsAsync(warehouse.Id, Arg.Any<CancellationToken>()).Returns(dto);
+        _localApiService.FetchMeasurementsAsync(warehouse.Id, warehouse.Reference, Arg.Any<CancellationToken>()).Returns(dto);
         _measurementRepository.GetExistingAsync(warehouse.Id, dto.MeasDate, Arg.Any<CancellationToken>())
             .Returns(new Measurement { Id = Guid.NewGuid(), WarehouseId = warehouse.Id, MeasDate = dto.MeasDate });
 
@@ -64,7 +64,7 @@ public class MeasurementSyncServiceTests : IDisposable
         await _context.SaveChangesAsync();
 
         var dto = CreateDto(new DateOnly(2026, 8, 1));
-        _localApiService.FetchMeasurementsAsync(warehouse.Id, Arg.Any<CancellationToken>()).Returns(dto);
+        _localApiService.FetchMeasurementsAsync(warehouse.Id, warehouse.Reference, Arg.Any<CancellationToken>()).Returns(dto);
         _measurementRepository.GetExistingAsync(warehouse.Id, dto.MeasDate, Arg.Any<CancellationToken>())
             .Returns((Measurement?)null);
 
@@ -91,7 +91,7 @@ public class MeasurementSyncServiceTests : IDisposable
         await _context.SaveChangesAsync();
 
         // Simulates a network outage: the local API service returns null instead of throwing.
-        _localApiService.FetchMeasurementsAsync(warehouse.Id, Arg.Any<CancellationToken>())
+        _localApiService.FetchMeasurementsAsync(warehouse.Id, warehouse.Reference, Arg.Any<CancellationToken>())
             .Returns((LocalMeasurementDto?)null);
 
         var exception = await Record.ExceptionAsync(() => _service.SyncAllWarehousesAsync());
@@ -112,9 +112,9 @@ public class MeasurementSyncServiceTests : IDisposable
         await _context.SaveChangesAsync();
 
         var dto = CreateDto(new DateOnly(2026, 8, 1));
-        _localApiService.FetchMeasurementsAsync(failingWarehouse.Id, Arg.Any<CancellationToken>())
+        _localApiService.FetchMeasurementsAsync(failingWarehouse.Id, failingWarehouse.Reference, Arg.Any<CancellationToken>())
             .Returns((LocalMeasurementDto?)null);
-        _localApiService.FetchMeasurementsAsync(healthyWarehouse.Id, Arg.Any<CancellationToken>())
+        _localApiService.FetchMeasurementsAsync(healthyWarehouse.Id, healthyWarehouse.Reference, Arg.Any<CancellationToken>())
             .Returns(dto);
         _measurementRepository.GetExistingAsync(healthyWarehouse.Id, dto.MeasDate, Arg.Any<CancellationToken>())
             .Returns((Measurement?)null);
@@ -132,7 +132,7 @@ public class MeasurementSyncServiceTests : IDisposable
         _context.Warehouses.Add(warehouse);
         await _context.SaveChangesAsync();
 
-        _localApiService.FetchMeasurementsAsync(warehouse.Id, Arg.Any<CancellationToken>())
+        _localApiService.FetchMeasurementsAsync(warehouse.Id, warehouse.Reference, Arg.Any<CancellationToken>())
             .ThrowsAsync(new HttpRequestException("Connection refused"));
 
         var exception = await Record.ExceptionAsync(() => _service.SyncAllWarehousesAsync());

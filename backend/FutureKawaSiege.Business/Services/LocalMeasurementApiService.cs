@@ -12,7 +12,8 @@ namespace FutureKawaSiege.Business.Services;
 /// Service for fetching aggregated measurements from the local warehouse API.
 ///
 /// The API URL is read from configuration (<c>MeasurementSync:LocalApiUrl</c>) as a fixed
-/// value for this PoC (single country). The URL is used as-is (full endpoint URL).
+/// value for this PoC (single country). The warehouse reference is appended as the
+/// <c>warehouse_ref</c> query parameter; without it the local API aggregates every warehouse.
 /// When <c>MeasurementSync:UseMockData</c> is true, the service generates fake data
 /// directly without making an HTTP call — useful for testing when no local API exists.
 /// </summary>
@@ -41,7 +42,7 @@ public class LocalMeasurementApiService : ILocalMeasurementApiService
     }
 
     /// <inheritdoc/>
-    public async Task<LocalMeasurementDto?> FetchMeasurementsAsync(Guid warehouseId, CancellationToken cancellationToken = default)
+    public async Task<LocalMeasurementDto?> FetchMeasurementsAsync(Guid warehouseId, string warehouseReference, CancellationToken cancellationToken = default)
     {
         var useMockData = _configuration.GetValue<bool>("MeasurementSync:UseMockData");
 
@@ -59,7 +60,8 @@ public class LocalMeasurementApiService : ILocalMeasurementApiService
             return null;
         }
 
-        var endpoint = baseUrl.TrimEnd('/');
+        var separator = baseUrl.Contains('?') ? '&' : '?';
+        var endpoint = $"{baseUrl.TrimEnd('/')}{separator}warehouse_ref={Uri.EscapeDataString(warehouseReference)}";
 
         try
         {

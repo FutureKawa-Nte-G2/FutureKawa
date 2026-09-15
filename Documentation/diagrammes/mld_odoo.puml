@@ -19,7 +19,6 @@ class "sale_order" as SaleOrder <<Table>> {
   + date_order : timestamp
   + amount_total : numeric
   --
-  ~ batch_count : int4 <<extension>>
   ~ batch_ref : varchar <<extension>>
   ~ quality_grade : varchar <<extension>>
   ~ country : varchar <<extension>>

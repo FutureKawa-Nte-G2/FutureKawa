@@ -13,7 +13,6 @@
                 <page string="FutureKawa" name="futurekawa">
                     <group>
                         <group string="Informations Café">
-                            <field name="batch_count"/>
                             <field name="country"/>
                         </group>
                         <group string="Intégration Backend">

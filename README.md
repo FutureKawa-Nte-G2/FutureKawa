@@ -141,7 +141,7 @@ Module personnalisé Odoo 18 pour la gestion des commandes et livraisons de caf�
 
 ### Fonctionnalités
 
-- **Extension de `sale.order`** : champs métier `batch_count`, `batch_ref`, `quality_grade` (A/B/C, déduit du produit), `country`, `integration_status` et `integration_error_message` (synchronisation avec le backend .NET)
+- **Extension de `sale.order`** : champs métier `batch_ref`, `quality_grade` (A/B/C, déduit du produit), `country`, `integration_status` et `integration_error_message` (synchronisation avec le backend .NET)
 - **Extension de `stock.picking`** : champs `delivery_reference` et `carrier_tracking_ref`
 
 ### Intégration avec le backend .NET
@@ -188,9 +188,8 @@ En environnement de développement, le token doit correspondre à `Odoo:WebhookT
 3. Ajouter une ligne de commande : choisir un **produit** (café) et une **quantité**
    - Le `quality_grade` (A/B/C) est déduit automatiquement du produit choisi
 4. Ouvrir l'onglet **FutureKawa** de la commande et renseigner :
-   - **Nombre de lots** (`batch_count`) : nombre de lots de café à générer
    - **Pays de provenance** (`country`) : pays d'origine du café
-5. Cliquer sur **Confirmer** : la commande est confirmée, les lots sont générés (`batch_ref`) et le webhook est envoyé vers le backend .NET
+5. Cliquer sur **Confirmer** : la commande est confirmée, elle est associée côté backend .NET au lot le plus ancien en stock (FIFO), un nouveau lot de remplacement est généré en parallèle (`batch_ref`) et le webhook est envoyé vers le backend .NET
 6. Vérifier le champ **Statut d'intégration** (`integration_status`) dans l'onglet FutureKawa : il indique si la synchronisation avec le backend a réussi (le message d'erreur éventuel est visible dans `integration_error_message`)
 
 Détails complets : [odoo-addons/future_kawa_erp/README.md](odoo-addons/future_kawa_erp/README.md)
@@ -212,6 +211,17 @@ Le backend utilise les sections suivantes dans `appsettings.json` / `appsettings
 | `Email`             | `Smtp:Host`, `Port`, `EnableSsl`, `Username`, `Password` | Relais SMTP utilisé pour les emails d'alerte                                                                                                                                                                           |
 |                     | `From:Address`, `From:Name`                              | Expéditeur affiché sur l'email                                                                                                                                                                                         |
 |                     | `AlertRecipients`                                        | Tableau d'adresses destinataires                                                                                                                                                                                       |
+
+### Email de notification d'alerte
+
+À la réception d'une alerte (`POST /api/alerts`), `AlertEmailService` envoie un email récapitulatif (type d'alerte, pays, entrepôt, heure de mesure/réception) aux adresses listées dans `Email:AlertRecipients`. Si `Email:Smtp:Host` ou `Email:AlertRecipients` ne sont pas configurés, ou si l'envoi échoue, c'est simplement loggé — ça ne bloque jamais la création de l'alerte.
+
+En local/Docker Compose, le relais est [Mailtrap Email Testing](https://mailtrap.io) (sandbox, offre gratuite) : les emails sont capturés dans un inbox de test, jamais réellement délivrés — n'importe quel destinataire est accepté. Créer un compte, ouvrir **Email Testing → ton inbox → onglet SMTP** pour récupérer host/port/username/password, puis renseigner `MAILTRAP_USERNAME` / `MAILTRAP_PASSWORD` dans `.env` (voir `.env.example`).
+
+Voir [Documentation/alertes-email-k8s.md](Documentation/alertes-email-k8s.md) pour ce qu'il faudra ajouter (Secret, ConfigMap, egress réseau) le jour où `siege-api` sera déployé sur le cluster Kubernetes.
+| `Email` | `Smtp:Host`, `Port`, `EnableSsl`, `Username`, `Password` | Relais SMTP utilisé pour les emails d'alerte |
+| | `From:Address`, `From:Name` | Expéditeur affiché sur l'email |
+| | `AlertRecipients` | Tableau d'adresses destinataires |
 
 ### Email de notification d'alerte
 

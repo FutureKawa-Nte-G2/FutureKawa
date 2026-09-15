@@ -10,12 +10,12 @@
 
 BEGIN;
 
--- Seuils : 20 °C ± 3 et 55 % ± 10, alignés sur les valeurs par défaut du
--- simulateur. Un capteur nominal reste dans la bande, un capteur en dérive
--- en sort.
+-- Seuils du sujet pour le Brésil : 29 °C ± 3 et 55 % ± 2, les mêmes que le seed
+-- du siège. Le simulateur est réglé dessus : un capteur nominal reste dans la
+-- bande, un capteur en dérive en sort.
 INSERT INTO countries (country_id, country_name, country_code,
                        nominal_temp, tolerance_temp, nominal_humidity, tolerance_humidity)
-VALUES ('11111111-1111-1111-1111-111111111111', 'Brésil', 'BR', 20, 3, 55, 10)
+VALUES ('11111111-1111-1111-1111-111111111111', 'Brésil', 'BR', 29, 3, 55, 2)
 ON CONFLICT DO NOTHING;
 
 -- Must match head office's DevelopmentSeeder, or pushed alerts get a 404.

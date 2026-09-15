@@ -31,10 +31,10 @@ import pathlib
 import random
 import sys
 
-# Valeurs par défaut alignées sur les seuils du seed brésilien : 20 °C ± 3 et
-# 55 % ± 10. Un capteur « nominal » reste donc dans la bande, un capteur en
+# Valeurs par défaut alignées sur les seuils du sujet pour le Brésil : 29 °C ± 3
+# et 55 % ± 2. Un capteur « nominal » reste donc dans la bande, un capteur en
 # dérive en sort franchement.
-NOMINAL_TEMP = 20.0
+NOMINAL_TEMP = 29.0
 NOMINAL_HUMIDITY = 55.0
 
 
@@ -53,7 +53,7 @@ def readings(steps, step_minutes, drift_from, seed):
 
         if i < drift_from:
             temp = NOMINAL_TEMP + rng.uniform(-1, 1)
-            humidity = NOMINAL_HUMIDITY + rng.uniform(-3, 3)
+            humidity = NOMINAL_HUMIDITY + rng.uniform(-1, 1)
         else:
             # Montée continue : au bout de quelques heures le relevé sort de la
             # bande de tolérance, ce qui doit déclencher exactement une

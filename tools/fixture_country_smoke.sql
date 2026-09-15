@@ -18,15 +18,24 @@ INSERT INTO countries (country_id, country_name, country_code,
 VALUES ('11111111-1111-1111-1111-111111111111', 'Brésil', 'BR', 20, 3, 55, 10)
 ON CONFLICT DO NOTHING;
 
--- Must match head office's DevelopmentSeeder, or pushed alerts get a 404.
+-- Head office's DevelopmentSeeder references are the source of truth: a pushed
+-- alert or batch naming one we lack gets a 404 or a 422.
 INSERT INTO warehouses (warehouse_id, country_id, warehouse_name, warehouse_ref)
-VALUES ('22222222-2222-2222-2222-222222222222',
-        '11111111-1111-1111-1111-111111111111', 'Entrepôt Santos', 'WH-BR-SANTOS')
+VALUES
+  ('22222222-2222-2222-2222-222222222222',
+   '11111111-1111-1111-1111-111111111111', 'Entrepôt Santos', 'WH-BR-SANTOS'),
+  ('22222222-2222-2222-2222-222222222223',
+   '11111111-1111-1111-1111-111111111111', 'Entrepôt Cerrado', 'WH-BR-CERRADO')
 ON CONFLICT DO NOTHING;
 
 INSERT INTO farms (farm_id, country_id, farm_name, farm_ref)
-VALUES ('33333333-3333-3333-3333-333333333333',
-        '11111111-1111-1111-1111-111111111111', 'Fazenda Cerrado', 'FARM-BR-001')
+VALUES
+  ('33333333-3333-3333-3333-333333333333',
+   '11111111-1111-1111-1111-111111111111', 'Fazenda Boa Vista', 'FARM-BR-BOAVISTA'),
+  ('33333333-3333-3333-3333-333333333334',
+   '11111111-1111-1111-1111-111111111111', 'Fazenda Serra Alta', 'FARM-BR-SERRAALTA'),
+  ('33333333-3333-3333-3333-333333333335',
+   '11111111-1111-1111-1111-111111111111', 'Fazenda Rio Verde', 'FARM-BR-RIOVERDE')
 ON CONFLICT DO NOTHING;
 
 -- Deux lots : un témoin qui doit rester conforme, un qui doit basculer.

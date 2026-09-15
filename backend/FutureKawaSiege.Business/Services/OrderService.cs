@@ -22,6 +22,7 @@ public class OrderService : IOrderService
     private readonly IOrderRepository _orderRepository;
     private readonly IOdooIntegrationService _odooIntegrationService;
     private readonly IOrderShipmentScheduler _shipmentScheduler;
+    private readonly ILocalBatchPushClient _batchPushClient;
     private readonly AppDbContext _context;
     private readonly ILogger<OrderService> _logger;
 
@@ -29,12 +30,14 @@ public class OrderService : IOrderService
         IOrderRepository orderRepository,
         IOdooIntegrationService odooIntegrationService,
         IOrderShipmentScheduler shipmentScheduler,
+        ILocalBatchPushClient batchPushClient,
         AppDbContext context,
         ILogger<OrderService> logger)
     {
         _orderRepository = orderRepository;
         _odooIntegrationService = odooIntegrationService;
         _shipmentScheduler = shipmentScheduler;
+        _batchPushClient = batchPushClient;
         _context = context;
         _logger = logger;
     }
@@ -164,6 +167,31 @@ public class OrderService : IOrderService
             {
                 batch.ShippedAt = DateTime.UtcNow.Date;
             }
+
+            var countryCode = batch.Farm?.Country?.Code;
+            if (string.IsNullOrWhiteSpace(countryCode))
+            {
+                _logger.LogWarning(
+                    "Cannot push shipment of batch {BatchReference}: no country resolved for its farm.",
+                    batch.Reference);
+            }
+            else
+            {
+                try
+                {
+                    await _batchPushClient.PushShipmentAsync(
+                        countryCode,
+                        batch.Reference,
+                        DateOnly.FromDateTime(batch.ShippedAt.Value),
+                        cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex,
+                        "Error pushing shipment of batch {BatchReference} to country {CountryCode}",
+                        batch.Reference, countryCode);
+                }
+            }
         }
 
         _logger.LogInformation(
@@ -229,16 +257,43 @@ public class OrderService : IOrderService
         if (references.Count == 0)
             return [];
 
-        var existingBatches = await _context.Batches
+        var referencedBatches = await _context.Batches
+            .Include(b => b.Warehouse)
+                .ThenInclude(w => w.Alerts.Where(a => a.Status == AlertStatus.Active))
             .Where(b => references.Contains(b.Reference))
             .ToListAsync(cancellationToken);
 
-        var existingReferences = existingBatches.Select(b => b.Reference).ToHashSet();
-        var missingReferences = references.Where(r => !existingReferences.Contains(r)).ToList();
+        // A pre-existing batch is only reused for this order if it actually matches
+        // the order's country and quality grade, and is not expired or currently
+        // under an active warehouse alert (same rule as BatchService.ComputeStatus).
+        var expirationThreshold = DateTime.UtcNow.AddDays(-365);
+        bool IsEligible(Batch b) =>
+            (countryId is null || b.Warehouse.CountryId == countryId) &&
+            b.QualityGrade == qualityGrade &&
+            b.StoredAt > expirationThreshold &&
+            b.Warehouse.Alerts.Count == 0;
+
+        var existingBatches = referencedBatches.Where(IsEligible).ToList();
+
+        // A referenced batch that exists but fails the checks above is a real,
+        // already-stored batch under a different reference — it cannot be
+        // "recreated" (references are unique), so it is left off the order
+        // instead of being silently attached or duplicated.
+        foreach (var batch in referencedBatches.Except(existingBatches))
+        {
+            _logger.LogWarning(
+                "Batch {BatchReference} referenced by order is not eligible (wrong country/quality grade, expired, or under an active warehouse alert) and will not be attached to the order.",
+                batch.Reference);
+        }
+
+        var referencedReferences = referencedBatches.Select(b => b.Reference).ToHashSet();
+        var missingReferences = references.Where(r => !referencedReferences.Contains(r)).ToList();
 
         if (missingReferences.Count > 0)
         {
             var defaults = await EnsureDefaultBatchDependenciesAsync(countryId, cancellationToken);
+            var storedAt = DateTime.UtcNow.Date;
+            var newBatches = new List<Batch>();
 
             foreach (var reference in missingReferences)
             {
@@ -247,13 +302,14 @@ public class OrderService : IOrderService
                     Reference = reference,
                     WarehouseId = defaults.WarehouseId,
                     FarmId = defaults.FarmId,
-                    StoredAt = DateTime.UtcNow.Date,
+                    StoredAt = storedAt,
                     QualityGrade = qualityGrade,
                     Status = BatchStatus.Stored,
                 };
 
                 _context.Batches.Add(batch);
                 existingBatches.Add(batch);
+                newBatches.Add(batch);
             }
 
             await _context.SaveChangesAsync(cancellationToken);
@@ -261,6 +317,27 @@ public class OrderService : IOrderService
                 "Created {Count} missing batches for order references: {References}",
                 missingReferences.Count,
                 string.Join(", ", missingReferences));
+
+            foreach (var batch in newBatches)
+            {
+                try
+                {
+                    await _batchPushClient.PushBatchAsync(
+                        defaults.CountryCode,
+                        batch.Reference,
+                        defaults.FarmReference,
+                        defaults.WarehouseReference,
+                        DateOnly.FromDateTime(storedAt),
+                        qualityGrade,
+                        cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex,
+                        "Error pushing batch {BatchReference} to country {CountryCode}",
+                        batch.Reference, defaults.CountryCode);
+                }
+            }
         }
 
         return existingBatches;
@@ -276,9 +353,10 @@ public class OrderService : IOrderService
         };
     }
 
-    private async Task<(Guid WarehouseId, Guid FarmId)> EnsureDefaultBatchDependenciesAsync(
-        Guid? countryId,
-        CancellationToken cancellationToken)
+    private async Task<(Guid WarehouseId, Guid FarmId, string WarehouseReference, string FarmReference, string CountryCode)>
+        EnsureDefaultBatchDependenciesAsync(
+            Guid? countryId,
+            CancellationToken cancellationToken)
     {
         var country = countryId is not null
             ? await _context.Countries.FindAsync(new object?[] { countryId.Value }, cancellationToken)
@@ -294,7 +372,7 @@ public class OrderService : IOrderService
             .FirstOrDefaultAsync(f => f.CountryId == country.Id, cancellationToken)
             ?? await CreateDefaultFarmAsync(country.Id, cancellationToken);
 
-        return (warehouse.Id, farm.Id);
+        return (warehouse.Id, farm.Id, warehouse.Reference, farm.Reference, country.Code);
     }
 
     private async Task<Guid?> ResolveCountryIdAsync(

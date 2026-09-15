@@ -262,22 +262,20 @@ conversion est une simple bascule de casse faite **à la frontière**, au moment
 de servir le siège, jamais en base. Un lot créé depuis un fichier de réception
 ERP entre en `stored`.
 
-> ⚠️ Cette règle est cohérente avec le code en place (`OrderService.ShipOrderAsync`
-> écrit `BatchStatus.Shipped`, la création écrit `BatchStatus.Stored`) mais n'a
-> jamais été actée collectivement : à confirmer avant que la synchronisation des
-> lots soit codée. À noter aussi, le frontend utilise un vocabulaire différent
-> **et sur un autre axe** — `compliant` / `alert` / `expired`, de la conformité
-> et non du cycle de vie, hérité d'un schéma jamais mergé. Divergence réelle, à
-> traiter séparément.
+> Cette règle est cohérente avec le code en place (`OrderService.ShipOrderAsync`
+> écrit `BatchStatus.Shipped`, la création écrit `BatchStatus.Stored`) et la
+> synchronisation des lots entre siège et pays (`ILocalBatchPushClient`) s'y
+> conforme. À noter aussi, le frontend utilise un vocabulaire différent **et sur
+> un autre axe** — `compliant` / `alert` / `expired`, de la conformité et non du
+> cycle de vie, hérité d'un schéma jamais mergé. Divergence réelle, à traiter
+> séparément.
 
 ---
 
 ## Contrat maison : `POST /api/batches`
 
-Enregistre un lot décrit par un **fichier de réception ERP**. Contrairement à
-`/api/measurements`, ce contrat n'est imposé par personne : aucun appelant
-n'existe encore (voir plus bas). Il est donc choisi, et modifiable tant que
-personne ne l'a branché.
+Enregistre un lot décrit par un **fichier de réception ERP**. Appelé par le
+siège (.NET) à la création d'un lot — voir plus bas.
 
 ### Requête
 
@@ -354,7 +352,7 @@ Aucune contrainte `CHECK` ne protège la colonne en base — la PR #54 les a
 renvoyées à une PR de suite — donc le validateur Pydantic est aujourd'hui le
 seul rempart contre un grade inventé.
 
-### ⚠️ Aucun appelant ne peut encore utiliser cette route
+### Appelant : le siège, à la création d'un lot
 
 Le payload réel d'Odoo (`odoo-addons/future_kawa_erp/models/sale_order.py`) est :
 
@@ -371,4 +369,51 @@ accepter un lot sans elles. Le contrat est donc imposé par notre propre schéma
 et c'est à l'appelant de résoudre ce qu'Odoo ne dit pas — exactement comme le
 siège le fait de son côté.
 
+`OrderService.ResolveBatchesAsync` appelle cette route via `ILocalBatchPushClient`
+(`LocalBatchPushClient.cs`) pour chaque référence de lot **nouvellement créée**
+— pas pour un lot FIFO déjà existant réutilisé, déjà transmis lors de sa
+création. `409 batch_already_exists` (rejeu) est traité comme un succès ; un
+`422` (référence inconnue) est loggé en erreur et n'est pas retenté
+immédiatement, la donnée référentielle devant être corrigée en amont.
+
+Les lots `WH-XX-DEFAULT` / `FM-XX-DEFAULT` fabriqués par
+`EnsureDefaultBatchDependenciesAsync` n'existent pas forcément côté pays :
+`422` attendu tant que ce cas n'est pas traité côté référentiels.
+
 Le watcher de fichier de réception, lui, n'existe nulle part dans le dépôt.
+
+---
+
+## Contrat maison : `PATCH /api/batches/{batch_ref}/ship`
+
+Marque un lot comme expédié. Appelée par le siège depuis
+`OrderService.ShipOrderAsync`, pour chaque lot dont le statut passe à
+`Shipped`, en parallèle de la notification Odoo existante
+(`NotifyOrderShippedAsync`).
+
+### Requête
+
+En-tête `X-API-Key` obligatoire. Le lot est désigné par **`batch_ref`**, jamais
+par `batch_id` : passer l'UUID renvoyé par `POST /api/batches` donne un `404
+batch_not_found`.
+
+```json
+{ "shippedAt": "2026-09-15" }
+```
+
+### Réponse `200 OK`
+
+Idempotente : un rejeu garde la première `shippedAt`.
+
+### Rejets
+
+| Code | Cas |
+|---|---|
+| `401` | clé absente ou invalide |
+| `404` | `batch_not_found` — lot jamais transmis côté pays (le `POST` initial a
+échoué), ou `batch_ref` mal formé |
+| `422` | corps invalide |
+
+Si le `POST` initial échoue silencieusement, le `PATCH` ultérieur renverra
+`404 batch_not_found` : les deux échecs sont loggués séparément côté siège pour
+permettre le diagnostic.

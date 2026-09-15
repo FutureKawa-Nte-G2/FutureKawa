@@ -257,12 +257,37 @@ public class OrderService : IOrderService
         if (references.Count == 0)
             return [];
 
-        var existingBatches = await _context.Batches
+        var referencedBatches = await _context.Batches
+            .Include(b => b.Warehouse)
+                .ThenInclude(w => w.Alerts.Where(a => a.Status == AlertStatus.Active))
             .Where(b => references.Contains(b.Reference))
             .ToListAsync(cancellationToken);
 
-        var existingReferences = existingBatches.Select(b => b.Reference).ToHashSet();
-        var missingReferences = references.Where(r => !existingReferences.Contains(r)).ToList();
+        // A pre-existing batch is only reused for this order if it actually matches
+        // the order's country and quality grade, and is not expired or currently
+        // under an active warehouse alert (same rule as BatchService.ComputeStatus).
+        var expirationThreshold = DateTime.UtcNow.AddDays(-365);
+        bool IsEligible(Batch b) =>
+            (countryId is null || b.Warehouse.CountryId == countryId) &&
+            b.QualityGrade == qualityGrade &&
+            b.StoredAt > expirationThreshold &&
+            b.Warehouse.Alerts.Count == 0;
+
+        var existingBatches = referencedBatches.Where(IsEligible).ToList();
+
+        // A referenced batch that exists but fails the checks above is a real,
+        // already-stored batch under a different reference — it cannot be
+        // "recreated" (references are unique), so it is left off the order
+        // instead of being silently attached or duplicated.
+        foreach (var batch in referencedBatches.Except(existingBatches))
+        {
+            _logger.LogWarning(
+                "Batch {BatchReference} referenced by order is not eligible (wrong country/quality grade, expired, or under an active warehouse alert) and will not be attached to the order.",
+                batch.Reference);
+        }
+
+        var referencedReferences = referencedBatches.Select(b => b.Reference).ToHashSet();
+        var missingReferences = references.Where(r => !referencedReferences.Contains(r)).ToList();
 
         if (missingReferences.Count > 0)
         {

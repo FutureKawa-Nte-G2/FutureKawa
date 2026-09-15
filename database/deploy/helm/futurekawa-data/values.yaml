@@ -1,0 +1,72 @@
+# Data-stack FutureKawa — un release par pays (ex. -BR, -EC, -CO).
+# Les mots de passe ici sont des valeurs de dev ; en prod : --set, Secret externe ou sealed-secrets.
+
+pays: BR                       # label de release (un déploiement par pays)
+
+nameOverride: ""
+fullnameOverride: ""
+
+# Images buildées puis importées dans k3s -> ne pas re-puller.
+imagePullPolicy: IfNotPresent
+
+postgres:
+  # HA via CloudNativePG (opérateur à installer au préalable, cf. README).
+  # Le failover est piloté par l'opérateur, pas par un quorum entre instances : 2 suffisent.
+  instances: 2
+  imageName: ghcr.io/futurekawa-nte-g2/cnpg-timescaledb:16-ts   # image CNPG + TimescaleDB
+  db: futurekawa
+  owner: futurekawa            # CNPG génère son mot de passe dans le secret <cluster>-app
+  storage: 5Gi
+  storageClass: ""             # défaut du cluster ; CNPG réplique par streaming
+  resources:
+    requests: { cpu: 250m, memory: 512Mi }
+    limits:   { cpu: "1",  memory: 1Gi }
+  roles:                       # compte de lecture seule (analyse, debug) ; les applis
+    apiReadPassword: apiread_dev  # se connectent avec l'owner généré par CNPG
+  backup:                      # sauvegarde CNPG (barman -> object store) ; à activer + brancher une destination
+    enabled: false
+    destinationPath: ""        # ex. s3://futurekawa-backups/BR
+    endpointURL: ""
+    schedule: "0 0 2 * * *"    # cron CNPG (6 champs)
+    retentionPolicy: "7d"
+    s3KeyId: ""
+    s3Secret: ""
+
+mosquitto:
+  image: eclipse-mosquitto:2
+  storage: 1Gi
+  # En multi-nœuds, utiliser un StorageClass réattachable (ex. longhorn) : local-path
+  # épingle le pod à son nœud et l'ingestion ne survit pas à la perte de la VM.
+  storageClass: ""
+  service:
+    type: LoadBalancer         # le capteur est hors cluster ; k3s fournit ServiceLB
+    nodePort: null             # utilisé seulement si type=NodePort
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits:   { cpu: 200m, memory: 128Mi }
+
+# Migrations du schéma. Alembic et non Flyway : ADR-001 désigne Api/alembic/
+# comme source de vérité unique du schéma. Même image que l'API, seule la
+# commande change — le schéma ne peut donc pas diverger du code qui le lit.
+migrations:
+  backoffLimit: 3
+
+# API pays (FastAPI). Une instance sert un pays.
+countryApi:
+  image: futurekawa/country-api:dev
+  replicas: 2
+  service:
+    type: ClusterIP
+    port: 8000
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits:   { cpu: 500m, memory: 512Mi }
+
+# Consumers MQTT (US #32). Un seul réplica : deux abonnements concurrents sur le
+# même client_id provoqueraient une double écriture, faute de shared subscriptions.
+consumers:
+  image: futurekawa/country-api:dev
+  replicas: 1
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits:   { cpu: 300m, memory: 384Mi }

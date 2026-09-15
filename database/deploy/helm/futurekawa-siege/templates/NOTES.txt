@@ -1,0 +1,30 @@
+Stack siège FutureKawa « {{ .Release.Name }} » déployée.
+
+PRÉREQUIS :
+  - opérateur CloudNativePG installé (partagé avec le chart futurekawa-data)
+  - images disponibles dans le cluster :
+      {{ .Values.siegeApi.image }}
+      {{ .Values.frontend.image }}
+
+{{- if .Values.ingress.enabled }}
+
+Accès :  http://{{ .Values.ingress.host }}
+  /      -> frontend
+  /api   -> backend siège (même origine : pas de requête cross-origin)
+
+  En local, ajouter l'hôte à /etc/hosts ou tester avec :
+    curl -H 'Host: {{ .Values.ingress.host }}' http://localhost/
+{{- end }}
+{{- if .Values.siegeApi.seed.enabled }}
+
+Seed de démonstration actif : test@futurekawa.com / TestPass123 (Admin).
+  Le désactiver en production : --set siegeApi.seed.enabled=false
+{{- end }}
+
+ATTENTION frontend : NEXT_PUBLIC_API_BASE_URL est inlinée dans le bundle au
+build. Changer ingress.host impose de reconstruire l'image :
+  docker build -t {{ .Values.frontend.image }} \
+    --build-arg NEXT_PUBLIC_API_BASE_URL=http://{{ .Values.ingress.host }} frontend/
+
+Synchro des mesures : {{ .Values.warehouseApiUrl }}
+  (Service du chart futurekawa-data ; adapter si le pays est dans un autre namespace.)

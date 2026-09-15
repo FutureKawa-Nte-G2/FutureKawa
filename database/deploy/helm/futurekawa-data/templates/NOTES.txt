@@ -1,0 +1,34 @@
+Stack pays FutureKawa « {{ .Release.Name }} » ({{ .Values.pays }}) déployée.
+
+PRÉREQUIS cluster (une seule fois, hors chart) :
+  - opérateur CloudNativePG installé (CRDs postgresql.cnpg.io)
+  - image CNPG+TimescaleDB disponible : {{ .Values.postgres.imageName }}
+    docker build -f Dockerfile.timescaledb -t {{ .Values.postgres.imageName }} .
+  - image de l'API pays disponible : {{ .Values.countryApi.image }}
+    docker build -t {{ .Values.countryApi.image }} Api/
+  - StorageClass réattachable (ex. Longhorn) pour Mosquitto en multi-nœuds
+
+Un seul moteur de données : PostgreSQL/TimescaleDB (métier + relevés).
+  Cluster CNPG  : {{ include "futurekawa-data.fullname" . }}-postgres ({{ .Values.postgres.instances }} instances)
+  Écriture      : {{ include "futurekawa-data.fullname" . }}-postgres-rw:5432
+  Creds appli   : secret {{ include "futurekawa-data.fullname" . }}-postgres-app
+
+Broker MQTT   : {{ include "futurekawa-data.fullname" . }}-mosquitto:1883
+  Contrat capteur : topic futurekawa/<code capteur>
+                    {"measuredAt":"...","temp":21.5,"humidity":54.1}
+
+API pays      : {{ include "futurekawa-data.fullname" . }}-api:{{ .Values.countryApi.service.port }}
+  Vérifier :  kubectl exec deploy/{{ include "futurekawa-data.fullname" . }}-api -- \
+                python -c "import urllib.request;print(urllib.request.urlopen('http://localhost:8000/health').read())"
+
+Migrations    : Job Alembic en hook post-install/post-upgrade.
+  ADR-001 : Api/alembic/ est la source de vérité du schéma. Le Job utilise
+  l'image de l'API, donc le schéma ne peut pas diverger du code qui le lit.
+
+Consumers MQTT : {{ .Values.consumers.replicas }} réplica.
+  Ne pas monter au-delà de 1 sans shared subscriptions ($share) : deux
+  abonnements sur le même client_id écriraient chaque relevé deux fois.
+{{- if not .Values.postgres.backup.enabled }}
+
+Sauvegarde CNPG désactivée : renseigner postgres.backup.* (object store hors VM).
+{{- end }}

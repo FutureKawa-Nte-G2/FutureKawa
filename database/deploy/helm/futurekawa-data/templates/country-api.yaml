@@ -1,0 +1,62 @@
+# API pays (FastAPI). Lue par le siège en HTTP ; elle n'appelle personne.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "futurekawa-data.fullname" . }}-api
+  labels:
+    {{- include "futurekawa-data.labels" . | nindent 4 }}
+    app.kubernetes.io/component: country-api
+spec:
+  replicas: {{ .Values.countryApi.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: country-api
+  template:
+    metadata:
+      labels:
+        {{- include "futurekawa-data.labels" . | nindent 8 }}
+        app.kubernetes.io/component: country-api
+    spec:
+      containers:
+        - name: api
+          image: {{ .Values.countryApi.image | quote }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8000
+          env:
+            {{- include "futurekawa-data.dbEnv" . | nindent 12 }}
+          # /health ne touche pas la base (cf. app/main.py) : il dit que le
+          # process répond. C'est exactement ce qu'on veut pour la liveness ;
+          # la readiness s'appuie sur le même point, la base étant garantie par
+          # le Job de migration qui tourne avant.
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          {{- with .Values.countryApi.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "futurekawa-data.fullname" . }}-api
+  labels:
+    {{- include "futurekawa-data.labels" . | nindent 4 }}
+    app.kubernetes.io/component: country-api
+spec:
+  type: {{ .Values.countryApi.service.type }}
+  selector:
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: country-api
+  ports:
+    - name: http
+      port: {{ .Values.countryApi.service.port }}
+      targetPort: http

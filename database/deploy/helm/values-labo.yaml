@@ -1,0 +1,29 @@
+# Lab EPSI (3 k3s nodes, 4 GB each). Secrets live outside the repo:
+#   -f ~/.config/futurekawa/helm-labo-secrets.yaml
+# Images are imported into each node's containerd (no registry yet): the
+# default IfNotPresent never pulls them.
+
+ingress:
+  host: futurekawa.172.16.146.101.nip.io
+
+postgres:
+  # Also used by the siège cluster: already on the nodes, TimescaleDB unused there.
+  imageName: futurekawa/cnpg-timescaledb:16-ts
+  storage: 2Gi
+
+countryApi:
+  image: futurekawa/country-api:labo
+
+consumers:
+  image: futurekawa/country-api:labo
+
+siegeApi:
+  image: futurekawa/siege-api:labo
+
+frontend:
+  image: futurekawa/frontend:labo
+
+odoo:
+  # Built from database/Dockerfile.odoo (module future_kawa_erp included).
+  image: futurekawa/odoo:labo
+  storage: 2Gi

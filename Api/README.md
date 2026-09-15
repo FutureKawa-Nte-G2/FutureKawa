@@ -55,10 +55,11 @@ première n'est pas refermée, une nouvelle dérive de la salle ne peut plus rie
 ouvrir — elle tombe dans le rattrapage d'`IntegrityError` de `evaluate_reading`
 et se réduit à un marquage de lot. La résolution est ce qui réarme la détection.
 
-Elle ne touche pas à `batches.is_compliant` : réparer une salle ne blanchit pas
-le café qui a passé la nuit hors plage. Lever ce drapeau est un jugement porté
-sur le lot, pas un effet de bord de l'accusé de réception de la salle — et cet
-endpoint-là reste à écrire.
+Résoudre une alerte `condition` remet aussi `batches.is_compliant` à `true` sur
+les lots de l'entrepôt encore en stock. Sans ça, `evaluate_reading` ignore un
+lot déjà non conforme et la salle ne pourrait plus jamais relever d'alerte sur
+ce lot. Les lots déjà expédiés gardent leur drapeau : il trace ce qui est sorti
+hors plage.
 
 Les alertes `expiration` sont lues et affichées, mais **aucune n'est créée** :
 ce n'est pas prévu. Seules les alertes `condition` sont produites, et poussées

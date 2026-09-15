@@ -34,8 +34,8 @@ URL = "/api/alerts"
 OTHER_WAREHOUSE_ID = uuid.UUID("00000000-0000-0000-0000-0000000000e2")
 OTHER_WAREHOUSE_REF = "BR-ENT-02"
 
-# A second batch with its own sensor: a batch already non-compliant never
-# raises again, so replaying on the same batch would prove nothing.
+# A second batch with its own sensor: while the room's alert is active its
+# batch is non-compliant and skipped, so replaying on it would prove nothing.
 SECOND_BATCH_ID = uuid.UUID("00000000-0000-0000-0000-0000000000b2")
 SECOND_BATCH_REF = "BR-2026-00044"
 SECOND_SENSOR_ID = uuid.UUID("00000000-0000-0000-0000-0000000000a2")
@@ -403,23 +403,79 @@ async def test_should_open_a_new_room_alert_once_the_first_is_resolved(
     assert await _count_alerts(session, alert_type="condition", alert_status="active") == 1
 
 
-async def test_should_leave_the_batch_flag_alone_when_resolving(
-    session, client, auth_headers
-):
-    """Fixing the room does not clear coffee that spent the night out of band."""
-    await _assign(session, SENSOR_ID, BATCH_ID)
-    await evaluate_reading(session, _out_of_band(SENSOR_CODE, day=10))
-
+async def _resolve_open_alert(client, auth_headers) -> None:
     opened = (await client.get(URL, params={"warehouse_ref": WAREHOUSE_REF})).json()
-    await client.patch(
+    response = await client.patch(
         f"{URL}/{opened['alerts'][0]['alertId']}/resolve",
         params={"warehouse_ref": WAREHOUSE_REF},
         headers=auth_headers,
     )
+    assert response.status_code == 200
 
-    batch = await session.get(Batch, BATCH_ID)
+
+async def _is_compliant(session, batch_id: uuid.UUID) -> bool:
+    batch = await session.get(Batch, batch_id)
     await session.refresh(batch)
-    assert batch.is_compliant is False
+    return batch.is_compliant
+
+
+async def test_should_restore_the_batch_flag_when_resolving(
+    session, client, auth_headers
+):
+    await _assign(session, SENSOR_ID, BATCH_ID)
+    await evaluate_reading(session, _out_of_band(SENSOR_CODE, day=10))
+    assert await _is_compliant(session, BATCH_ID) is False
+
+    await _resolve_open_alert(client, auth_headers)
+
+    assert await _is_compliant(session, BATCH_ID) is True
+
+
+async def test_should_keep_the_flag_of_a_batch_already_shipped(
+    session, client, auth_headers
+):
+    """What left the room out of band stays recorded as such."""
+    await _assign(session, SENSOR_ID, BATCH_ID)
+    await evaluate_reading(session, _out_of_band(SENSOR_CODE, day=10))
+    batch = await session.get(Batch, BATCH_ID)
+    batch.shipped_at = _at(11).date()
+    await session.commit()
+
+    await _resolve_open_alert(client, auth_headers)
+
+    assert await _is_compliant(session, BATCH_ID) is False
+
+
+async def test_should_not_restore_a_batch_of_another_warehouse(
+    session, client, auth_headers
+):
+    await _add_other_warehouse(session)
+    await _add_second_batch(session)
+    batch = await session.get(Batch, SECOND_BATCH_ID)
+    batch.warehouse_id = OTHER_WAREHOUSE_ID
+    batch.is_compliant = False
+    await session.commit()
+
+    await _assign(session, SENSOR_ID, BATCH_ID)
+    await evaluate_reading(session, _out_of_band(SENSOR_CODE, day=10))
+    await _resolve_open_alert(client, auth_headers)
+
+    assert await _is_compliant(session, SECOND_BATCH_ID) is False
+
+
+async def test_should_raise_again_on_the_same_batch_once_resolved(
+    session, client, auth_headers
+):
+    """Without the flag reset, the batch was skipped and the room went silent."""
+    await _assign(session, SENSOR_ID, BATCH_ID)
+    await evaluate_reading(session, _out_of_band(SENSOR_CODE, day=10))
+    await _resolve_open_alert(client, auth_headers)
+
+    second = await evaluate_reading(session, _out_of_band(SENSOR_CODE, day=20))
+
+    assert second.alert_created is True
+    assert second.alert_push is not None
+    assert await _count_alerts(session, alert_type="condition", alert_status="active") == 1
 
 
 async def test_should_still_require_the_key_after_the_env_var_is_removed(

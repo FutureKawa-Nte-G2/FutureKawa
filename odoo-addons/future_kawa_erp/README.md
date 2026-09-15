@@ -13,8 +13,7 @@ Champs métier ajoutés :
 
 | Champ                       | Type              | Description                                    |
 | --------------------------- | ----------------- | ---------------------------------------------- |
-| `batch_count`               | Integer           | Nombre de lots de café à générer               |
-| `batch_ref`                 | Char              | Références des lots générées (lecture seule)   |
+| `batch_ref`                 | Char              | Référence du lot de remplacement généré (lecture seule) |
 | `quality_grade`             | Selection (A/B/C) | Grade déduit automatiquement du produit choisi |
 | `country`                   | Char              | Pays d'origine                                 |
 | `integration_status`        | Selection         | Statut de synchronisation avec le backend .NET |
@@ -41,10 +40,15 @@ un POST HTTP vers le backend .NET avec le payload suivant :
   "orderDate": "2026-08-03T10:30:00",
   "country": "CO",
   "qualityGrade": "a",
-  "batchReferences": ["LOT-008", "LOT-009"],
+  "batchReferences": ["LOT-009"],
   "lines": [{ "product": "Café Arabica - Grade A", "quantity": 100.0 }]
 }
 ```
+
+`batchReferences` ne contient que la référence du lot de remplacement
+(`batch_ref`) qui va entrer dans le stock. Le backend .NET associe la
+commande au lot le plus ancien déjà en stock (FIFO) et crée ce nouveau lot
+en parallèle — voir la section suivante.
 
 L'URL et le token d'authentification sont configurés via les paramètres système
 Odoo :
@@ -56,6 +60,19 @@ Odoo :
 
 Le backend .NET appelle l'API JSON-RPC d'Odoo pour marquer une commande comme
 expédiée via la méthode `action_mark_shipped()`.
+
+### Allocation des lots (FIFO)
+
+Une commande n'est plus associée à un lot créé spécifiquement pour elle.
+Côté backend .NET, à la réception d'une commande :
+
+1. La commande est associée au lot le plus ancien encore en stock
+   (tri par `StoredAt`, FIFO) et **non déjà associé à une autre commande** :
+   un lot alloué à une commande n'est jamais réutilisé pour une autre.
+2. Un nouveau lot est créé en parallèle avec la référence reçue
+   (`batchReferences`) pour réapprovisionner le stock et intégrer le FIFO.
+3. S'il n'existe aucun lot disponible (stock vide, ou tous les lots déjà
+   alloués), le lot nouvellement créé est utilisé pour honorer la commande.
 
 ## Installation
 

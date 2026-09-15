@@ -1,4 +1,6 @@
 using FutureKawaSiege.Commons.Models.API.Requests;
+using FutureKawaSiege.Commons.Models.API.Responses;
+using FutureKawaSiege.Data.Entities;
 
 namespace FutureKawaSiege.Business.Services.Abstraction;
 
@@ -48,4 +50,25 @@ public interface IAlertService
     /// resolving an already-resolved alert succeeds without changing it.
     /// </summary>
     Task<AlertResolutionResult> ResolveAlertAsync(Guid alertId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Returns a paginated list of alerts, optionally filtered by country code,
+    /// warehouse ID and status, most recent first (#85).
+    /// </summary>
+    Task<AlertListResponseDto> GetAlertsAsync(
+        string? countryCode,
+        Guid? warehouseId,
+        AlertStatus? status,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Returns the batches affected by an alert — its warehouse's batches whose
+    /// storage period overlaps the alert's active period — or null if the alert
+    /// does not exist (#85). See <see cref="AlertBatchDto"/> for why this is a
+    /// computed query rather than a stored relationship.
+    /// </summary>
+    Task<IEnumerable<AlertBatchDto>?> GetAlertBatchesAsync(
+        Guid alertId, CancellationToken cancellationToken = default);
 }

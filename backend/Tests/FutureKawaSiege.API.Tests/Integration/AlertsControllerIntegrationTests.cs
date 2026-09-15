@@ -352,4 +352,426 @@ public class AlertsControllerIntegrationTests : IClassFixture<CustomWebApplicati
         Assert.Equal(AlertStatus.Resolved, resolved.Status);
         Assert.NotNull(resolved.ResolvedAt);
     }
+
+    [Fact]
+    public async Task GetAll_Should_Return401_When_NoJwt()
+    {
+        // Act
+        var response = await _client.GetAsync("/api/alerts");
+
+        // Assert
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(0, 10)]
+    [InlineData(1, 0)]
+    [InlineData(1, 101)]
+    public async Task GetAll_Should_Return400_WithInvalidPagination(int page, int pageSize)
+    {
+        // Arrange
+        var token = await GetAccessTokenAsync();
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        // Act
+        var response = await _client.GetAsync($"/api/alerts?page={page}&pageSize={pageSize}");
+
+        // Assert
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetAll_Should_Return400_WithInvalidStatus()
+    {
+        // Arrange
+        var token = await GetAccessTokenAsync();
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        // Act
+        var response = await _client.GetAsync("/api/alerts?status=not_a_status");
+
+        // Assert
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetAll_Should_Return200_WithValidAuth()
+    {
+        // Arrange
+        var token = await GetAccessTokenAsync();
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        // Act
+        var response = await _client.GetAsync("/api/alerts?page=1&pageSize=10");
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<ApiResponse<AlertListResponseDto>>();
+        Assert.NotNull(body);
+        Assert.True(body.Success);
+        Assert.NotNull(body.Data);
+    }
+
+    [Fact]
+    public async Task GetAll_Should_Return200_And_FilterByWarehouseAndStatus()
+    {
+        // Arrange: fresh warehouse (isolated from other tests' data) with one active
+        // and one resolved alert, so the status filter is exercised against known data.
+        await SeedTestDataAsync();
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var country = db.Countries.First(c => c.Code == "BR");
+        var warehouse = new Warehouse
+        {
+            Id = Guid.NewGuid(),
+            CountryId = country.Id,
+            Name = $"WH-LIST-{Guid.NewGuid().ToString()[..8]}",
+            Reference = $"WH-LIST-{Guid.NewGuid().ToString()[..8]}"
+        };
+        db.Warehouses.Add(warehouse);
+        var activeAlert = new Alert
+        {
+            Id = Guid.NewGuid(),
+            WarehouseId = warehouse.Id,
+            Type = AlertType.Temperature,
+            Status = AlertStatus.Active,
+            CreatedAt = DateTime.UtcNow
+        };
+        var resolvedAlert = new Alert
+        {
+            Id = Guid.NewGuid(),
+            WarehouseId = warehouse.Id,
+            Type = AlertType.Humidity,
+            Status = AlertStatus.Resolved,
+            CreatedAt = DateTime.UtcNow.AddDays(-1),
+            ResolvedAt = DateTime.UtcNow
+        };
+        db.Alerts.AddRange(activeAlert, resolvedAlert);
+        await db.SaveChangesAsync();
+
+        var token = await GetAccessTokenAsync();
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        // Act
+        var response = await _client.GetAsync($"/api/alerts?warehouseId={warehouse.Id}&status=active");
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<ApiResponse<AlertListResponseDto>>();
+        Assert.NotNull(body);
+        Assert.True(body.Success);
+        var returned = Assert.Single(body.Data!.Alerts, a => a.Id == activeAlert.Id);
+        Assert.Equal("active", returned.Status);
+        Assert.DoesNotContain(body.Data.Alerts, a => a.Id == resolvedAlert.Id);
+    }
+
+    [Fact]
+    public async Task GetAll_Should_ReturnMostRecentFirst()
+    {
+        // Arrange: fresh warehouse with two alerts created at different times, so the
+        // sort order is exercised against known data.
+        await SeedTestDataAsync();
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var country = db.Countries.First(c => c.Code == "BR");
+        var warehouse = new Warehouse
+        {
+            Id = Guid.NewGuid(),
+            CountryId = country.Id,
+            Name = $"WH-SORT-{Guid.NewGuid().ToString()[..8]}",
+            Reference = $"WH-SORT-{Guid.NewGuid().ToString()[..8]}"
+        };
+        db.Warehouses.Add(warehouse);
+        var older = new Alert
+        {
+            Id = Guid.NewGuid(),
+            WarehouseId = warehouse.Id,
+            Type = AlertType.Temperature,
+            Status = AlertStatus.Active,
+            CreatedAt = DateTime.UtcNow.AddDays(-3)
+        };
+        var newer = new Alert
+        {
+            Id = Guid.NewGuid(),
+            WarehouseId = warehouse.Id,
+            Type = AlertType.Humidity,
+            Status = AlertStatus.Active,
+            CreatedAt = DateTime.UtcNow
+        };
+        db.Alerts.AddRange(older, newer);
+        await db.SaveChangesAsync();
+
+        var token = await GetAccessTokenAsync();
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        // Act
+        var response = await _client.GetAsync($"/api/alerts?warehouseId={warehouse.Id}");
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<ApiResponse<AlertListResponseDto>>();
+        Assert.NotNull(body);
+        var ids = body!.Data!.Alerts.Select(a => a.Id).ToList();
+        Assert.Equal(new[] { newer.Id, older.Id }, ids);
+    }
+
+    [Fact]
+    public async Task GetBatches_Should_Return401_When_NoJwt()
+    {
+        // Act
+        var response = await _client.GetAsync($"/api/alerts/{Guid.NewGuid()}/batches");
+
+        // Assert
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetBatches_Should_Return404_When_AlertDoesNotExist()
+    {
+        // Arrange
+        var token = await GetAccessTokenAsync();
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        // Act
+        var response = await _client.GetAsync($"/api/alerts/{Guid.NewGuid()}/batches");
+
+        // Assert
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetBatches_Should_Return200_And_IncludeBatch_OverlappingAlertPeriod()
+    {
+        // Arrange: fresh warehouse/farm, an alert active from -3d to -1d, and a batch
+        // stored at -2d (inside the alert's active period), still in stock.
+        await SeedTestDataAsync();
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var country = db.Countries.First(c => c.Code == "BR");
+        var warehouse = new Warehouse
+        {
+            Id = Guid.NewGuid(),
+            CountryId = country.Id,
+            Name = $"WH-BATCHES-{Guid.NewGuid().ToString()[..8]}",
+            Reference = $"WH-BATCHES-{Guid.NewGuid().ToString()[..8]}"
+        };
+        var farm = new Farm
+        {
+            Id = Guid.NewGuid(),
+            CountryId = country.Id,
+            Name = "Fazenda Teste",
+            Reference = $"FARM-{Guid.NewGuid().ToString()[..8]}"
+        };
+        var alert = new Alert
+        {
+            Id = Guid.NewGuid(),
+            WarehouseId = warehouse.Id,
+            Type = AlertType.Temperature,
+            Status = AlertStatus.Resolved,
+            CreatedAt = DateTime.UtcNow.AddDays(-3),
+            ResolvedAt = DateTime.UtcNow.AddDays(-1)
+        };
+        var overlappingBatch = new Batch
+        {
+            Id = Guid.NewGuid(),
+            WarehouseId = warehouse.Id,
+            FarmId = farm.Id,
+            Reference = "BATCH-OVERLAP-001",
+            StoredAt = DateTime.UtcNow.AddDays(-2), // inside [-3d, -1d]
+            ShippedAt = null,
+            QualityGrade = BatchQualityGrade.A,
+            Status = BatchStatus.Stored
+        };
+        db.AddRange(warehouse, farm, alert, overlappingBatch);
+        await db.SaveChangesAsync();
+
+        var token = await GetAccessTokenAsync();
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        // Act
+        var response = await _client.GetAsync($"/api/alerts/{alert.Id}/batches");
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<ApiResponse<IEnumerable<AlertBatchDto>>>();
+        Assert.NotNull(body);
+        Assert.True(body.Success);
+        var returned = Assert.Single(body.Data!, b => b.Id == overlappingBatch.Id);
+        Assert.Equal("BATCH-OVERLAP-001", returned.BatchRef);
+        Assert.Equal("Fazenda Teste", returned.FarmName);
+        Assert.Equal("A", returned.QualityGrade);
+    }
+
+    [Fact]
+    public async Task GetBatches_Should_ExcludeBatch_StoredAfterAlertResolved()
+    {
+        // Arrange: alert resolved at -1d, batch stored "now" (after resolution) -> no overlap.
+        await SeedTestDataAsync();
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var country = db.Countries.First(c => c.Code == "BR");
+        var warehouse = new Warehouse
+        {
+            Id = Guid.NewGuid(),
+            CountryId = country.Id,
+            Name = $"WH-NOOVERLAP-{Guid.NewGuid().ToString()[..8]}",
+            Reference = $"WH-NOOVERLAP-{Guid.NewGuid().ToString()[..8]}"
+        };
+        var farm = new Farm
+        {
+            Id = Guid.NewGuid(),
+            CountryId = country.Id,
+            Name = "Fazenda Teste",
+            Reference = $"FARM-{Guid.NewGuid().ToString()[..8]}"
+        };
+        var alert = new Alert
+        {
+            Id = Guid.NewGuid(),
+            WarehouseId = warehouse.Id,
+            Type = AlertType.Temperature,
+            Status = AlertStatus.Resolved,
+            CreatedAt = DateTime.UtcNow.AddDays(-3),
+            ResolvedAt = DateTime.UtcNow.AddDays(-1)
+        };
+        var laterBatch = new Batch
+        {
+            Id = Guid.NewGuid(),
+            WarehouseId = warehouse.Id,
+            FarmId = farm.Id,
+            Reference = "BATCH-LATER-001",
+            StoredAt = DateTime.UtcNow, // after the alert was resolved
+            ShippedAt = null,
+            QualityGrade = BatchQualityGrade.B,
+            Status = BatchStatus.Stored
+        };
+        db.AddRange(warehouse, farm, alert, laterBatch);
+        await db.SaveChangesAsync();
+
+        var token = await GetAccessTokenAsync();
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        // Act
+        var response = await _client.GetAsync($"/api/alerts/{alert.Id}/batches");
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<ApiResponse<IEnumerable<AlertBatchDto>>>();
+        Assert.NotNull(body);
+        Assert.DoesNotContain(body.Data!, b => b.Id == laterBatch.Id);
+    }
+
+    [Fact]
+    public async Task GetBatches_Should_ExcludeBatch_ShippedBeforeAlertCreated()
+    {
+        // Arrange: alert created at -1d (still active), batch shipped at -5d -> no overlap.
+        await SeedTestDataAsync();
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var country = db.Countries.First(c => c.Code == "BR");
+        var warehouse = new Warehouse
+        {
+            Id = Guid.NewGuid(),
+            CountryId = country.Id,
+            Name = $"WH-SHIPPED-{Guid.NewGuid().ToString()[..8]}",
+            Reference = $"WH-SHIPPED-{Guid.NewGuid().ToString()[..8]}"
+        };
+        var farm = new Farm
+        {
+            Id = Guid.NewGuid(),
+            CountryId = country.Id,
+            Name = "Fazenda Teste",
+            Reference = $"FARM-{Guid.NewGuid().ToString()[..8]}"
+        };
+        var alert = new Alert
+        {
+            Id = Guid.NewGuid(),
+            WarehouseId = warehouse.Id,
+            Type = AlertType.Temperature,
+            Status = AlertStatus.Active,
+            CreatedAt = DateTime.UtcNow.AddDays(-1)
+        };
+        var oldShippedBatch = new Batch
+        {
+            Id = Guid.NewGuid(),
+            WarehouseId = warehouse.Id,
+            FarmId = farm.Id,
+            Reference = "BATCH-OLD-SHIPPED",
+            StoredAt = DateTime.UtcNow.AddDays(-10),
+            ShippedAt = DateTime.UtcNow.AddDays(-5), // shipped before the alert was created
+            QualityGrade = BatchQualityGrade.C,
+            Status = BatchStatus.Shipped
+        };
+        db.AddRange(warehouse, farm, alert, oldShippedBatch);
+        await db.SaveChangesAsync();
+
+        var token = await GetAccessTokenAsync();
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        // Act
+        var response = await _client.GetAsync($"/api/alerts/{alert.Id}/batches");
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<ApiResponse<IEnumerable<AlertBatchDto>>>();
+        Assert.NotNull(body);
+        Assert.DoesNotContain(body.Data!, b => b.Id == oldShippedBatch.Id);
+    }
+
+    [Fact]
+    public async Task GetBatches_Should_IncludeBatch_StillInStock_When_AlertStillActive()
+    {
+        // Arrange: alert still active (no ResolvedAt), batch stored well before and
+        // still in stock (no ShippedAt) -> both open-ended, must overlap.
+        await SeedTestDataAsync();
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var country = db.Countries.First(c => c.Code == "BR");
+        var warehouse = new Warehouse
+        {
+            Id = Guid.NewGuid(),
+            CountryId = country.Id,
+            Name = $"WH-OPEN-{Guid.NewGuid().ToString()[..8]}",
+            Reference = $"WH-OPEN-{Guid.NewGuid().ToString()[..8]}"
+        };
+        var farm = new Farm
+        {
+            Id = Guid.NewGuid(),
+            CountryId = country.Id,
+            Name = "Fazenda Teste",
+            Reference = $"FARM-{Guid.NewGuid().ToString()[..8]}"
+        };
+        var alert = new Alert
+        {
+            Id = Guid.NewGuid(),
+            WarehouseId = warehouse.Id,
+            Type = AlertType.Humidity,
+            Status = AlertStatus.Active,
+            CreatedAt = DateTime.UtcNow.AddHours(-2)
+        };
+        var openBatch = new Batch
+        {
+            Id = Guid.NewGuid(),
+            WarehouseId = warehouse.Id,
+            FarmId = farm.Id,
+            Reference = "BATCH-OPEN-001",
+            StoredAt = DateTime.UtcNow.AddDays(-30),
+            ShippedAt = null,
+            QualityGrade = BatchQualityGrade.A,
+            Status = BatchStatus.Stored
+        };
+        db.AddRange(warehouse, farm, alert, openBatch);
+        await db.SaveChangesAsync();
+
+        var token = await GetAccessTokenAsync();
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        // Act
+        var response = await _client.GetAsync($"/api/alerts/{alert.Id}/batches");
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<ApiResponse<IEnumerable<AlertBatchDto>>>();
+        Assert.NotNull(body);
+        Assert.Contains(body.Data!, b => b.Id == openBatch.Id);
+    }
 }

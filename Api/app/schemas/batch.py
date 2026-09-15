@@ -66,6 +66,14 @@ class BatchCreate(BaseModel):
         return normalised
 
 
+class BatchShip(BaseModel):
+    """Sent by head office when the order carrying the batch ships."""
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    shipped_at: date
+
+
 class BatchRead(BaseModel):
     """A batch as persisted, complete.
 

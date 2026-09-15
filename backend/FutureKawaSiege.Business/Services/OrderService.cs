@@ -22,6 +22,7 @@ public class OrderService : IOrderService
     private readonly IOrderRepository _orderRepository;
     private readonly IOdooIntegrationService _odooIntegrationService;
     private readonly IOrderShipmentScheduler _shipmentScheduler;
+    private readonly ILocalBatchPushClient _batchPushClient;
     private readonly AppDbContext _context;
     private readonly ILogger<OrderService> _logger;
 
@@ -29,12 +30,14 @@ public class OrderService : IOrderService
         IOrderRepository orderRepository,
         IOdooIntegrationService odooIntegrationService,
         IOrderShipmentScheduler shipmentScheduler,
+        ILocalBatchPushClient batchPushClient,
         AppDbContext context,
         ILogger<OrderService> logger)
     {
         _orderRepository = orderRepository;
         _odooIntegrationService = odooIntegrationService;
         _shipmentScheduler = shipmentScheduler;
+        _batchPushClient = batchPushClient;
         _context = context;
         _logger = logger;
     }
@@ -164,6 +167,31 @@ public class OrderService : IOrderService
             {
                 batch.ShippedAt = DateTime.UtcNow.Date;
             }
+
+            var countryCode = batch.Farm?.Country?.Code;
+            if (string.IsNullOrWhiteSpace(countryCode))
+            {
+                _logger.LogWarning(
+                    "Cannot push shipment of batch {BatchReference}: no country resolved for its farm.",
+                    batch.Reference);
+            }
+            else
+            {
+                try
+                {
+                    await _batchPushClient.PushShipmentAsync(
+                        countryCode,
+                        batch.Reference,
+                        DateOnly.FromDateTime(batch.ShippedAt.Value),
+                        cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex,
+                        "Error pushing shipment of batch {BatchReference} to country {CountryCode}",
+                        batch.Reference, countryCode);
+                }
+            }
         }
 
         _logger.LogInformation(
@@ -215,18 +243,17 @@ public class OrderService : IOrderService
     /// Implements FIFO batch allocation for a newly received order.
     ///
     /// Instead of creating a batch dedicated to the order, the order is
-    /// associated with the oldest available batch currently in stock (FIFO),
-    /// while a new batch is created in parallel to replenish the stock pool
-    /// for future orders. Missing batches are created with a default
-    /// warehouse and farm so the order flow remains functional.
+    /// associated with the oldest eligible batch currently in stock (FIFO —
+    /// not yet shipped, not already tied to another order, matching this
+    /// order's country and quality grade, not expired, and not in a
+    /// warehouse under an active alert), while a new batch is created in
+    /// parallel to replenish the stock pool for future orders. Missing
+    /// batches are created with a default warehouse and farm so the order
+    /// flow remains functional, and pushed to the country's local API.
     ///
-    /// A batch already associated with another order is considered
-    /// allocated and is excluded from the FIFO pick, so two orders never
-    /// end up sharing the same batch.
-    ///
-    /// If no batch is available (e.g. the very first order, or every batch
-    /// already allocated), the newly created batch is used to fulfill the
-    /// order instead.
+    /// If no eligible batch is available (e.g. the very first order, empty
+    /// stock, or every batch already allocated / ineligible), the newly
+    /// created batch is used to fulfill the order instead.
     /// </summary>
     private async Task<List<Batch>> ResolveOrderBatchAsync(
         IEnumerable<string> batchReferences,
@@ -234,11 +261,22 @@ public class OrderService : IOrderService
         Guid? countryId,
         CancellationToken cancellationToken)
     {
-        // Oldest available batch currently in stock, before this order's
-        // replenishment batch is created, so it never allocates the batch
-        // to itself. A batch already tied to an order is excluded.
+        // Oldest eligible batch currently in stock: not yet shipped, not
+        // already tied to another order, matching this order's country and
+        // quality grade, not expired (>365 days), and not in a warehouse
+        // under an active alert (same eligibility rule as the previous
+        // ResolveBatchesAsync / BatchService.ComputeStatus). Read before
+        // this order's replenishment batch is created, so it never
+        // allocates the batch to itself.
+        var expirationThreshold = DateTime.UtcNow.AddDays(-365);
+
         var oldestBatch = await _context.Batches
-            .Where(b => b.ShippedAt == null && !b.Orders.Any())
+            .Where(b => b.ShippedAt == null
+                && !b.Orders.Any()
+                && (countryId == null || b.Warehouse.CountryId == countryId)
+                && b.QualityGrade == qualityGrade
+                && b.StoredAt > expirationThreshold
+                && !b.Warehouse.Alerts.Any(a => a.Status == AlertStatus.Active))
             .OrderBy(b => b.StoredAt)
             .FirstOrDefaultAsync(cancellationToken);
 
@@ -246,6 +284,8 @@ public class OrderService : IOrderService
             .Where(r => !string.IsNullOrWhiteSpace(r))
             .Distinct()
             .ToList();
+
+        var newBatches = new List<Batch>();
 
         if (newReferences.Count > 0)
         {
@@ -261,18 +301,22 @@ public class OrderService : IOrderService
             if (missingReferences.Count > 0)
             {
                 var defaults = await EnsureDefaultBatchDependenciesAsync(countryId, cancellationToken);
+                var storedAt = DateTime.UtcNow.Date;
 
                 foreach (var reference in missingReferences)
                 {
-                    _context.Batches.Add(new Batch
+                    var batch = new Batch
                     {
                         Reference = reference,
                         WarehouseId = defaults.WarehouseId,
                         FarmId = defaults.FarmId,
-                        StoredAt = DateTime.UtcNow.Date,
+                        StoredAt = storedAt,
                         QualityGrade = qualityGrade,
                         Status = BatchStatus.Stored,
-                    });
+                    };
+
+                    _context.Batches.Add(batch);
+                    newBatches.Add(batch);
                 }
 
                 await _context.SaveChangesAsync(cancellationToken);
@@ -280,23 +324,43 @@ public class OrderService : IOrderService
                     "Created {Count} new batch(es) entering the FIFO stock pool: {References}",
                     missingReferences.Count,
                     string.Join(", ", missingReferences));
+
+                foreach (var batch in newBatches)
+                {
+                    try
+                    {
+                        await _batchPushClient.PushBatchAsync(
+                            defaults.CountryCode,
+                            batch.Reference,
+                            defaults.FarmReference,
+                            defaults.WarehouseReference,
+                            DateOnly.FromDateTime(storedAt),
+                            qualityGrade,
+                            cancellationToken);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex,
+                            "Error pushing batch {BatchReference} to country {CountryCode}",
+                            batch.Reference, defaults.CountryCode);
+                    }
+                }
             }
         }
 
         if (oldestBatch is not null)
         {
             _logger.LogInformation(
-                "Order associated with oldest available batch in stock (FIFO): {Reference} (stored on {StoredAt:yyyy-MM-dd})",
+                "Order associated with oldest eligible batch in stock (FIFO): {Reference} (stored on {StoredAt:yyyy-MM-dd})",
                 oldestBatch.Reference,
                 oldestBatch.StoredAt);
             return [oldestBatch];
         }
 
-        // No batch was available (empty stock, or all batches already
-        // allocated to another order): fall back to the batch(es) just created.
-        return await _context.Batches
-            .Where(b => newReferences.Contains(b.Reference))
-            .ToListAsync(cancellationToken);
+        // No eligible batch was available (empty stock, all batches already
+        // allocated, or none matching country/quality/expiry/alert): fall
+        // back to the batch(es) just created.
+        return newBatches;
     }
 
     private static BatchQualityGrade ParseQualityGrade(string? grade)
@@ -309,9 +373,10 @@ public class OrderService : IOrderService
         };
     }
 
-    private async Task<(Guid WarehouseId, Guid FarmId)> EnsureDefaultBatchDependenciesAsync(
-        Guid? countryId,
-        CancellationToken cancellationToken)
+    private async Task<(Guid WarehouseId, Guid FarmId, string WarehouseReference, string FarmReference, string CountryCode)>
+        EnsureDefaultBatchDependenciesAsync(
+            Guid? countryId,
+            CancellationToken cancellationToken)
     {
         var country = countryId is not null
             ? await _context.Countries.FindAsync(new object?[] { countryId.Value }, cancellationToken)
@@ -327,7 +392,7 @@ public class OrderService : IOrderService
             .FirstOrDefaultAsync(f => f.CountryId == country.Id, cancellationToken)
             ?? await CreateDefaultFarmAsync(country.Id, cancellationToken);
 
-        return (warehouse.Id, farm.Id);
+        return (warehouse.Id, farm.Id, warehouse.Reference, farm.Reference, country.Code);
     }
 
     private async Task<Guid?> ResolveCountryIdAsync(

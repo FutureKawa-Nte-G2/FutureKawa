@@ -106,13 +106,14 @@ export interface Measurement {
 // --- Alerts (warehouse temperature/humidity threshold breaches) ---
 // Mirrors the backend Alert entity (#76): WarehouseId only, no BatchId — an
 // alert is scoped to a warehouse's readings, never to a specific batch (see
-// backlog-batches-alertes-pr.md). GET /api/alerts doesn't exist server-side
-// yet (backlog-frontend-mesures-alertes-collecte.md), so this is the target
-// contract the frontend mock aligns to, not a confirmed wire format. Enum
-// values follow this project's convention of exposing backend enums as
-// lowercase strings on the wire (see BatchStatus above); backend enum member
-// names are PascalCase (AlertType.Temperature/Humidity, AlertStatus.Active/Resolved).
-export type AlertType = 'temperature' | 'humidity';
+// backlog-batches-alertes-pr.md). Backed by GET /api/alerts (#85). Enum values
+// follow this project's convention of exposing backend enums as lowercase
+// strings on the wire (see BatchStatus above); backend enum member names are
+// PascalCase (AlertType.Temperature/Humidity/Condition/Expiration,
+// AlertStatus.Active/Resolved). "condition" is the country API's own
+// vocabulary: it covers a temperature-or-humidity breach without
+// distinguishing which one; "expiration" concerns a batch, not a reading.
+export type AlertType = 'temperature' | 'humidity' | 'condition' | 'expiration';
 export type AlertStatus = 'active' | 'resolved';
 
 export interface Alert {
@@ -137,11 +138,10 @@ export interface AlertListResponse {
 }
 
 // A batch considered "affected" by an alert (the "liste des lots" expand row, #76).
-// No real backend source exists yet: Alert carries no BatchId by design (see
-// backlog-batches-alertes-pr.md) — the eventual computation is a date-overlap
-// query (batch StoredAt/ShippedAt vs alert CreatedAt/ResolvedAt), never
-// implemented. Mocked for this issue only; shape may change once that
-// endpoint (GET /api/alerts/{id}/batches) is actually built.
+// Alert carries no BatchId by design (see backlog-batches-alertes-pr.md) — the
+// backend computes this via a date-overlap query (batch StoredAt/ShippedAt vs
+// alert CreatedAt/ResolvedAt) in BatchRepository. Backed by
+// GET /api/alerts/{id}/batches (#85).
 export interface AlertBatch {
   id: string;
   countryCode: string;

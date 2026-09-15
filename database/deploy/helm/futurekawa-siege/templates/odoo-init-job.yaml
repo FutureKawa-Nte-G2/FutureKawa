@@ -1,0 +1,74 @@
+{{- if .Values.odoo.enabled }}
+# Initialise Odoo à chaque install/upgrade, sans intervention manuelle :
+#   1. crée la base et installe le module future_kawa_erp (sans effet s'il l'est
+#      déjà — pas de -u, qui réécrirait les paramètres système du module) ;
+#   2. aligne le compte admin sur celui qu'utilise le siège en JSON-RPC ;
+#   3. pointe le webhook vers le Service du siège. La valeur livrée par le
+#      module vise le nom de service du docker-compose, injoignable ici.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "futurekawa-siege.fullname" . }}-odoo-init
+  labels:
+    {{- include "futurekawa-siege.labels" . | nindent 4 }}
+    app.kubernetes.io/component: odoo-init
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "10"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        {{- include "futurekawa-siege.labels" . | nindent 8 }}
+        app.kubernetes.io/component: odoo-init
+    spec:
+      restartPolicy: Never
+      initContainers:
+        - name: wait-for-odoo-db
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - until nc -z {{ include "futurekawa-siege.fullname" . }}-odoo-db 5432; do echo "odoo-db pas prête"; sleep 3; done
+      containers:
+        - name: odoo-init
+          image: {{ .Values.odoo.image | quote }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          env:
+            - name: ODOO_ADMIN_LOGIN
+              value: {{ .Values.odoo.adminLogin | quote }}
+            - name: ODOO_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "futurekawa-siege.fullname" . }}-secrets
+                  key: ODOO_ADMIN_PASSWORD
+            - name: ODOO_WEBHOOK_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "futurekawa-siege.fullname" . }}-secrets
+                  key: ODOO_WEBHOOK_TOKEN
+            - name: WEBHOOK_URL
+              value: http://{{ include "futurekawa-siege.fullname" . }}-api:8080/api/integration/odoo/orders
+          command:
+            - sh
+            - -ec
+            - |
+              DB_ARGS="--db_host={{ include "futurekawa-siege.fullname" . }}-odoo-db --db_user=odoo --db_password=odoo -d {{ .Values.odoo.dbName }} --no-http"
+              odoo $DB_ARGS -i future_kawa_erp{{ if not .Values.odoo.withDemo }} --without-demo=all{{ end }} --stop-after-init
+              odoo shell $DB_ARGS <<'PY'
+              import os
+              admin = env.ref('base.user_admin')
+              admin.write({'login': os.environ['ODOO_ADMIN_LOGIN'], 'password': os.environ['ODOO_ADMIN_PASSWORD']})
+              params = env['ir.config_parameter'].sudo()
+              params.set_param('future_kawa.webhook_url', os.environ['WEBHOOK_URL'])
+              params.set_param('future_kawa.webhook_token', os.environ['ODOO_WEBHOOK_TOKEN'])
+              env.cr.commit()
+              print('odoo-init OK:', admin.login, params.get_param('future_kawa.webhook_url'))
+              PY
+          {{- with .Values.odoo.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+{{- end }}

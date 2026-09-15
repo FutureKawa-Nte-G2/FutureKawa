@@ -16,6 +16,7 @@ TS_IMAGE  ?= $(REGISTRY)/cnpg-timescaledb:16-ts
 API_IMAGE ?= futurekawa/country-api:dev
 SIEGE_IMAGE    ?= futurekawa/siege-api:dev
 FRONTEND_IMAGE ?= futurekawa/frontend:dev
+ODOO_IMAGE     ?= futurekawa/odoo:dev
 
 # Hôte servant frontend et API sur la même origine. Le frontend inline cette
 # valeur dans son bundle au build : la changer impose de reconstruire l'image,
@@ -42,13 +43,14 @@ validate: ## Valide les charts Helm et le Terraform
 	@cd $(TF) && terraform fmt -check >/dev/null && terraform validate >/dev/null && echo "terraform OK"
 
 # ---- Images ----
-images: ## Build les 4 images (TimescaleDB, API pays, siège, frontend)
+images: ## Build les 5 images (TimescaleDB, API pays, siège, frontend, Odoo)
 	docker build -f Dockerfile.timescaledb -t $(TS_IMAGE) .
 	docker build -t $(API_IMAGE) ../Api
 	docker build -t $(SIEGE_IMAGE) ../backend
 	docker build -t $(FRONTEND_IMAGE) \
 	  --build-arg NEXT_PUBLIC_API_BASE_URL=http://$(INGRESS_HOST) \
 	  --build-arg NEXT_PUBLIC_USE_MOCKS=false ../frontend
+	docker build -f Dockerfile.odoo -t $(ODOO_IMAGE) ../odoo-addons
 
 # ---- k8s ----
 operators: ## Installe CNPG (+ Longhorn si INSTALL_LONGHORN=true) ; KUBECONFIG requis
@@ -74,6 +76,7 @@ deploy-siege: ## Déploie la stack siège (un seul release, central)
 	  -n $(NS) --create-namespace --wait --timeout 10m \
 	  --set siegeApi.image=$(SIEGE_IMAGE) \
 	  --set frontend.image=$(FRONTEND_IMAGE) \
+	  --set odoo.image=$(ODOO_IMAGE) \
 	  --set ingress.host=$(INGRESS_HOST)
 
 infra: ## Terraform : provisionne les VMs + k3s (nécessite terraform.tfvars)
@@ -87,7 +90,7 @@ k3d-up: ## Crée un cluster k3d local (HTTP sur :80, MQTT sur :1883)
 	  -p '80:80@loadbalancer' -p '1883:1883@loadbalancer' --wait
 
 k3d-load: images ## Importe les images dans le cluster k3d
-	k3d image import $(TS_IMAGE) $(API_IMAGE) $(SIEGE_IMAGE) $(FRONTEND_IMAGE) -c $(K3D_CLUSTER)
+	k3d image import $(TS_IMAGE) $(API_IMAGE) $(SIEGE_IMAGE) $(FRONTEND_IMAGE) $(ODOO_IMAGE) -c $(K3D_CLUSTER)
 
 k3d: k3d-up k3d-load ## Cluster + images + opérateurs + déploiement, en local
 	$(MAKE) operators INSTALL_LONGHORN=false

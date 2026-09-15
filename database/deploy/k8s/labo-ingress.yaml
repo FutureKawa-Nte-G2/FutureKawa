@@ -1,0 +1,40 @@
+# Lab EPSI: exposes the ERP and the Brazil country API next to the siège UI.
+# nip.io resolves <anything>.172.16.146.101.nip.io to that IP; Traefik routes
+# by host name and serves HTTPS with its self-signed certificate.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: labo-odoo
+  namespace: futurekawa
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: odoo.172.16.146.101.nip.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: siege-futurekawa-siege-odoo
+                port:
+                  number: 8069
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: labo-api-br
+  namespace: futurekawa
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: br.172.16.146.101.nip.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: fk-futurekawa-data-api
+                port:
+                  number: 8000

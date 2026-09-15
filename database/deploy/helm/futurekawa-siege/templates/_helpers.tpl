@@ -48,7 +48,7 @@ le seed tourne contre une base différente de celle que l'API lira.
 - name: Odoo__Db
   value: {{ .Values.odoo.dbName | quote }}
 - name: Odoo__Username
-  value: admin@admin.com
+  value: {{ .Values.odoo.adminLogin | quote }}
 - name: Odoo__Password
   valueFrom:
     secretKeyRef:
@@ -77,4 +77,17 @@ backoffLimit avant que la base ne réponde.
       until nc -z {{ include "futurekawa-siege.fullname" . }}-db-rw 5432; do
         echo "base du siège pas encore prête"; sleep 3;
       done
+{{- end -}}
+
+{{/*
+Fichier odoo.conf, partagé par le Secret et l'annotation de checksum du pod.
+*/}}
+{{- define "futurekawa-siege.odooConf" -}}
+[options]
+addons_path = /mnt/extra-addons
+data_dir = /var/lib/odoo
+admin_passwd = {{ required "odoo.masterPassword est requis" .Values.odoo.masterPassword }}
+list_db = False
+db_name = {{ .Values.odoo.dbName }}
+proxy_mode = True
 {{- end -}}

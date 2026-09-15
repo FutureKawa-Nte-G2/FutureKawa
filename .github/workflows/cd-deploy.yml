@@ -44,6 +44,7 @@ jobs:
       API_IMAGE: futurekawa/country-api:ci
       SIEGE_IMAGE: futurekawa/siege-api:ci
       FRONTEND_IMAGE: futurekawa/frontend:ci
+      ODOO_IMAGE: futurekawa/odoo:ci
       INGRESS_HOST: futurekawa.localhost
 
     steps:
@@ -92,6 +93,10 @@ jobs:
             --build-arg NEXT_PUBLIC_USE_MOCKS=false \
             frontend/
 
+      - name: Image Odoo
+        # Module future_kawa_erp intégré : le Job odoo-init l'installe.
+        run: docker build -f database/Dockerfile.odoo -t "$ODOO_IMAGE" odoo-addons/
+
       # --- Cluster --------------------------------------------------------
 
       - name: Installer k3d
@@ -136,7 +141,7 @@ jobs:
         run: |
           docker images --format '{{.Repository}}:{{.Tag}} {{.Size}}' | grep futurekawa
           df -h / | tail -1
-          k3d image import -c futurekawa "$TS_IMAGE" "$API_IMAGE" "$SIEGE_IMAGE" "$FRONTEND_IMAGE"
+          k3d image import -c futurekawa "$TS_IMAGE" "$API_IMAGE" "$SIEGE_IMAGE" "$FRONTEND_IMAGE" "$ODOO_IMAGE"
           df -h / | tail -1
 
       # --- Déploiement ----------------------------------------------------
@@ -156,6 +161,7 @@ jobs:
             -n "$NS" --create-namespace --wait --timeout 10m \
             --set siegeApi.image="$SIEGE_IMAGE" \
             --set frontend.image="$FRONTEND_IMAGE" \
+            --set odoo.image="$ODOO_IMAGE" \
             --set ingress.host="$INGRESS_HOST"
 
       - name: État du déploiement

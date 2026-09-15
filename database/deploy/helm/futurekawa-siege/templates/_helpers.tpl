@@ -48,7 +48,7 @@ le seed tourne contre une base différente de celle que l'API lira.
 - name: Odoo__Db
   value: {{ .Values.odoo.dbName | quote }}
 - name: Odoo__Username
-  value: admin@admin.com
+  value: {{ .Values.odoo.adminLogin | quote }}
 - name: Odoo__Password
   valueFrom:
     secretKeyRef:

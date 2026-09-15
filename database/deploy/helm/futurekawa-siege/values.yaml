@@ -54,11 +54,18 @@ frontend:
 
 odoo:
   enabled: true
-  image: odoo:18.0
+  # Image odoo:18.0 + module future_kawa_erp (database/Dockerfile.odoo) : l'image
+  # officielle seule ferait échouer le Job odoo-init, faute de module.
+  image: futurekawa/odoo:dev
   dbImage: postgres:16
   storage: 5Gi
   storageClass: ""
+  # Compte admin posé par le Job odoo-init, et utilisé par le siège en JSON-RPC.
+  adminLogin: admin@admin.com
   adminPassword: Not24get
+  # Données de démonstration Odoo (et celles du module : 3 cafés, 1 client).
+  # Lu uniquement à la création de la base.
+  withDemo: false
   dbName: futurekawa
   webhookToken: futurekawa-webhook-shared-token
   resources:

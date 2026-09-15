@@ -1,0 +1,5 @@
+# Odoo with the FutureKawa ERP module baked in. docker-compose mounts
+# odoo-addons/ as a volume; a Kubernetes pod has no access to the repo, so the
+# module must ship inside the image. Build context: odoo-addons/.
+FROM odoo:18.0
+COPY --chown=odoo:odoo . /mnt/extra-addons/

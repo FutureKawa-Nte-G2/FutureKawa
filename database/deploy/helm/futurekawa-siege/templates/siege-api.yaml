@@ -43,6 +43,15 @@ spec:
               value: "false"
             - name: MeasurementSync__LocalApiUrl
               value: {{ .Values.warehouseApiUrl | quote }}
+            {{- range $code, $country := .Values.localApi.countries }}
+            - name: LocalApi__Countries__{{ $code }}__ApiKey
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "futurekawa-siege.fullname" $ }}-secrets
+                  key: LOCAL_API_KEY_{{ $code }}
+            - name: LocalApi__Countries__{{ $code }}__BaseUrl
+              value: {{ $country.baseUrl | quote }}
+            {{- end }}
           # Les migrations tournent dans un hook post-install : au tout premier
           # déploiement l'API peut démarrer avant que le schéma n'existe et
           # redémarrer une ou deux fois. La readiness l'empêche de recevoir du

@@ -18,3 +18,11 @@ permet de composer une URL à partir de deux secretKeyRef.
 - name: DATABASE_URL
   value: postgresql+asyncpg://$(PGUSER):$(PGPASSWORD)@{{ include "futurekawa-data.fullname" . }}-postgres-rw:5432/{{ .Values.postgres.db }}
 {{- end -}}
+
+{{- define "futurekawa-data.localApiKeyEnv" -}}
+- name: LOCAL_API_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ include "futurekawa-data.fullname" . }}-local-api
+      key: LOCAL_API_KEY
+{{- end -}}

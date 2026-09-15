@@ -1,0 +1,12 @@
+.terraform/
+# .terraform.lock.hcl EST versionné (reproductibilité des providers) — ne pas ignorer.
+terraform.tfvars
+*.auto.tfvars
+*.tfvars.json
+*.tfstate
+*.tfstate.*
+*.tfplan
+override.tf
+override.tf.json
+crash.log
+kubeconfig

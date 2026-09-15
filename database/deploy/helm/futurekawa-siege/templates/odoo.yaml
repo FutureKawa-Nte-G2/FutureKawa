@@ -1,0 +1,171 @@
+{{- if .Values.odoo.enabled }}
+# Base d'Odoo : Postgres nu et non CNPG. Odoo crée et supprime ses bases lui-même
+# (gestionnaire de bases, duplication, restauration) ; le passer sous un
+# opérateur qui possède le cycle de vie de la base créerait deux autorités
+# concurrentes sur le même serveur.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "futurekawa-siege.fullname" . }}-odoo-db
+  labels:
+    {{- include "futurekawa-siege.labels" . | nindent 4 }}
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: {{ .Values.odoo.storage | quote }}
+  {{- if .Values.odoo.storageClass }}
+  storageClassName: {{ .Values.odoo.storageClass | quote }}
+  {{- end }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "futurekawa-siege.fullname" . }}-odoo-data
+  labels:
+    {{- include "futurekawa-siege.labels" . | nindent 4 }}
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: {{ .Values.odoo.storage | quote }}
+  {{- if .Values.odoo.storageClass }}
+  storageClassName: {{ .Values.odoo.storageClass | quote }}
+  {{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "futurekawa-siege.fullname" . }}-odoo-db
+  labels:
+    {{- include "futurekawa-siege.labels" . | nindent 4 }}
+    app.kubernetes.io/component: odoo-db
+spec:
+  replicas: 1
+  # Recreate : le volume est ReadWriteOnce, deux pods ne peuvent pas le monter.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: odoo-db
+  template:
+    metadata:
+      labels:
+        {{- include "futurekawa-siege.labels" . | nindent 8 }}
+        app.kubernetes.io/component: odoo-db
+    spec:
+      containers:
+        - name: postgres
+          image: {{ .Values.odoo.dbImage | quote }}
+          ports:
+            - name: pg
+              containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: postgres
+            - name: POSTGRES_USER
+              value: odoo
+            - name: POSTGRES_PASSWORD
+              value: odoo
+            # Le volume est monté sur /var/lib/postgresql/data ; sans ce
+            # sous-répertoire, initdb refuse un répertoire non vide (lost+found).
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "odoo"]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "futurekawa-siege.fullname" . }}-odoo-db
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "futurekawa-siege.fullname" . }}-odoo-db
+  labels:
+    {{- include "futurekawa-siege.labels" . | nindent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: odoo-db
+  ports:
+    - name: pg
+      port: 5432
+      targetPort: pg
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "futurekawa-siege.fullname" . }}-odoo
+  labels:
+    {{- include "futurekawa-siege.labels" . | nindent 4 }}
+    app.kubernetes.io/component: odoo
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: odoo
+  template:
+    metadata:
+      labels:
+        {{- include "futurekawa-siege.labels" . | nindent 8 }}
+        app.kubernetes.io/component: odoo
+    spec:
+      initContainers:
+        - name: wait-for-odoo-db
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - until nc -z {{ include "futurekawa-siege.fullname" . }}-odoo-db 5432; do echo "odoo-db pas prête"; sleep 3; done
+      containers:
+        - name: odoo
+          image: {{ .Values.odoo.image | quote }}
+          ports:
+            - name: http
+              containerPort: 8069
+          env:
+            - name: HOST
+              value: {{ include "futurekawa-siege.fullname" . }}-odoo-db
+            - name: USER
+              value: odoo
+            - name: PASSWORD
+              value: odoo
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/odoo
+          {{- with .Values.odoo.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "futurekawa-siege.fullname" . }}-odoo-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "futurekawa-siege.fullname" . }}-odoo
+  labels:
+    {{- include "futurekawa-siege.labels" . | nindent 4 }}
+    app.kubernetes.io/component: odoo
+spec:
+  selector:
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: odoo
+  ports:
+    - name: http
+      port: 8069
+      targetPort: http
+{{- end }}

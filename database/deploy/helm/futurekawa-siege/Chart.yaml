@@ -1,0 +1,12 @@
+apiVersion: v2
+name: futurekawa-siege
+description: Stack siège FutureKawa (backend .NET, frontend Next.js, Odoo) — un seul release, central.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - erp
+  - dotnet
+  - nextjs
+maintainers:
+  - name: Alexis Coheleach

@@ -1,4 +1,4 @@
-"""Creation of a batch from an ERP reception file.
+"""Creation and shipment of a batch.
 
 The caller is a file watcher, not a person. Two consequences shape everything
 here: no field can be derived from a caller identity, and every rejection has to
@@ -15,12 +15,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Batch, Farm, Warehouse
-from app.schemas.batch import BatchCreate
+from app.schemas.batch import BatchCreate, BatchShip
 
 # A batch arriving from a reception file enters storage. `Documentation/api-pays-contrats.md` records
 # the rule, and head office writes the same thing on its side
 # (`BatchStatus.Stored` in `OrderService`).
 NEW_BATCH_STATUS = "stored"
+SHIPPED_BATCH_STATUS = "shipped"
 
 
 class BatchAlreadyExistsError(Exception):
@@ -30,6 +31,14 @@ class BatchAlreadyExistsError(Exception):
 
     def __init__(self, batch_ref: str) -> None:
         self.message = f"A batch with reference {batch_ref} already exists."
+        super().__init__(self.message)
+
+
+class BatchRefNotFoundError(Exception):
+    code = "batch_not_found"
+
+    def __init__(self, batch_ref: str) -> None:
+        self.message = f"No batch found with reference {batch_ref}."
         super().__init__(self.message)
 
 
@@ -101,5 +110,20 @@ async def create_batch(session: AsyncSession, payload: BatchCreate) -> Batch:
         # which would let one bad file poison the files behind it.
         await session.rollback()
         raise BatchAlreadyExistsError(payload.batch_ref) from exc
+
+    return batch
+
+
+async def ship_batch(session: AsyncSession, batch_ref: str, payload: BatchShip) -> Batch:
+    """Idempotent: a replayed shipment keeps the first date, which is when the batch left."""
+    batch = await session.scalar(select(Batch).where(Batch.batch_ref == batch_ref))
+    if batch is None:
+        raise BatchRefNotFoundError(batch_ref)
+
+    if batch.shipped_at is None:
+        batch.shipped_at = payload.shipped_at
+        batch.batch_status = SHIPPED_BATCH_STATUS
+        await session.commit()
+        await session.refresh(batch)
 
     return batch

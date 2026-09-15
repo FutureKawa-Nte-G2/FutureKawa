@@ -2,11 +2,11 @@ import uuid
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
-from app.schemas.batch import BatchCreate, BatchRead
+from app.schemas.batch import BatchCreate, BatchRead, BatchShip
 from app.schemas.batch_history import BatchMeasurementHistory, Granularity
 from app.security import require_api_key
 from app.services.batch_history import (
@@ -16,9 +16,11 @@ from app.services.batch_history import (
 )
 from app.services.batches import (
     BatchAlreadyExistsError,
+    BatchRefNotFoundError,
     FarmRefUnknownError,
     WarehouseRefUnknownError,
     create_batch,
+    ship_batch,
 )
 
 router = APIRouter(prefix="/api", tags=["batches"])
@@ -62,6 +64,31 @@ async def post_batch(
         # watcher tells them apart on `detail.code`.
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={"code": exc.code, "message": exc.message},
+        ) from exc
+
+    return BatchRead.model_validate(batch)
+
+
+@router.patch(
+    "/batches/{batch_ref}/ship",
+    response_model=BatchRead,
+    dependencies=[Depends(require_api_key)],
+)
+async def patch_batch_ship(
+    batch_ref: Annotated[str, Path(min_length=1, max_length=64)],
+    payload: BatchShip,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> BatchRead:
+    """Called by head office when the order carrying the batch ships.
+
+    Addressed by `batch_ref`: head office never learns our batch ids.
+    """
+    try:
+        batch = await ship_batch(session, batch_ref, payload)
+    except BatchRefNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": exc.code, "message": exc.message},
         ) from exc
 

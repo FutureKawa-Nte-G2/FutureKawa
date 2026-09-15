@@ -52,6 +52,34 @@ spec:
             - name: LocalApi__Countries__{{ $code }}__BaseUrl
               value: {{ $country.baseUrl | quote }}
             {{- end }}
+            {{- with .Values.email }}
+            {{- if .smtp.host }}
+            - name: Email__Smtp__Host
+              value: {{ .smtp.host | quote }}
+            - name: Email__Smtp__Port
+              value: {{ .smtp.port | quote }}
+            - name: Email__Smtp__EnableSsl
+              value: {{ .smtp.enableSsl | quote }}
+            - name: Email__Smtp__Username
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "futurekawa-siege.fullname" $ }}-secrets
+                  key: EMAIL_SMTP_USERNAME
+            - name: Email__Smtp__Password
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "futurekawa-siege.fullname" $ }}-secrets
+                  key: EMAIL_SMTP_PASSWORD
+            - name: Email__From__Address
+              value: {{ .from.address | quote }}
+            - name: Email__From__Name
+              value: {{ .from.name | quote }}
+            {{- range $i, $to := .alertRecipients }}
+            - name: Email__AlertRecipients__{{ $i }}
+              value: {{ $to | quote }}
+            {{- end }}
+            {{- end }}
+            {{- end }}
           # Les migrations tournent dans un hook post-install : au tout premier
           # déploiement l'API peut démarrer avant que le schéma n'existe et
           # redémarrer une ou deux fois. La readiness l'empêche de recevoir du

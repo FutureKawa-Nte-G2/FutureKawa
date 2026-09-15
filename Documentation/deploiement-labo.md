@@ -188,6 +188,10 @@ odoo:
   adminPassword: "$(openssl rand -hex 16)"
   masterPassword: "$(openssl rand -hex 16)"
   webhookToken: "$(openssl rand -hex 32)"
+email:
+  smtp:
+    username: "<identifiant de l'inbox Mailtrap>"
+    password: "<mot de passe de l'inbox Mailtrap>"
 EOF
 ```
 
@@ -443,7 +447,7 @@ helm -n futurekawa rollback siege     # revient à la dernière révision valide
 
 ### Simuler des relevés capteurs
 
-Mosquitto n'est pas exposé hors du cluster : on publie depuis son pod. Un relevé n'est gardé que si son capteur est connu en base ([étape 1.9](#19-données-de-test-et-relevés-simulés)).
+On publie depuis le pod Mosquitto, sans rien installer sur son poste. Le capteur réel, lui, publie sur `172.16.146.101:1883`. Un relevé n'est gardé que si son capteur est connu en base ([étape 1.9](#19-données-de-test-et-relevés-simulés)).
 
 ```bash
 git show origin/develop:tools/sensor_simulator.py > /tmp/sensor_simulator.py

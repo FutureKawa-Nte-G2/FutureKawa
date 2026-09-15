@@ -28,8 +28,18 @@ odoo:
   image: futurekawa/odoo:labo
   storage: 2Gi
 
-# No sensor publishes over the network yet and the simulator runs inside the
-# cluster: keep the anonymous broker off the school network.
+# The real sensor (ESP) publishes from the school network, so the broker is
+# reachable on port 1883 of every node. It accepts anonymous clients: the
+# consumers have no MQTT credentials support yet. Accepted for the demo.
 mosquitto:
   service:
-    type: ClusterIP
+    type: LoadBalancer
+
+# Alert emails go to a Mailtrap sandbox inbox: nothing is really delivered.
+# SMTP username/password come from the secrets file.
+email:
+  smtp:
+    host: sandbox.smtp.mailtrap.io
+    port: 2525
+  alertRecipients:
+    - responsable.bresil@futurekawa.local

@@ -75,6 +75,21 @@ odoo:
     requests: { cpu: 200m, memory: 512Mi }
     limits:   { cpu: "1",  memory: 2Gi }
 
+# Email envoyé à chaque alerte reçue (AlertEmailService, #86). Sans host ou sans
+# destinataire, le siège n'envoie rien et le logue : l'alerte est créée quand
+# même. Identifiants SMTP à passer par le fichier de secrets.
+email:
+  smtp:
+    host: ""                 # ex. sandbox.smtp.mailtrap.io
+    port: 2525
+    enableSsl: true
+    username: ""
+    password: ""
+  from:
+    address: alerts@futurekawa.local
+    name: FutureKawa Alerts
+  alertRecipients: []
+
 # One entry per country release. Without a key, POST /api/alerts rejects every
 # pushed alert (fail-closed). apiKey must equal that release's localApiKey.
 # Dev value: override in production.

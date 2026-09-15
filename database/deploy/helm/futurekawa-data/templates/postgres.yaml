@@ -1,0 +1,77 @@
+# Postgres = cluster CloudNativePG (HA par streaming replication, failover auto).
+# PRÉREQUIS : l'opérateur CNPG (CRDs postgresql.cnpg.io) doit être installé dans le cluster.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {{ include "futurekawa-data.fullname" . }}-postgres
+  labels:
+    {{- include "futurekawa-data.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+spec:
+  instances: {{ .Values.postgres.instances }}
+  imageName: {{ .Values.postgres.imageName | quote }}
+  imagePullPolicy: {{ .Values.imagePullPolicy }}
+  primaryUpdateStrategy: unsupervised   # upgrade roulant : bascule d'abord les replicas, puis switchover
+  # Compte de lecture seule (analyse, debug). L'API et les consumers se
+  # connectent avec l'owner généré par CNPG, pas avec ce rôle.
+  managed:
+    roles:
+      - name: apiread
+        ensure: present
+        login: true
+        passwordSecret:
+          name: {{ include "futurekawa-data.fullname" . }}-role-apiread
+  # Éclate primary + replicas sur des nœuds (VMs) distincts -> survit à la perte d'une VM.
+  affinity:
+    enablePodAntiAffinity: true
+    topologyKey: kubernetes.io/hostname
+    podAntiAffinityType: required
+  postgresql:
+    shared_preload_libraries:
+      - timescaledb        # requis par TimescaleDB (chargé au démarrage)
+  bootstrap:
+    initdb:
+      database: {{ .Values.postgres.db | quote }}
+      owner: {{ .Values.postgres.owner | quote }}
+      postInitApplicationSQL:
+        # Créée par le superuser dans la base applicative : le rôle applicatif
+        # n'a pas le droit de charger une extension.
+        - CREATE EXTENSION IF NOT EXISTS timescaledb;
+  storage:
+    size: {{ .Values.postgres.storage | quote }}
+    {{- if .Values.postgres.storageClass }}
+    storageClass: {{ .Values.postgres.storageClass | quote }}
+    {{- end }}
+  {{- with .Values.postgres.resources }}
+  resources:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- if .Values.postgres.backup.enabled }}
+  backup:
+    retentionPolicy: {{ .Values.postgres.backup.retentionPolicy | quote }}
+    barmanObjectStore:
+      destinationPath: {{ .Values.postgres.backup.destinationPath | quote }}
+      endpointURL: {{ .Values.postgres.backup.endpointURL | quote }}
+      s3Credentials:
+        accessKeyId:
+          name: {{ include "futurekawa-data.secretName" . }}
+          key: BACKUP_S3_KEY_ID
+        secretAccessKey:
+          name: {{ include "futurekawa-data.secretName" . }}
+          key: BACKUP_S3_SECRET
+  {{- end }}
+{{- if .Values.postgres.backup.enabled }}
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: {{ include "futurekawa-data.fullname" . }}-postgres-backup
+  labels:
+    {{- include "futurekawa-data.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+spec:
+  schedule: {{ .Values.postgres.backup.schedule | quote }}
+  backupOwnerReference: self
+  cluster:
+    name: {{ include "futurekawa-data.fullname" . }}-postgres
+{{- end }}

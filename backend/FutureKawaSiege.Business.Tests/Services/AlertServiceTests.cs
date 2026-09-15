@@ -602,7 +602,7 @@ public class AlertServiceTests
 
         // Assert
         Assert.NotNull(result);
-        var dto = Assert.Single(result!);
+        var dto = Assert.Single(result);
         Assert.Equal(batch.Id, dto.Id);
         Assert.Equal("BR", dto.CountryCode);
         Assert.Equal("BATCH-BR-001", dto.BatchRef);

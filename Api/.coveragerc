@@ -1,0 +1,4 @@
+[run]
+# SQLAlchemy asyncio runs the sync layer inside greenlets; without this,
+# coverage does not trace them and async services report as untested.
+concurrency = greenlet

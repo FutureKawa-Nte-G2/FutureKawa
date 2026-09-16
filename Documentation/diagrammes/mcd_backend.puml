@@ -1,0 +1,127 @@
+@startuml MCD_Backend_FutureKawa
+
+!theme plain
+
+title MCD - Head-office Backend FutureKawa (.NET)
+
+entity "User" as User {
+  * id : UUID <<PK>>
+  --
+  * email : string
+  * password_hash : string
+  * role : string
+  warehouse_id : UUID <<FK>>
+  * created_at : datetime
+  last_login_at : datetime
+}
+
+entity "RefreshToken" as RefreshToken {
+  * id : UUID <<PK>>
+  --
+  * user_id : UUID <<FK>>
+  * token_hash : string
+  * expires_at : datetime
+  * created_at : datetime
+  is_revoked : bool
+  revoked_at : datetime
+  replaced_by_token_hash : string
+}
+
+entity "Country" as Country {
+  * id : UUID <<PK>>
+  --
+  * name : string
+  * code : string
+  * nominal_temp : decimal
+  * tolerance_temp : decimal
+  * nominal_humidity : decimal
+  * tolerance_humidity : decimal
+}
+
+entity "Farm" as Farm {
+  * id : UUID <<PK>>
+  --
+  * country_id : UUID <<FK>>
+  * name : string
+  * reference : string
+}
+
+entity "Warehouse" as Warehouse {
+  * id : UUID <<PK>>
+  --
+  * country_id : UUID <<FK>>
+  * name : string
+  * reference : string
+}
+
+entity "Batch" as Batch {
+  * id : UUID <<PK>>
+  --
+  * farm_id : UUID <<FK>>
+  * warehouse_id : UUID <<FK>>
+  * reference : string
+  * stored_at : datetime
+  shipped_at : datetime
+  * quality_grade : string
+  * status : string
+}
+
+entity "Alert" as Alert {
+  * id : UUID <<PK>>
+  --
+  * warehouse_id : UUID <<FK>>
+  * type : string
+  * status : string
+  * created_at : datetime
+  resolved_at : datetime
+  measured_at : datetime
+}
+
+entity "Measurement" as Measurement {
+  * id : UUID <<PK>>
+  --
+  * warehouse_id : UUID <<FK>>
+  * meas_date : date
+  * avg_meas_temp : decimal
+  * max_meas_temp : decimal
+  * min_meas_temp : decimal
+  * avg_meas_humidity : decimal
+  * min_meas_humidity : decimal
+  * max_meas_humidity : decimal
+}
+
+entity "Order" as Order {
+  * id : UUID <<PK>>
+  --
+  odoo_order_id : int
+  * order_reference : string
+  * order_date : datetime
+  * client_name : string
+  country_id : UUID <<FK>>
+  * status : string
+  integration_error_message : string
+  * created_at : datetime
+  updated_at : datetime
+}
+
+entity "OrderLine" as OrderLine {
+  * id : UUID <<PK>>
+  --
+  * order_id : UUID <<FK>>
+  * product_name : string
+  * quantity : decimal
+}
+
+' Conceptual relationships
+User ||--o{ RefreshToken : "owns"
+Warehouse ||--o{ User : "employs"
+Country ||--o{ Farm : "contains"
+Country ||--o{ Warehouse : "contains"
+Farm ||--o{ Batch : "produces"
+Warehouse ||--o{ Batch : "stores"
+Warehouse ||--o{ Alert : "raises"
+Warehouse ||--o{ Measurement : "measures"
+Order ||--|{ OrderLine : "contains"
+Order }o--o{ Batch : "associates"
+
+@enduml

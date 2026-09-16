@@ -1,0 +1,8 @@
+# node_modules de l'hôte : réinstallé dans l'étage deps, et un module compilé
+# pour macOS casserait le build Alpine.
+node_modules
+.next
+out
+npm-debug.log*
+.env*
+.git

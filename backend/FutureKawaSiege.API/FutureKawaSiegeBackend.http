@@ -1,0 +1,38 @@
+@HostAddress = https://localhost:55648
+
+### Auth: Login
+# @name login
+POST {{HostAddress}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "test@futurekawa.com",
+  "password": "TestPass123"
+}
+
+### Auth: Get current user (sans token - doit échouer en 401)
+GET {{HostAddress}}/api/auth/me
+
+### Auth: Get current user (avec token)
+GET {{HostAddress}}/api/auth/me
+Authorization: Bearer {{login.response.body.$.data.accessToken}}
+
+### Auth: Logout
+POST {{HostAddress}}/api/auth/logout
+
+### Measurements: Déclencher une synchro manuelle
+POST {{HostAddress}}/api/measurements/sync
+Authorization: Bearer {{login.response.body.$.data.accessToken}}
+
+### Measurements: Récupérer toutes les mesures
+# @name getMeasurements
+GET http://127.0.0.1:8000/api/measurements
+Authorization: Bearer {{login.response.body.$.data.accessToken}}
+
+### Measurements: Récupérer les mesures du premier warehouse retourné ci-dessus
+GET {{HostAddress}}/api/measurements/{{getMeasurements.response.body.$.data[0].warehouseId}}
+Authorization: Bearer {{login.response.body.$.data.accessToken}}
+
+### Measurements: Rejouer la synchro pour vérifier l'idempotence (attendu : "0 persisted, 3 skipped")
+POST {{HostAddress}}/api/measurements/sync
+Authorization: Bearer {{login.response.body.$.data.accessToken}}

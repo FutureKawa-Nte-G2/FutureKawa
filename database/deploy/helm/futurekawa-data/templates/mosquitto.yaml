@@ -1,0 +1,98 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "futurekawa-data.fullname" . }}-mosquitto
+  labels:
+    {{- include "futurekawa-data.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mosquitto
+data:
+  mosquitto.conf: |
+    listener 1883
+    allow_anonymous true
+    persistence true
+    persistence_location /mosquitto/data/
+    log_dest stdout
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "futurekawa-data.fullname" . }}-mosquitto
+  labels:
+    {{- include "futurekawa-data.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mosquitto
+spec:
+  accessModes: ["ReadWriteOnce"]
+  {{- if .Values.mosquitto.storageClass }}
+  storageClassName: {{ .Values.mosquitto.storageClass | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.mosquitto.storage | quote }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "futurekawa-data.fullname" . }}-mosquitto
+  labels:
+    {{- include "futurekawa-data.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mosquitto
+spec:
+  # Le capteur est HORS cluster : le broker doit être joignable de l'extérieur.
+  # k3s fournit ServiceLB nativement -> LoadBalancer par défaut ; NodePort possible.
+  type: {{ .Values.mosquitto.service.type | quote }}
+  selector:
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: mosquitto
+  ports:
+    - name: mqtt
+      port: 1883
+      targetPort: 1883
+      {{- if and (eq .Values.mosquitto.service.type "NodePort") .Values.mosquitto.service.nodePort }}
+      nodePort: {{ .Values.mosquitto.service.nodePort }}
+      {{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "futurekawa-data.fullname" . }}-mosquitto
+  labels:
+    {{- include "futurekawa-data.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mosquitto
+spec:
+  # replicas:1 — un broker MQTT ne se scale pas sans clustering (split des abonnés).
+  replicas: 1
+  strategy:
+    type: Recreate              # RWO PVC : pas de 2 pods qui montent le volume en parallèle
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: mosquitto
+  template:
+    metadata:
+      labels:
+        {{- include "futurekawa-data.labels" . | nindent 8 }}
+        app.kubernetes.io/component: mosquitto
+    spec:
+      containers:
+        - name: mosquitto
+          image: {{ .Values.mosquitto.image | quote }}
+          ports:
+            - name: mqtt
+              containerPort: 1883
+          volumeMounts:
+            - name: config
+              mountPath: /mosquitto/config/mosquitto.conf
+              subPath: mosquitto.conf
+            - name: data
+              mountPath: /mosquitto/data
+          {{- with .Values.mosquitto.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "futurekawa-data.fullname" . }}-mosquitto
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "futurekawa-data.fullname" . }}-mosquitto

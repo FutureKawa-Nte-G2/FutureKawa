@@ -1,0 +1,143 @@
+@startuml MLD_Warehouse_FutureKawa
+
+!theme plain
+
+title MLD - Base de données entrepôt FutureKawa (PostgreSQL)
+
+skinparam class {
+    BackgroundColor<<Table>> LightYellow
+    ArrowColor DarkSlateGray
+}
+
+class "users" as Users <<Table>> {
+  + user_id : uuid <<PK>>
+  + email : varchar(256) <<UQ>>
+  + password_hash : text
+  + role : varchar(32)
+  + warehouse_id : uuid? <<FK>>
+}
+
+class "countries" as Countries <<Table>> {
+  + country_id : uuid <<PK>>
+  + country_name : varchar(128)
+  + country_code : varchar(8) <<UQ>>
+  + nominal_temp : numeric(5,2)
+  + tolerance_temp : numeric(5,2)
+  + nominal_humidity : numeric(5,2)
+  + tolerance_humidity : numeric(5,2)
+}
+
+class "farms" as Farms <<Table>> {
+  + farm_id : uuid <<PK>>
+  + country_id : uuid <<FK>>
+  + farm_name : varchar(128)
+  + farm_ref : varchar(64) <<UQ>>
+}
+
+class "warehouses" as Warehouses <<Table>> {
+  + warehouse_id : uuid <<PK>>
+  + country_id : uuid <<FK>>
+  + warehouse_name : varchar(128)
+  + warehouse_ref : varchar(64) <<UQ>>
+}
+
+class "batches" as Batches <<Table>> {
+  + batch_id : uuid <<PK>>
+  + warehouse_id : uuid <<FK>>
+  + farm_id : uuid <<FK>>
+  + batch_ref : varchar(64) <<UQ>>
+  + stored_at : date
+  + shipped_at : date?
+  + quality_grade : varchar(8)
+  + batch_status : varchar(16)
+}
+
+class "sensors" as Sensors <<Table>> {
+  + sensor_id : uuid <<PK>>
+  + warehouse_id : uuid <<FK>>
+  + code : varchar(64) <<UQ>>
+  + is_active : bool
+}
+
+class "sensor_assignments" as SensorAssignments <<Table>> {
+  + sensor_assignment_id : uuid <<PK>>
+  + sensor_id : uuid <<FK>>
+  + batch_id : uuid <<FK>>
+  + assigned_at : timestamptz
+  + released_at : timestamptz?
+}
+
+class "measurements" as Measurements <<Table>> {
+  + measurement_id : uuid <<PK>>
+  + sensor_id : uuid <<FK, UQ>>
+  + meas_date : timestamptz <<PK, UQ>>
+  + meas_humidity : numeric(5,2)
+  + meas_temp : numeric(5,2)
+}
+
+class "notifications" as Notifications <<Table>> {
+  + notification_id : uuid <<PK>>
+  + warehouse_id : uuid <<FK>>
+  + notification_type : varchar(32)
+  + batch_id : uuid? <<FK>>
+  + order_id : uuid? <<FK>>
+  + created_at : timestamptz
+  + read_at : timestamptz?
+}
+
+class "alerts" as Alerts <<Table>> {
+  + alert_id : uuid <<PK>>
+  + warehouse_id : uuid <<FK>>
+  + batch_id : uuid? <<FK>>
+  + alert_type : varchar(32)
+  + alert_status : varchar(32)
+  + created_at : timestamptz
+  + resolved_at : timestamptz?
+}
+
+class "orders" as Orders <<Table>> {
+  + id : uuid <<PK>>
+  + odoo_order_id : int? <<IX>>
+  + order_reference : varchar(64)
+  + order_date : timestamptz
+  + client_name : varchar(256)
+  + country_id : uuid? <<FK>>
+  + status : varchar(32)
+  + integration_error_message : varchar(1024)?
+  + created_at : timestamptz
+  + updated_at : timestamptz?
+}
+
+class "order_lines" as OrderLines <<Table>> {
+  + id : uuid <<PK>>
+  + order_id : uuid <<FK>>
+  + product_name : varchar(256)
+  + quantity : numeric(12,2)
+}
+
+class "order_batches" as OrderBatches <<Table>> {
+  + batch_id : uuid <<PK, FK>>
+  + order_id : uuid <<PK, FK>>
+}
+
+' Relations logiques (PK/FK)
+Countries "1" --> "0..*" Farms : country_id
+Countries "1" --> "0..*" Warehouses : country_id
+Farms "1" --> "0..*" Batches : farm_id
+Warehouses "1" --> "0..*" Batches : warehouse_id
+Warehouses "1" --> "0..*" Users : warehouse_id
+Warehouses "1" --> "0..*" Sensors : warehouse_id
+Warehouses "1" --> "0..*" Alerts : warehouse_id
+Warehouses "1" --> "0..*" Notifications : warehouse_id
+Batches "1" --> "0..*" Notifications : batch_id
+Orders "1" --> "0..*" Notifications : order_id
+Sensors "1" --> "0..*" Measurements : sensor_id
+Sensors "1" --> "0..*" SensorAssignments : sensor_id
+Batches "1" --> "0..*" SensorAssignments : batch_id
+Batches "1" --> "0..*" Alerts : batch_id
+Orders "0..*" --> "0..1" Countries : country_id
+Orders "1" --> "0..*" OrderLines : order_id
+Orders "1" --> "0..*" OrderBatches : order_id
+Batches "1" --> "0..*" OrderBatches : batch_id
+
+@enduml

@@ -1,0 +1,129 @@
+@startuml MLD_Backend_FutureKawa
+
+!theme plain
+
+title MLD - Head-office Backend FutureKawa (.NET / PostgreSQL)
+
+skinparam class {
+    BackgroundColor<<Entity>> LightYellow
+    ArrowColor DarkSlateGray
+}
+
+class "Users" as Users <<Entity>> {
+  + Id : uuid <<PK>>
+  + Email : varchar(256) <<UQ>>
+  + PasswordHash : text
+  + Role : varchar(32)
+  + WarehouseId : uuid? <<FK>>
+  + CreatedAt : timestamptz
+  + LastLoginAt : timestamptz?
+}
+
+class "RefreshTokens" as RefreshTokens <<Entity>> {
+  + Id : uuid <<PK>>
+  + UserId : uuid <<FK>>
+  + TokenHash : varchar(256)
+  + ExpiresAt : timestamptz
+  + CreatedAt : timestamptz
+  + IsRevoked : bool
+  + RevokedAt : timestamptz?
+  + ReplacedByTokenHash : text?
+}
+
+class "Countries" as Countries <<Entity>> {
+  + Id : uuid <<PK>>
+  + Name : varchar(128)
+  + Code : varchar(8) <<UQ>>
+  + NominalTemp : numeric(5,2)
+  + ToleranceTemp : numeric(5,2)
+  + NominalHumidity : numeric(5,2)
+  + ToleranceHumidity : numeric(5,2)
+}
+
+class "Farms" as Farms <<Entity>> {
+  + Id : uuid <<PK>>
+  + CountryId : uuid <<FK>>
+  + Name : varchar(128)
+  + Reference : varchar(64) <<UQ>>
+}
+
+class "Warehouses" as Warehouses <<Entity>> {
+  + Id : uuid <<PK>>
+  + CountryId : uuid <<FK>>
+  + Name : varchar(128)
+  + Reference : varchar(64) <<UQ>>
+}
+
+class "Batches" as Batches <<Entity>> {
+  + Id : uuid <<PK>>
+  + FarmId : uuid <<FK>>
+  + WarehouseId : uuid <<FK>>
+  + Reference : varchar(64) <<UQ>>
+  + StoredAt : timestamptz
+  + ShippedAt : timestamptz?
+  + QualityGrade : varchar(8)
+  + Status : varchar(16)
+}
+
+class "Alerts" as Alerts <<Entity>> {
+  + Id : uuid <<PK>>
+  + WarehouseId : uuid <<FK>>
+  + Type : varchar(16)
+  + Status : varchar(16)
+  + CreatedAt : timestamptz
+  + ResolvedAt : timestamptz?
+  + MeasuredAt : timestamptz?
+}
+
+class "Measurements" as Measurements <<Entity>> {
+  + Id : uuid <<PK>>
+  + WarehouseId : uuid <<FK>>
+  + MeasDate : date
+  + AvgMeasTemp : numeric(5,2)
+  + MaxMeasTemp : numeric(5,2)
+  + MinMeasTemp : numeric(5,2)
+  + AvgMeasHumidity : numeric(5,2)
+  + MinMeasHumidity : numeric(5,2)
+  + MaxMeasHumidity : numeric(5,2)
+}
+
+class "Orders" as Orders <<Entity>> {
+  + Id : uuid <<PK>>
+  + OdooOrderId : int? <<IX>>
+  + OrderReference : varchar(64)
+  + OrderDate : timestamptz
+  + ClientName : varchar(256)
+  + CountryId : uuid? <<FK>>
+  + Status : varchar(32)
+  + IntegrationErrorMessage : varchar(1024)?
+  + CreatedAt : timestamptz
+  + UpdatedAt : timestamptz?
+}
+
+class "OrderLines" as OrderLines <<Entity>> {
+  + Id : uuid <<PK>>
+  + OrderId : uuid <<FK>>
+  + ProductName : varchar(256)
+  + Quantity : numeric(12,2)
+}
+
+class "OrderBatches" as OrderBatches <<Entity>> {
+  + BatchId : uuid <<PK, FK>>
+  + OrderId : uuid <<PK, FK>>
+}
+
+' Logical relationships (PK/FK)
+Users "1" --> "0..*" RefreshTokens : UserId
+Warehouses "1" --> "0..*" Users : WarehouseId
+Countries "1" --> "0..*" Farms : CountryId
+Countries "1" --> "0..*" Warehouses : CountryId
+Farms "1" --> "0..*" Batches : FarmId
+Warehouses "1" --> "0..*" Batches : WarehouseId
+Warehouses "1" --> "0..*" Alerts : WarehouseId
+Warehouses "1" --> "0..*" Measurements : WarehouseId
+Orders "1" --> "0..*" OrderLines : OrderId
+Orders "0..*" --> "0..1" Countries : CountryId
+Orders "1" --> "0..*" OrderBatches : OrderId
+Batches "1" --> "0..*" OrderBatches : BatchId
+
+@enduml

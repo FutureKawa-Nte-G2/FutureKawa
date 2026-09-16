@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/Tests/">
+    <Project Path="FutureKawaSiege.Business.Tests/FutureKawaSiege.Business.Tests.csproj" Id="503670d1-678f-4101-893a-309ffcb5ec09" />
+    <Project Path="Tests/FutureKawaSiege.API.Tests/FutureKawaSiege.API.Tests.csproj" />
+  </Folder>
+  <Project Path="FutureKawaSiege.API/FutureKawaSiege.API.csproj" />
+  <Project Path="FutureKawaSiege.Business/FutureKawaSiege.Business.csproj" />
+  <Project Path="FutureKawaSiege.Commons/FutureKawaSiege.Commons.csproj" Id="edd9ae80-f889-4141-bfb6-63bc33084f7b" />
+  <Project Path="FutureKawaSiege.Data/FutureKawaSiege.Data.csproj" />
+</Solution>

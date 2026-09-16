@@ -1,0 +1,123 @@
+name: CI-PYTHON-API
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  build-and-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Api
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          # Same version as the development machines. An older version would
+          # reject the `str | None` syntax used in the annotations.
+          python-version: '3.13'
+          cache: 'pip'
+          cache-dependency-path: Api/requirements-dev.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Run tests with coverage
+        # The suite runs on in-memory SQLite: no database to start, and each
+        # test gets its own. Whatever SQLite does not reproduce is checked by
+        # the `Migrations` job below, against a real PostgreSQL.
+        run: python -m pytest tests --cov=app --cov-report=term-missing --cov-report=xml
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-api-coverage
+          path: Api/coverage.xml
+          if-no-files-found: ignore
+
+  migrations:
+    name: Migrations
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Api
+
+    services:
+      warehouse-db:
+        # Same image as `warehouse-db` in the docker-compose. Plain PostgreSQL
+        # is not enough: the initial migration creates the timescaledb extension
+        # and turns `measurements` into a hypertable.
+        image: timescale/timescaledb:2.17.2-pg16
+        env:
+          POSTGRES_DB: futurekawa_ci
+          POSTGRES_USER: futurekawa
+          POSTGRES_PASSWORD: futurekawa
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U futurekawa -d futurekawa_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql+asyncpg://futurekawa:futurekawa@localhost:5432/futurekawa_ci
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+          cache-dependency-path: Api/requirements-dev.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Assert a single migration head
+        # Two branches that each add a migration declare the same parent, and
+        # Alembic ends up with two heads after the second merge: `alembic upgrade
+        # head` then refuses to run, both on developer machines and in
+        # deployment. Catching it here costs a second; finding out afterwards
+        # means writing a merge migration.
+        run: |
+          heads=$(alembic heads | grep -c '(head)')
+          echo "Heads found: $heads"
+          alembic heads
+          if [ "$heads" -ne 1 ]; then
+            echo "::error::$heads migration heads instead of a single one."
+            exit 1
+          fi
+
+      - name: Apply migrations
+        # Against a real PostgreSQL, not SQLite: this is where the partial
+        # indexes, the CHECK constraints and the hypertable get verified, none
+        # of which an in-memory database applies the same way.
+        run: alembic upgrade head
+
+      - name: Assert the models match the migrations
+        # Catches a model changed without a matching migration — the case where
+        # the suite passes locally on tables created by `create_all`, but a
+        # deployment ends up with a stale schema.
+        run: alembic check
+
+      - name: Assert the last migration is reversible
+        run: |
+          alembic downgrade -1
+          alembic upgrade head

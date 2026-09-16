@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- ============================================================ -->
+    <!-- Demonstration data for the FutureKawa module                 -->
+    <!-- ============================================================ -->
+
+    <!-- Coffee products (Grades A, B, C) -->
+    <record id="product_coffee_grade_a" model="product.product">
+        <field name="name">Café Arabica - Grade A</field>
+        <field name="type">consu</field>
+        <field name="list_price">25.00</field>
+        <field name="default_code">COFFEE-A</field>
+    </record>
+
+    <record id="product_coffee_grade_b" model="product.product">
+        <field name="name">Café Robusta - Grade B</field>
+        <field name="type">consu</field>
+        <field name="list_price">18.00</field>
+        <field name="default_code">COFFEE-B</field>
+    </record>
+
+    <record id="product_coffee_grade_c" model="product.product">
+        <field name="name">Café Mixte - Grade C</field>
+        <field name="type">consu</field>
+        <field name="list_price">12.00</field>
+        <field name="default_code">COFFEE-C</field>
+    </record>
+
+    <!-- Demonstration customer -->
+    <record id="partner_coffee_distributor" model="res.partner">
+        <field name="name">Distributeur Café Europe SARL</field>
+        <field name="email">contact@cafe-europe.com</field>
+        <field name="street">12 Avenue du Café</field>
+        <field name="city">Lyon</field>
+        <field name="zip">69001</field>
+        <field name="country_id" ref="base.fr"/>
+    </record>
+</odoo>

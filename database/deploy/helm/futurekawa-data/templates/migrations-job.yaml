@@ -1,0 +1,45 @@
+# Migrations Alembic. ADR-001 : Api/alembic/ est la source de vérité du schéma.
+# Le Job porte un hook Helm pre-install/pre-upgrade pour que le schéma soit en
+# place avant que l'API et les consumers ne démarrent.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "futurekawa-data.fullname" . }}-migrate
+  labels:
+    {{- include "futurekawa-data.labels" . | nindent 4 }}
+    app.kubernetes.io/component: migrations
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    # Le cluster CNPG n'existe pas encore en pre-install : le Job doit tourner
+    # après, sans quoi il n'aurait aucune base où se connecter.
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: {{ .Values.migrations.backoffLimit }}
+  template:
+    metadata:
+      labels:
+        {{- include "futurekawa-data.labels" . | nindent 8 }}
+        app.kubernetes.io/component: migrations
+    spec:
+      restartPolicy: Never
+      initContainers:
+        # CNPG met un moment à promouvoir le primaire ; sans cette attente le Job
+        # échouerait sur ses premiers essais et consommerait son backoffLimit.
+        - name: wait-for-postgres
+          image: {{ .Values.countryApi.image | quote }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          command:
+            - sh
+            - -c
+            - |
+              until python -c "import socket,sys; s=socket.socket(); s.settimeout(2); sys.exit(s.connect_ex(('{{ include "futurekawa-data.fullname" . }}-postgres-rw', 5432)))"; do
+                echo "postgres pas encore prêt"; sleep 3;
+              done
+      containers:
+        - name: alembic
+          image: {{ .Values.countryApi.image | quote }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          command: ["alembic", "upgrade", "head"]
+          env:
+            {{- include "futurekawa-data.dbEnv" . | nindent 12 }}

@@ -8,6 +8,7 @@ import { MeasurementsCharts } from "@/components/batches/MeasurementsCharts";
 import { getBatchById } from "@/lib/api/batches";
 import { filterMeasurementsByStoragePeriod, getWarehouseMeasurements } from "@/lib/api/measurements";
 import { useAuth } from "@/context/AuthContext";
+import { useRefresh } from "@/context/RefreshContext";
 import type { Batch, Measurement } from "@/lib/api/types";
 
 // Issue #35 restricts this page to Quality Agent / Quality Manager, but the
@@ -26,6 +27,7 @@ function BatchDetailContent() {
   const params = useParams<{ countryCode: string; id: string }>();
   const router = useRouter();
   const { accessToken } = useAuth();
+  const { registerRefreshHandler } = useRefresh();
   const [batch, setBatch] = useState<Batch | null>(null);
   const [measurements, setMeasurements] = useState<Measurement[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -57,6 +59,16 @@ function BatchDetailContent() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchData();
   }, [fetchData]);
+
+  useEffect(() => {
+    // Same registration pattern as FifoContent/AlertesContent (see
+    // backlog-frontend-mesures-alertes-collecte.md): while this page is
+    // mounted, the Navbar's refresh button (which now also triggers a manual
+    // measurement collection, see RefreshButton.tsx) re-fetches this batch's
+    // data instead of doing nothing.
+    registerRefreshHandler(fetchData);
+    return () => registerRefreshHandler(null);
+  }, [registerRefreshHandler, fetchData]);
 
   return (
     <main className="flex-1 p-8">

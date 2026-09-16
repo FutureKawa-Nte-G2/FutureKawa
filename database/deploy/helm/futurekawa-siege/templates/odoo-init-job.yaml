@@ -55,8 +55,20 @@ spec:
             - sh
             - -ec
             - |
-              DB_ARGS="--db_host={{ include "futurekawa-siege.fullname" . }}-odoo-db --db_user=odoo --db_password=odoo -d {{ .Values.odoo.dbName }} --no-http"
-              odoo $DB_ARGS -i future_kawa_erp{{ if not .Values.odoo.withDemo }} --without-demo=all{{ end }} --stop-after-init
+              DB_HOST={{ include "futurekawa-siege.fullname" . }}-odoo-db
+              DB_NAME={{ .Values.odoo.dbName }}
+              DB_ARGS="--db_host=$DB_HOST --db_user=odoo --db_password=odoo -d $DB_NAME --no-http"
+              # `-i` sur un module DÉJÀ installé recharge ses données en mode init,
+              # y compris celles marquées noupdate="1" : le compteur de références
+              # de lots repartirait à 1 et Odoo fabriquerait des LOT-001 en double.
+              # On n'installe donc que si le module n'est pas déjà en place.
+              if PGPASSWORD=odoo psql -h "$DB_HOST" -U odoo -d "$DB_NAME" -tAc \
+                   "select state from ir_module_module where name='future_kawa_erp'" 2>/dev/null \
+                   | grep -qx installed; then
+                echo "module future_kawa_erp déjà installé : installation ignorée"
+              else
+                odoo $DB_ARGS -i future_kawa_erp{{ if not .Values.odoo.withDemo }} --without-demo=all{{ end }} --stop-after-init
+              fi
               odoo shell $DB_ARGS <<'PY'
               import os
               admin = env.ref('base.user_admin')

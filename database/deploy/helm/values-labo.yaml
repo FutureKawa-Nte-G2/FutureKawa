@@ -41,5 +41,7 @@ email:
   smtp:
     host: sandbox.smtp.mailtrap.io
     port: 2525
+  from:
+    address: alerts@futurekawa.local
   alertRecipients:
-    - responsable.bresil@futurekawa.local
+    - test@futurekawa.office

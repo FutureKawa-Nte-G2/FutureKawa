@@ -68,7 +68,7 @@ public class AlertEmailService : IAlertEmailService
             using var client = new SmtpClient(host, port)
             {
                 EnableSsl = enableSsl,
-                Timeout = 5000,
+                Timeout = 50000,
             };
 
             if (!string.IsNullOrWhiteSpace(username))

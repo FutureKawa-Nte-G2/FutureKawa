@@ -14,6 +14,19 @@ export async function getWarehouseMeasurements(
   return apiRequest<Measurement[]>(`/api/measurements/${warehouseId}`, { accessToken });
 }
 
+// POST /api/measurements/sync — manually triggers a sync cycle for ALL
+// warehouses at once (MeasurementsController.SyncNow, backend/FutureKawaSiege.API
+// — SyncAllWarehousesAsync takes no warehouse/country parameter). Returns the
+// backend's confirmation message (ApiResponse.data), e.g. "Sync completed."
+// This only triggers the collection — callers are responsible for refetching
+// their own data afterwards to see the newly collected values.
+export async function syncMeasurements(accessToken?: string | null): Promise<string> {
+  return apiRequest<string>("/api/measurements/sync", {
+    method: "POST",
+    accessToken,
+  });
+}
+
 // Narrows a warehouse's daily measurements down to a single batch's storage
 // window. Measurement.measDate and the batch's enteredAt/shippedAt are both
 // ISO 8601 strings (date-only for the former, date-time for the latter) —

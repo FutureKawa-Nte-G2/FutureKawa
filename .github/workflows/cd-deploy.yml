@@ -14,18 +14,22 @@ name: CD-DEPLOY
 #    kubeconfig d'administration serait disproportionné pour ce projet.
 
 on:
+  # Le déploiement réel ne part QUE d'une release publiée (donc d'un tag posé sur
+  # main) : aucune branche ne déclenche la production, pas même main. Les pushes
+  # ci-dessous ne font tourner que le cluster éphémère.
+  release:
+    types: [published]
   push:
     branches:
       - main
       - develop
-      # Branche de déploiement du labo : develop + charts, pour le premier
-      # déploiement automatique avant la fusion de #72, #78 et #90.
-      - deploy/labo
   # Aussi sur PR : un chart qui ne s'installe pas doit être vu avant la fusion,
   # pas après. C'est le principe de l'environnement de revue.
   pull_request:
     branches:
       - develop
+  # Relance manuelle du cluster éphémère seulement : la production passe par une
+  # release, jamais par un clic sur une branche.
   workflow_dispatch:
     inputs:
       target:
@@ -33,7 +37,7 @@ on:
         required: true
         default: ephemeral
         type: choice
-        options: [ephemeral, production]
+        options: [ephemeral]
 
 jobs:
   ephemeral:
@@ -235,9 +239,11 @@ jobs:
   production:
     name: Déploiement production (labo Proxmox)
     # Garde-fous, du plus automatique au plus humain :
+    #   - seule une release publiée arrive ici, et une release se pose sur un tag
+    #     de main : aucune branche de travail ne peut déployer ;
     #   - le déploiement éphémère doit être passé (charts installés, smoke test
-    #     MQTT vert) ;
-    #   - l'environnement GitHub `production` n'accepte que main et deploy/labo,
+    #     MQTT vert) sur le code exact de la release ;
+    #   - l'environnement GitHub `production` n'autorise que les tags de release,
     #     porte les secrets du labo et attend une approbation ;
     #   - les bases sont sauvegardées sur le nœud avant toute mise à jour.
     needs: ephemeral
@@ -245,12 +251,9 @@ jobs:
     # que depuis le réseau de l'école, jamais depuis un runner GitHub.
     runs-on: [self-hosted, futurekawa-prod]
     if: >-
-      always() && (
-        (github.event_name == 'push'
-         && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/deploy/labo')
-         && needs.ephemeral.result == 'success')
-        || (github.event_name == 'workflow_dispatch' && inputs.target == 'production')
-      )
+      always()
+      && github.event_name == 'release'
+      && needs.ephemeral.result == 'success'
     environment: production
     # Jamais deux déploiements en même temps sur le même cluster.
     concurrency:
@@ -280,7 +283,7 @@ jobs:
           export KUBECONFIG="$HOME/.kube/config"
           helm version --short | grep -q "^${HELM_VERSION}"
           kubectl get nodes
-          echo "TAG=${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          echo "TAG=${GITHUB_REF_NAME:-${GITHUB_SHA::7}}" >> "$GITHUB_ENV"
 
       - name: Sauvegarder les bases avant mise à jour
         # Un pg_dump par base sur le disque du nœud ; on garde les 5 derniers.

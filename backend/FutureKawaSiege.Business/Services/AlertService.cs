@@ -95,7 +95,7 @@ public class AlertService : IAlertService
         // query, and attaching it before AddAsync makes EF treat the whole
         // graph (Warehouse + Country) as new rows to insert.
         alert.Warehouse = warehouse;
-        await _alertEmailService.SendAlertCreatedNotificationAsync(alert, cancellationToken);
+        await _alertEmailService.SendAlertCreatedNotificationAsync(alert, CancellationToken.None);
 
         return AlertReceptionResult.Success;
     }

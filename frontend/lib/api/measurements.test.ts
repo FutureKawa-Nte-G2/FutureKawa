@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { filterMeasurementsByStoragePeriod, getWarehouseMeasurements } from "./measurements";
+import { filterMeasurementsByStoragePeriod, getWarehouseMeasurements, syncMeasurements } from "./measurements";
 import type { Measurement } from "./types";
 
 function jsonResponse(status: number, data: unknown) {
@@ -11,6 +11,10 @@ function jsonResponse(status: number, data: unknown) {
 
 function lastUrl(fetchMock: ReturnType<typeof vi.spyOn>) {
   return new URL(fetchMock.mock.calls.at(-1)![0] as string);
+}
+
+function lastRequestInit(fetchMock: ReturnType<typeof vi.spyOn>) {
+  return fetchMock.mock.calls.at(-1)![1] as RequestInit;
 }
 
 describe("getWarehouseMeasurements", () => {
@@ -46,6 +50,31 @@ describe("getWarehouseMeasurements", () => {
     vi.spyOn(global, "fetch").mockResolvedValueOnce(jsonResponse(500, null));
 
     await expect(getWarehouseMeasurements("BR-W1")).rejects.toThrow();
+  });
+});
+
+describe("syncMeasurements", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("sends a POST to /api/measurements/sync with the access token and returns the backend's confirmation message", async () => {
+    const fetchMock = vi
+      .spyOn(global, "fetch")
+      .mockResolvedValueOnce(jsonResponse(200, "Sync completed."));
+
+    const result = await syncMeasurements("test-token");
+
+    const url = lastUrl(fetchMock);
+    const init = lastRequestInit(fetchMock);
+    expect(url.pathname).toBe("/api/measurements/sync");
+    expect(init.method).toBe("POST");
+    expect((init.headers as Record<string, string>)["Authorization"]).toBe("Bearer test-token");
+    expect(result).toBe("Sync completed.");
+  });
+
+  it("propagates an ApiError when the sync fails", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValueOnce(jsonResponse(500, null));
+
+    await expect(syncMeasurements("test-token")).rejects.toThrow();
   });
 });
 

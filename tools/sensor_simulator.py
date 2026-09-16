@@ -28,9 +28,10 @@ import pathlib
 import random
 import sys
 
-# Matches the Brazilian fixture band (20 °C ± 3, 55 % ± 10): a nominal sensor
-# stays inside, a drifting one clearly leaves it.
-NOMINAL_TEMP = 20.0
+# Matches the Brazilian band required by the brief (29 °C ± 3, 55 % ± 2), the
+# same one the fixture loads: a nominal sensor stays inside, a drifting one
+# clearly leaves it.
+NOMINAL_TEMP = 29.0
 NOMINAL_HUMIDITY = 55.0
 
 
@@ -44,7 +45,7 @@ def readings(steps, step_minutes, drift_from, seed):
 
         if i < drift_from:
             temp = NOMINAL_TEMP + rng.uniform(-1, 1)
-            humidity = NOMINAL_HUMIDITY + rng.uniform(-3, 3)
+            humidity = NOMINAL_HUMIDITY + rng.uniform(-1, 1)
         else:
             # Steady rise: once out of band it must raise exactly one
             # notification, not one per reading.

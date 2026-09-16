@@ -6,10 +6,11 @@
 
 BEGIN;
 
--- Band matches the simulator defaults: nominal sensors stay in, drifting ones leave.
+-- Brazilian band from the brief (29 °C ± 3, 55 % ± 2), the same one head office
+-- seeds. Matches the simulator defaults: nominal sensors stay in, drifting ones leave.
 INSERT INTO countries (country_id, country_name, country_code,
                        nominal_temp, tolerance_temp, nominal_humidity, tolerance_humidity)
-VALUES ('11111111-1111-1111-1111-111111111111', 'Brésil', 'BR', 20, 3, 55, 10)
+VALUES ('11111111-1111-1111-1111-111111111111', 'Brésil', 'BR', 29, 3, 55, 2)
 ON CONFLICT DO NOTHING;
 
 -- Head office's DevelopmentSeeder references are the source of truth: a pushed

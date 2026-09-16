@@ -58,14 +58,18 @@ spec:
               DB_HOST={{ include "futurekawa-siege.fullname" . }}-odoo-db
               DB_NAME={{ .Values.odoo.dbName }}
               DB_ARGS="--db_host=$DB_HOST --db_user=odoo --db_password=odoo -d $DB_NAME --no-http"
-              # `-i` sur un module DÉJÀ installé recharge ses données en mode init,
-              # y compris celles marquées noupdate="1" : le compteur de références
-              # de lots repartirait à 1 et Odoo fabriquerait des LOT-001 en double.
-              # On n'installe donc que si le module n'est pas déjà en place.
+              # Installer si le module est absent, le mettre à jour sinon. La
+              # distinction compte : `-i` sur un module déjà installé recharge ses
+              # données en mode init, y compris celles marquées noupdate="1" — le
+              # compteur de références de lots repartirait à 1 et Odoo fabriquerait
+              # des LOT-001 en double. `-u` applique le nouveau code et les vues
+              # sans y toucher, ce qu'il faut à chaque déploiement puisque le
+              # module vit dans l'image.
               if PGPASSWORD=odoo psql -h "$DB_HOST" -U odoo -d "$DB_NAME" -tAc \
                    "select state from ir_module_module where name='future_kawa_erp'" 2>/dev/null \
                    | grep -qx installed; then
-                echo "module future_kawa_erp déjà installé : installation ignorée"
+                echo "module future_kawa_erp déjà installé : mise à jour"
+                odoo $DB_ARGS -u future_kawa_erp --stop-after-init
               else
                 odoo $DB_ARGS -i future_kawa_erp{{ if not .Values.odoo.withDemo }} --without-demo=all{{ end }} --stop-after-init
               fi

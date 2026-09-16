@@ -245,6 +245,28 @@ Voir [Documentation/alertes-email-k8s.md](Documentation/alertes-email-k8s.md) po
 - `LocalApiUrl` pointe vers le mock inclus dans le backend (`MockMeasurementsController`) pour la démo en local.
 - `IntervalMinutes: 1440` déclenche une synchronisation par jour en dev.
 
+## Déploiement sur le labo EPSI (Kubernetes)
+
+La stack tourne sur le Proxmox de l'école : 3 VM Debian, un cluster k3s, et dedans la stack pays **Brésil**, le siège et Odoo. Joignable **uniquement depuis le réseau de l'école** (ou le VPN Netbird du labo). Certificat auto-signé : accepter l'alerte du navigateur.
+
+| Service | URL | Compte |
+| --- | --- | --- |
+| Front siège | https://futurekawa.172.16.146.101.nip.io | `test@futurekawa.com` / `TestPass123` |
+| Odoo | https://odoo.172.16.146.101.nip.io | `admin@admin.com`, mot de passe : demander à Alexis |
+| API pays BR (Swagger) | https://br.172.16.146.101.nip.io/docs | — |
+
+**Tutoriel pas à pas : [Documentation/deploiement-labo.md](Documentation/deploiement-labo.md)**
+
+| Je veux… | Section |
+| --- | --- |
+| Avoir accès (SSH, kubeconfig, secrets) | [0. Avant de commencer](Documentation/deploiement-labo.md#0-avant-de-commencer) |
+| Tout réinstaller de zéro | [1. Installer tout de zéro](Documentation/deploiement-labo.md#1-installer-tout-de-zéro) |
+| Déployer une nouvelle version de mon appli | [2. Mettre à jour une application](Documentation/deploiement-labo.md#2-mettre-à-jour-une-application) |
+| Redémarrer une appli, une base ou une VM | [3. Redémarrer](Documentation/deploiement-labo.md#3-redémarrer) |
+| Éteindre le temps d'un week-end | [4. Couper sans rien perdre](Documentation/deploiement-labo.md#4-couper-sans-rien-perdre) |
+| Tout supprimer | [5. Supprimer](Documentation/deploiement-labo.md#5-supprimer) |
+| Logs, pod qui plante, simuler des capteurs | [6. Dépannage](Documentation/deploiement-labo.md#6-dépannage) |
+
 ## Repository Structure
 
 ```

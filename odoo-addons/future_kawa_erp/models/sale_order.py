@@ -19,31 +19,29 @@ class SaleOrder(models.Model):
     Extension of the sale.order model for FutureKawa.
 
     Adds business fields specific to coffee management:
-    - batch_count: number of coffee batches to generate
-    - batch_ref: generated coffee batch reference(s), comma-separated (readonly)
+    - batch_ref: generated coffee batch reference (readonly)
     - quality_grade: quality grade (A, B, C) — informational on Odoo side
     - country: country of origin — informational on Odoo side
     - integration_status: sync status with the .NET backend
 
     Overrides the action_confirm() method to trigger a webhook
     to the .NET backend when an order is confirmed.
+
+    Note on batch handling: an order is no longer tied to a batch created
+    just for it. Instead, the .NET backend associates the order with the
+    oldest batch currently in stock (FIFO) and creates a single new batch
+    in parallel to replenish the stock pool. The reference generated here
+    is only used for that replenishment batch.
     """
 
     _inherit = "sale.order"
 
     # ── FutureKawa specific business fields ──
 
-    batch_count = fields.Integer(
-        string="Number of Batches",
-        help="Number of coffee batches to generate for this order.",
-        default=1,
-        copy=False,
-    )
-
     batch_ref = fields.Char(
-        string="Generated Batch References",
-        help="Coffee batch reference(s) generated for this order. "
-             "Use commas to separate multiple references.",
+        string="Generated Batch Reference",
+        help="Reference of the coffee batch generated to replenish stock "
+             "(FIFO) following this order.",
         copy=False,
         readonly=True,
     )
@@ -146,7 +144,8 @@ class SaleOrder(models.Model):
         - orderId: the Odoo order ID
         - client: the client (partner) name
         - orderDate: the order date (ISO 8601)
-        - batchReferences: list of coffee batch references (can be several)
+        - batchReferences: reference of the single replenishment batch,
+          sent as a one-item list for compatibility with the .NET DTO
         - lines: the order lines (product, quantity)
 
         The webhook URL and authentication token are retrieved from
@@ -171,21 +170,12 @@ class SaleOrder(models.Model):
             )
             return
 
-        # Generate batch references automatically if not already set
-        batch_refs = []
-        if self.batch_ref:
-            batch_refs = [
-                ref.strip()
-                for ref in self.batch_ref.split(",")
-                if ref.strip()
-            ]
-        elif self.batch_count and self.batch_count > 0:
+        # Generate a single replenishment batch reference if not already set
+        if not self.batch_ref:
             sequence = self.env["ir.sequence"].sudo()
-            batch_refs = [
-                sequence.next_by_code("future_kawa.batch.reference")
-                for _ in range(self.batch_count)
-            ]
-            self.write({"batch_ref": ", ".join(batch_refs)})
+            self.write({"batch_ref": sequence.next_by_code("future_kawa.batch.reference")})
+
+        batch_refs = [self.batch_ref] if self.batch_ref else []
 
         # Build JSON payload (camelCase to match .NET DTO)
         payload = {

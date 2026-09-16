@@ -18,7 +18,7 @@ reference on.
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.errors import WarehouseRefUnknownError
@@ -27,6 +27,7 @@ from app.schemas.alert import AlertList, AlertStatusFilter, AlertSummary
 
 ACTIVE = "active"
 RESOLVED = "resolved"
+CONDITION = "condition"
 
 
 class AlertNotFoundError(Exception):
@@ -74,6 +75,19 @@ async def _resolve_warehouse(session: AsyncSession, warehouse_ref: str) -> Wareh
     if warehouse is None:
         raise WarehouseRefUnknownError(warehouse_ref)
     return warehouse
+
+
+async def _restore_compliance(session: AsyncSession, warehouse_id: uuid.UUID) -> None:
+    # Shipped batches keep their flag: it is the record of what left the room.
+    await session.execute(
+        update(Batch)
+        .where(
+            Batch.warehouse_id == warehouse_id,
+            Batch.shipped_at.is_(None),
+            Batch.is_compliant.is_(False),
+        )
+        .values(is_compliant=True)
+    )
 
 
 async def list_alerts(
@@ -133,10 +147,9 @@ async def resolve_alert(
     than moving its timestamp — the question `resolvedAt` answers is "when did
     this stop", and a second click must not rewrite that.
 
-    Deliberately does not touch `batches.is_compliant`. A room being repaired
-    does not clear the batch that spent a night out of band; lifting that flag
-    is a judgement about the coffee, made on the batch, not a side effect of
-    acknowledging the room.
+    Resolving a `condition` alert also clears `is_compliant` on the room's
+    batches still in stock: `evaluate_reading` skips non-compliant batches, so
+    leaving the flag would stop the room from ever raising again.
     """
     warehouse = await _resolve_warehouse(session, warehouse_ref)
 
@@ -159,6 +172,8 @@ async def resolve_alert(
     if alert.alert_status == ACTIVE:
         alert.alert_status = RESOLVED
         alert.resolved_at = now or datetime.now(UTC)
+        if alert.alert_type == CONDITION:
+            await _restore_compliance(session, warehouse.warehouse_id)
         await session.commit()
         await session.refresh(alert)
 

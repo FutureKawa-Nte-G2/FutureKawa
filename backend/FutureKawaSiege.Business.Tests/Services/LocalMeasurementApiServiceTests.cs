@@ -11,6 +11,7 @@ namespace FutureKawaSiege.Business.Tests.Services;
 public class LocalMeasurementApiServiceTests : IDisposable
 {
     private const string ApiUrl = "http://local-api.test/measurements";
+    private const string WarehouseRef = "WH-BR-SANTOS";
 
     private readonly CountingHandler _handler = new();
     private readonly LocalMeasurementApiService _service;
@@ -37,7 +38,7 @@ public class LocalMeasurementApiServiceTests : IDisposable
         // Simulates a network outage (connection refused, DNS failure, timeout...).
         _handler.ResponseFactory = (_, _) => throw new HttpRequestException("Connection refused");
 
-        var result = await _service.FetchMeasurementsAsync(Guid.NewGuid());
+        var result = await _service.FetchMeasurementsAsync(Guid.NewGuid(), WarehouseRef);
 
         Assert.Null(result);
         Assert.Equal(1, _handler.CallCount);
@@ -48,7 +49,7 @@ public class LocalMeasurementApiServiceTests : IDisposable
     {
         _handler.ResponseFactory = (_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.InternalServerError));
 
-        var result = await _service.FetchMeasurementsAsync(Guid.NewGuid());
+        var result = await _service.FetchMeasurementsAsync(Guid.NewGuid(), WarehouseRef);
 
         Assert.Null(result);
     }
@@ -61,7 +62,7 @@ public class LocalMeasurementApiServiceTests : IDisposable
             Content = new StringContent("not-json", Encoding.UTF8, "application/json"),
         });
 
-        var result = await _service.FetchMeasurementsAsync(Guid.NewGuid());
+        var result = await _service.FetchMeasurementsAsync(Guid.NewGuid(), WarehouseRef);
 
         Assert.Null(result);
     }
@@ -72,7 +73,7 @@ public class LocalMeasurementApiServiceTests : IDisposable
         _settings["MeasurementSync:LocalApiUrl"] = null;
         var service = CreateService();
 
-        var result = await service.FetchMeasurementsAsync(Guid.NewGuid());
+        var result = await service.FetchMeasurementsAsync(Guid.NewGuid(), WarehouseRef);
 
         Assert.Null(result);
         Assert.Equal(0, _handler.CallCount);
@@ -97,7 +98,7 @@ public class LocalMeasurementApiServiceTests : IDisposable
             Content = new StringContent(json, Encoding.UTF8, "application/json"),
         });
 
-        var result = await _service.FetchMeasurementsAsync(Guid.NewGuid());
+        var result = await _service.FetchMeasurementsAsync(Guid.NewGuid(), WarehouseRef);
 
         Assert.NotNull(result);
         Assert.Equal(25.5m, result.AvgTemp);
@@ -110,12 +111,32 @@ public class LocalMeasurementApiServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task FetchMeasurementsAsync_Should_FilterByWarehouseReference()
+    {
+        // Without the filter the local API aggregates all its warehouses, and every
+        // head-office warehouse would receive the same figures.
+        Uri? requested = null;
+        _handler.ResponseFactory = (request, _) =>
+        {
+            requested = request.RequestUri;
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("null", Encoding.UTF8, "application/json"),
+            });
+        };
+
+        await _service.FetchMeasurementsAsync(Guid.NewGuid(), "WH-BR SANTOS");
+
+        Assert.Equal($"{ApiUrl}?warehouse_ref=WH-BR%20SANTOS", requested?.AbsoluteUri);
+    }
+
+    [Fact]
     public async Task FetchMeasurementsAsync_Should_ReturnMockData_WithoutHttpCall_When_UseMockDataIsEnabled()
     {
         _settings["MeasurementSync:UseMockData"] = "true";
         var service = CreateService();
 
-        var result = await service.FetchMeasurementsAsync(Guid.NewGuid());
+        var result = await service.FetchMeasurementsAsync(Guid.NewGuid(), WarehouseRef);
 
         Assert.NotNull(result);
         Assert.Equal(DateOnly.FromDateTime(DateTime.UtcNow), result.MeasDate);

@@ -54,16 +54,41 @@ frontend:
 
 odoo:
   enabled: true
-  image: odoo:18.0
+  # Image odoo:18.0 + module future_kawa_erp (database/Dockerfile.odoo) : l'image
+  # officielle seule ferait échouer le Job odoo-init, faute de module.
+  image: futurekawa/odoo:dev
   dbImage: postgres:16
   storage: 5Gi
   storageClass: ""
+  # Compte admin posé par le Job odoo-init, et utilisé par le siège en JSON-RPC.
+  adminLogin: admin@admin.com
   adminPassword: Not24get
+  # Mot de passe maître d'Odoo (opérations sur les bases). Le gestionnaire web
+  # étant désactivé (list_db = False), il ne sert qu'en ligne de commande.
+  masterPassword: change-me-odoo-master
+  # Données de démonstration Odoo (et celles du module : 3 cafés, 1 client).
+  # Lu uniquement à la création de la base.
+  withDemo: false
   dbName: futurekawa
   webhookToken: futurekawa-webhook-shared-token
   resources:
     requests: { cpu: 200m, memory: 512Mi }
     limits:   { cpu: "1",  memory: 2Gi }
+
+# Email envoyé à chaque alerte reçue (AlertEmailService, #86). Sans host ou sans
+# destinataire, le siège n'envoie rien et le logue : l'alerte est créée quand
+# même. Identifiants SMTP à passer par le fichier de secrets.
+email:
+  smtp:
+    host: ""                 # ex. sandbox.smtp.mailtrap.io
+    port: 2525
+    enableSsl: true
+    username: ""
+    password: ""
+  from:
+    address: alerts@futurekawa.local
+    name: FutureKawa Alerts
+  alertRecipients: []
 
 # One entry per country release. Without a key, POST /api/alerts rejects every
 # pushed alert (fail-closed). apiKey must equal that release's localApiKey.

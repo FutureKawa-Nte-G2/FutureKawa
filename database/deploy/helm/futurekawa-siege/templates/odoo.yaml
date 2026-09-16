@@ -100,6 +100,22 @@ spec:
       port: 5432
       targetPort: pg
 ---
+# Configuration Odoo. Secret et non ConfigMap : elle porte le mot de passe maître.
+# list_db = False désactive le gestionnaire de bases (/web/database/manager),
+# qui permettrait sinon à tout le réseau de supprimer ou d'exporter la base.
+# db_name restreint Odoo à la base de l'ERP ; proxy_mode lui fait lire les
+# en-têtes X-Forwarded-* posés par l'Ingress (URLs en https).
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "futurekawa-siege.fullname" . }}-odoo-conf
+  labels:
+    {{- include "futurekawa-siege.labels" . | nindent 4 }}
+type: Opaque
+stringData:
+  odoo.conf: |
+    {{- include "futurekawa-siege.odooConf" . | nindent 4 }}
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -120,6 +136,10 @@ spec:
       labels:
         {{- include "futurekawa-siege.labels" . | nindent 8 }}
         app.kubernetes.io/component: odoo
+      annotations:
+        # Le fichier est monté en subPath, jamais rafraîchi à chaud : on
+        # redémarre le pod quand la configuration change.
+        checksum/odoo-conf: {{ include "futurekawa-siege.odooConf" . | sha256sum }}
     spec:
       initContainers:
         - name: wait-for-odoo-db
@@ -144,6 +164,9 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /var/lib/odoo
+            - name: conf
+              mountPath: /etc/odoo/odoo.conf
+              subPath: odoo.conf
           {{- with .Values.odoo.resources }}
           resources:
             {{- toYaml . | nindent 12 }}
@@ -152,6 +175,9 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: {{ include "futurekawa-siege.fullname" . }}-odoo-data
+        - name: conf
+          secret:
+            secretName: {{ include "futurekawa-siege.fullname" . }}-odoo-conf
 ---
 apiVersion: v1
 kind: Service
